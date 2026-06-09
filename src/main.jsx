@@ -137,8 +137,41 @@ const blankCustomer = {
 
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Ready', 'Delivered', 'Completed'];
-const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers'];
+const basePages = ['Dashboard', 'Inventory', 'Orders', 'Customers'];
+const roles = ['CEO', 'Manager', 'Sales Executive', 'Logistics Officer'];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function canManageUsers(profile) {
+  return profile?.role === 'CEO';
+}
+
+function canManageInventory(profile) {
+  return ['CEO', 'Manager'].includes(profile?.role);
+}
+
+function canViewInventory(profile) {
+  return ['CEO', 'Manager', 'Sales Executive'].includes(profile?.role);
+}
+
+function canManageOrders(profile) {
+  return ['CEO', 'Manager', 'Sales Executive'].includes(profile?.role);
+}
+
+function canManageCustomers(profile) {
+  return ['CEO', 'Manager', 'Sales Executive'].includes(profile?.role);
+}
+
+function canDeleteRecords(profile) {
+  return ['CEO', 'Manager'].includes(profile?.role);
+}
+
+function canUpdateOrderStatus(profile) {
+  return ['CEO', 'Manager', 'Sales Executive', 'Logistics Officer'].includes(profile?.role);
+}
+
+function canViewFinancials(profile) {
+  return ['CEO', 'Manager', 'Sales Executive'].includes(profile?.role);
+}
 
 function numberValue(value) {
   return Number(value) || 0;
@@ -248,6 +281,10 @@ function userName(user) {
   return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Velora user';
 }
 
+function profileName(profile, user) {
+  return profile?.full_name || userName(user);
+}
+
 function useAuthSession() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -289,7 +326,102 @@ function useAuthSession() {
   return { session, user: session?.user || null, authLoading, authError, signOut };
 }
 
-function useSupabaseRecords(user) {
+function useProfile(user) {
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState('');
+
+  async function loadProfile() {
+    if (!user) {
+      setProfile(null);
+      setProfileLoading(false);
+      return;
+    }
+
+    setProfileLoading(true);
+    setProfileError('');
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (error) {
+      setProfileError(error.message);
+      setProfile(null);
+    } else {
+      setProfile(data);
+    }
+
+    setProfileLoading(false);
+  }
+
+  useEffect(() => {
+    loadProfile();
+  }, [user?.id]);
+
+  return { profile, profileLoading, profileError, refreshProfile: loadProfile };
+}
+
+function useUserManagement(profile) {
+  const [profiles, setProfiles] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [userError, setUserError] = useState('');
+
+  async function loadProfiles() {
+    if (!canManageUsers(profile)) {
+      setProfiles([]);
+      return;
+    }
+
+    setLoadingUsers(true);
+    setUserError('');
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, full_name, email, role, created_at')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setUserError(error.message);
+    } else {
+      setProfiles(data);
+    }
+
+    setLoadingUsers(false);
+  }
+
+  useEffect(() => {
+    loadProfiles();
+  }, [profile?.role]);
+
+  async function updateUserRole(id, role) {
+    if (!canManageUsers(profile)) {
+      setUserError('Only the CEO can manage user roles.');
+      return;
+    }
+
+    setUserError('');
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ role })
+      .eq('id', id)
+      .select('id, full_name, email, role, created_at')
+      .single();
+
+    if (error) {
+      setUserError(error.message);
+      return;
+    }
+
+    setProfiles((current) => current.map((item) => item.id === id ? data : item));
+  }
+
+  return { profiles, loadingUsers, userError, updateUserRole };
+}
+
+function useSupabaseRecords(user, profile) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -313,7 +445,7 @@ function useSupabaseRecords(user) {
       return;
     }
 
-    if (!user) {
+    if (!user || !profile) {
       setVehicles([]);
       setOrders([]);
       setCustomers([]);
@@ -325,10 +457,14 @@ function useSupabaseRecords(user) {
     setError('');
 
     try {
+      const vehicleQuery = supabase.from('vehicles').select('*').order('created_at', { ascending: false });
+      const orderQuery = supabase.from('orders').select('*').order('created_at', { ascending: false });
+      const customerQuery = supabase.from('customers').select('*').order('created_at', { ascending: false });
+
       const [vehicleRows, orderRows, customerRows] = await Promise.all([
-        runRequest(supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
-        runRequest(supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
-        runRequest(supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
+        canViewInventory(profile) ? runRequest(vehicleQuery) : Promise.resolve([]),
+        runRequest(orderQuery),
+        canManageCustomers(profile) ? runRequest(customerQuery) : Promise.resolve([]),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -341,49 +477,84 @@ function useSupabaseRecords(user) {
 
   useEffect(() => {
     loadRecords();
-  }, [user?.id]);
+  }, [user?.id, profile?.role]);
 
   async function saveVehicle(vehicle, editingId) {
+    if (!canManageInventory(profile)) {
+      setError('Your role cannot manage inventory.');
+      return;
+    }
+
     const query = editingId
-      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).select().single()
       : supabase.from('vehicles').insert(toVehicleRow(vehicle, user.id)).select().single();
     const saved = fromVehicleRow(await runRequest(query));
     setVehicles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteVehicle(id) {
-    await runRequest(supabase.from('vehicles').delete().eq('id', id).eq('created_by', user.id));
+    if (!canDeleteRecords(profile)) {
+      setError('Your role cannot delete records.');
+      return;
+    }
+
+    await runRequest(supabase.from('vehicles').delete().eq('id', id));
     setVehicles((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveOrder(order, editingId) {
+    if (!canManageOrders(profile)) {
+      setError('Your role cannot create or edit orders.');
+      return;
+    }
+
     const query = editingId
-      ? supabase.from('orders').update(toOrderRow(order)).eq('id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('orders').update(toOrderRow(order)).eq('id', editingId).select().single()
       : supabase.from('orders').insert(toOrderRow(order, user.id)).select().single();
     const saved = fromOrderRow(await runRequest(query));
     setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteOrder(id) {
-    await runRequest(supabase.from('orders').delete().eq('id', id).eq('created_by', user.id));
+    if (!canDeleteRecords(profile)) {
+      setError('Your role cannot delete records.');
+      return;
+    }
+
+    await runRequest(supabase.from('orders').delete().eq('id', id));
     setOrders((current) => current.filter((item) => item.id !== id));
   }
 
   async function updateOrderStatus(id, status) {
-    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).eq('created_by', user.id).select().single()));
+    if (!canUpdateOrderStatus(profile)) {
+      setError('Your role cannot update order status.');
+      return;
+    }
+
+    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).select().single()));
     setOrders((current) => current.map((item) => item.id === id ? saved : item));
   }
 
   async function saveCustomer(customer, editingId) {
+    if (!canManageCustomers(profile)) {
+      setError('Your role cannot create or edit customers.');
+      return;
+    }
+
     const query = editingId
-      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).select().single()
       : supabase.from('customers').insert(toCustomerRow(customer, user.id)).select().single();
     const saved = fromCustomerRow(await runRequest(query));
     setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteCustomer(id) {
-    await runRequest(supabase.from('customers').delete().eq('id', id).eq('created_by', user.id));
+    if (!canDeleteRecords(profile)) {
+      setError('Your role cannot delete records.');
+      return;
+    }
+
+    await runRequest(supabase.from('customers').delete().eq('id', id));
     setCustomers((current) => current.filter((item) => item.id !== id));
   }
 
@@ -685,7 +856,7 @@ function AuthView({ authError }) {
   );
 }
 
-function Dashboard({ vehicles, orders }) {
+function Dashboard({ vehicles, orders, profile }) {
   const totals = useMemo(() => {
     const activeOrders = orders.filter((order) => order.status !== 'Completed').length;
     const completedOrders = orders.filter((order) => order.status === 'Completed').length;
@@ -710,11 +881,11 @@ function Dashboard({ vehicles, orders }) {
         </div>
       </div>
       <div className="metrics-grid">
-        <Metric label="Vehicles in inventory" value={totals.inventory} />
+        <Metric label="Vehicles in inventory" value={canViewInventory(profile) ? totals.inventory : 'Restricted'} />
         <Metric label="Active orders" value={totals.activeOrders} />
         <Metric label="Completed orders" value={totals.completedOrders} />
-        <Metric label="Total revenue" value={money.format(totals.revenue)} tone="accent" />
-        <Metric label="Total profit" value={money.format(totals.profit)} tone="success" />
+        <Metric label="Total revenue" value={canViewFinancials(profile) ? money.format(totals.revenue) : 'Restricted'} tone="accent" />
+        <Metric label="Total profit" value={canViewFinancials(profile) ? money.format(totals.profit) : 'Restricted'} tone="success" />
       </div>
       <div className="section-heading">
         <h2>Recent orders</h2>
@@ -726,8 +897,8 @@ function Dashboard({ vehicles, orders }) {
               <th>Order ID</th>
               <th>Customer</th>
               <th>Vehicle</th>
-              <th>Revenue</th>
-              <th>Profit</th>
+              {canViewFinancials(profile) && <th>Revenue</th>}
+              {canViewFinancials(profile) && <th>Profit</th>}
               <th>Status</th>
             </tr>
           </thead>
@@ -737,8 +908,8 @@ function Dashboard({ vehicles, orders }) {
                 <td>{order.id}</td>
                 <td>{order.customerName}</td>
                 <td>{order.vehicle}</td>
-                <td>{money.format(orderRevenue(order))}</td>
-                <td>{money.format(orderProfit(order))}</td>
+                {canViewFinancials(profile) && <td>{money.format(orderRevenue(order))}</td>}
+                {canViewFinancials(profile) && <td>{money.format(orderProfit(order))}</td>}
                 <td><StatusBadge status={order.status} /></td>
               </tr>
             ))}
@@ -749,7 +920,7 @@ function Dashboard({ vehicles, orders }) {
   );
 }
 
-function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
+function Inventory({ vehicles, saveVehicle, deleteVehicle, profile }) {
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankVehicle);
   const [editingId, setEditingId] = useState('');
@@ -782,7 +953,9 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
         </div>
         <input className="search" placeholder="Search vehicles" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />
+      {canManageInventory(profile) && (
+        <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -792,12 +965,12 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
               <th>Model</th>
               <th>Category</th>
               <th>Qty</th>
-              <th>Purchase Price</th>
-              <th>Selling Price</th>
-              <th>Profit Amount</th>
-              <th>Profit Margin %</th>
+              {canViewFinancials(profile) && <th>Purchase Price</th>}
+              {canViewFinancials(profile) && <th>Selling Price</th>}
+              {canViewFinancials(profile) && <th>Profit Amount</th>}
+              {canViewFinancials(profile) && <th>Profit Margin %</th>}
               <th>Status</th>
-              <th>Actions</th>
+              {(canManageInventory(profile) || canDeleteRecords(profile)) && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -808,15 +981,17 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
                 <td>{vehicle.model}</td>
                 <td>{vehicle.category}</td>
                 <td>{vehicle.quantity}</td>
-                <td>{money.format(vehicle.purchasePrice)}</td>
-                <td>{money.format(vehicle.sellingPrice)}</td>
-                <td>{money.format(profitAmount(vehicle))}</td>
-                <td>{profitMargin(vehicle).toFixed(1)}%</td>
+                {canViewFinancials(profile) && <td>{money.format(vehicle.purchasePrice)}</td>}
+                {canViewFinancials(profile) && <td>{money.format(vehicle.sellingPrice)}</td>}
+                {canViewFinancials(profile) && <td>{money.format(profitAmount(vehicle))}</td>}
+                {canViewFinancials(profile) && <td>{profitMargin(vehicle).toFixed(1)}%</td>}
                 <td><StatusBadge status={vehicle.status} /></td>
-                <td className="row-actions">
-                  <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteVehicle(vehicle.id)}>Delete</button>
-                </td>
+                {(canManageInventory(profile) || canDeleteRecords(profile)) && (
+                  <td className="row-actions">
+                    {canManageInventory(profile) && <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>}
+                    {canDeleteRecords(profile) && <button className="mini danger" onClick={() => deleteVehicle(vehicle.id)}>Delete</button>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -827,7 +1002,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
   );
 }
 
-function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles }) {
+function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, profile }) {
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankOrder);
   const [editingId, setEditingId] = useState('');
@@ -855,7 +1030,9 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles })
         </div>
         <input className="search" placeholder="Search orders" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />
+      {canManageOrders(profile) && (
+        <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -865,12 +1042,12 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles })
               <th>Vehicle</th>
               <th>Qty</th>
               <th>Order Date</th>
-              <th>Purchase Cost</th>
-              <th>Selling Price</th>
-              <th>Total Revenue</th>
-              <th>Total Profit</th>
+              {canViewFinancials(profile) && <th>Purchase Cost</th>}
+              {canViewFinancials(profile) && <th>Selling Price</th>}
+              {canViewFinancials(profile) && <th>Total Revenue</th>}
+              {canViewFinancials(profile) && <th>Total Profit</th>}
               <th>Status</th>
-              <th>Actions</th>
+              {(canManageOrders(profile) || canDeleteRecords(profile)) && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -881,21 +1058,27 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles })
                 <td>{order.vehicle}</td>
                 <td>{order.quantity}</td>
                 <td>{order.orderDate}</td>
-                <td>{money.format(order.purchaseCost)}</td>
-                <td>{money.format(order.sellingPrice)}</td>
-                <td>{money.format(orderRevenue(order))}</td>
-                <td>{money.format(orderProfit(order))}</td>
+                {canViewFinancials(profile) && <td>{money.format(order.purchaseCost)}</td>}
+                {canViewFinancials(profile) && <td>{money.format(order.sellingPrice)}</td>}
+                {canViewFinancials(profile) && <td>{money.format(orderRevenue(order))}</td>}
+                {canViewFinancials(profile) && <td>{money.format(orderProfit(order))}</td>}
                 <td>
-                  <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
-                    {orderStatuses.map((status) => (
-                      <option key={status}>{status}</option>
-                    ))}
-                  </select>
+                  {canUpdateOrderStatus(profile) ? (
+                    <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
+                      {orderStatuses.map((status) => (
+                        <option key={status}>{status}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <StatusBadge status={order.status} />
+                  )}
                 </td>
-                <td className="row-actions">
-                  <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>
-                </td>
+                {(canManageOrders(profile) || canDeleteRecords(profile)) && (
+                  <td className="row-actions">
+                    {canManageOrders(profile) && <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>}
+                    {canDeleteRecords(profile) && <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -906,7 +1089,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles })
   );
 }
 
-function Customers({ customers, saveCustomer, deleteCustomer }) {
+function Customers({ customers, saveCustomer, deleteCustomer, profile }) {
   const [form, setForm] = useState(blankCustomer);
   const [editingId, setEditingId] = useState('');
 
@@ -926,7 +1109,9 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
           <h1>Customer records</h1>
         </div>
       </div>
-      <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />
+      {canManageCustomers(profile) && (
+        <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -936,7 +1121,7 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
               <th>Email</th>
               <th>Country / City</th>
               <th>Notes</th>
-              <th>Actions</th>
+              {(canManageCustomers(profile) || canDeleteRecords(profile)) && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -947,10 +1132,12 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
                 <td>{customer.email}</td>
                 <td>{customer.location}</td>
                 <td>{customer.notes}</td>
-                <td className="row-actions">
-                  <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteCustomer(customer.id)}>Delete</button>
-                </td>
+                {(canManageCustomers(profile) || canDeleteRecords(profile)) && (
+                  <td className="row-actions">
+                    {canManageCustomers(profile) && <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>}
+                    {canDeleteRecords(profile) && <button className="mini danger" onClick={() => deleteCustomer(customer.id)}>Delete</button>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -960,9 +1147,66 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
   );
 }
 
+function UserManagement({ profiles, loadingUsers, userError, updateUserRole }) {
+  return (
+    <section className="page-stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Administration</p>
+          <h1>User management</h1>
+        </div>
+      </div>
+      {loadingUsers && <div className="app-message">Loading users...</div>}
+      {userError && <div className="app-message error">{userError}</div>}
+      <div className="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {profiles.map((profile) => (
+              <tr key={profile.id}>
+                <td>{profile.full_name || 'Unnamed user'}</td>
+                <td>{profile.email}</td>
+                <td>
+                  <select className="status-select" value={profile.role} onChange={(event) => updateUserRole(profile.id, event.target.value)}>
+                    {roles.map((role) => (
+                      <option key={role}>{role}</option>
+                    ))}
+                  </select>
+                </td>
+                <td>{new Date(profile.created_at).toLocaleDateString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!profiles.length && !loadingUsers && <EmptyState label="No users found." />}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
   const { user, authLoading, authError, signOut } = useAuthSession();
+  const { profile, profileLoading, profileError } = useProfile(user);
+  const availablePages = useMemo(() => {
+    if (!profile) return ['Dashboard'];
+    const pages = basePages.filter((page) => {
+      if (page === 'Inventory') return canViewInventory(profile);
+      if (page === 'Customers') return canManageCustomers(profile);
+      if (page === 'Orders') return canManageOrders(profile) || profile.role === 'Logistics Officer';
+      return true;
+    });
+
+    return canManageUsers(profile) ? [...pages, 'User Management'] : pages;
+  }, [profile]);
+  const { profiles, loadingUsers, userError, updateUserRole } = useUserManagement(profile);
   const {
     vehicles,
     orders,
@@ -976,9 +1220,15 @@ function App() {
     updateOrderStatus,
     saveCustomer,
     deleteCustomer,
-  } = useSupabaseRecords(user);
+  } = useSupabaseRecords(user, profile);
 
-  if (authLoading) {
+  useEffect(() => {
+    if (!availablePages.includes(activePage)) {
+      setActivePage('Dashboard');
+    }
+  }, [availablePages, activePage]);
+
+  if (authLoading || (user && profileLoading)) {
     return <div className="screen-loader">Checking Velora session...</div>;
   }
 
@@ -997,12 +1247,13 @@ function App() {
           </div>
         </div>
         <div className="user-profile">
-          <strong>{userName(user)}</strong>
+          <strong>{profileName(profile, user)}</strong>
           <small>{user.email}</small>
+          <span className={`role-badge role-${profile?.role?.toLowerCase().replace(/\s+/g, '-')}`}>{profile?.role || 'Loading role'}</span>
           <button onClick={signOut}>Sign Out</button>
         </div>
         <nav>
-          {pages.map((page) => (
+          {availablePages.map((page) => (
             <button key={page} className={activePage === page ? 'active' : ''} onClick={() => setActivePage(page)}>
               {page}
             </button>
@@ -1012,10 +1263,14 @@ function App() {
       <main>
         {loading && <div className="app-message">Loading Velora records...</div>}
         {error && <div className="app-message error">{error}</div>}
-        {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} />}
-        {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} />}
-        {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} />}
-        {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
+        {profileError && <div className="app-message error">{profileError}</div>}
+        {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} profile={profile} />}
+        {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} profile={profile} />}
+        {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} profile={profile} />}
+        {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} profile={profile} />}
+        {activePage === 'User Management' && canManageUsers(profile) && (
+          <UserManagement profiles={profiles} loadingUsers={loadingUsers} userError={userError} updateUserRole={updateUserRole} />
+        )}
       </main>
     </div>
   );
