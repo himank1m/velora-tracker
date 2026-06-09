@@ -1021,7 +1021,7 @@ function DepartmentShortcuts({ setActivePage }) {
   ];
 
   return (
-    <section className="chart-card wide">
+    <section className="chart-card wide department-panel">
       <div className="card-heading">
         <div>
           <p className="eyebrow">Departments</p>
