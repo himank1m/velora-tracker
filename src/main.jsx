@@ -152,7 +152,7 @@ const blankShipment = {
 };
 
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
-const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Ready', 'Delivered', 'Completed'];
+const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
 const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments'];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -182,6 +182,25 @@ function orderProfit(order) {
 function matchesSearch(record, query) {
   const text = Object.values(record).join(' ').toLowerCase();
   return text.includes(query.toLowerCase());
+}
+
+function groupTimelineRows(events) {
+  return events.reduce((groups, event) => {
+    return {
+      ...groups,
+      [event.orderId]: [...(groups[event.orderId] || []), event],
+    };
+  }, {});
+}
+
+function delayedOrderCount(orders) {
+  const now = new Date();
+  return orders.filter((order) => {
+    if (order.status === 'Completed') return false;
+    const orderDate = new Date(order.orderDate);
+    const ageDays = (now - orderDate) / 86400000;
+    return ageDays > 14;
+  }).length;
 }
 
 function fromVehicleRow(row) {
@@ -234,6 +253,25 @@ function toOrderRow(order, userId) {
     purchase_cost: numberValue(order.purchaseCost),
     selling_price: numberValue(order.sellingPrice),
     status: order.status,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromTimelineRow(row) {
+  return {
+    id: row.id,
+    orderId: row.order_id,
+    status: row.status,
+    note: row.note || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toTimelineRow(event, userId) {
+  return {
+    order_id: event.orderId,
+    status: event.status,
+    note: event.note,
     ...(userId ? { created_by: userId } : {}),
   };
 }
@@ -347,6 +385,7 @@ function useAuthSession() {
 function useSupabaseRecords(user) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [orderTimelines, setOrderTimelines] = useState({});
   const [customers, setCustomers] = useState([]);
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -372,6 +411,7 @@ function useSupabaseRecords(user) {
     if (!user) {
       setVehicles([]);
       setOrders([]);
+      setOrderTimelines({});
       setCustomers([]);
       setShipments([]);
       setLoading(false);
@@ -382,17 +422,19 @@ function useSupabaseRecords(user) {
     setError('');
 
     try {
-      const [vehicleRows, orderRows, customerRows, shipmentRows] = await Promise.all([
+      const [vehicleRows, orderRows, customerRows, shipmentRows, timelineRows] = await Promise.all([
         runRequest(supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
         runRequest(supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
         runRequest(supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
         runRequest(supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
+        runRequest(supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true })),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
       setOrders(orderRows.map(fromOrderRow));
       setCustomers(customerRows.map(fromCustomerRow));
       setShipments(shipmentRows.map(fromShipmentRow));
+      setOrderTimelines(groupTimelineRows(timelineRows.map(fromTimelineRow)));
     } finally {
       setLoading(false);
     }
@@ -421,6 +463,10 @@ function useSupabaseRecords(user) {
       : supabase.from('orders').insert(toOrderRow(order, user.id)).select().single();
     const saved = fromOrderRow(await runRequest(query));
     setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+
+    if (!editingId) {
+      await addOrderTimelineEvent(saved.id, saved.status, 'Order created.');
+    }
   }
 
   async function deleteOrder(id) {
@@ -431,6 +477,27 @@ function useSupabaseRecords(user) {
   async function updateOrderStatus(id, status) {
     const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).eq('created_by', user.id).select().single()));
     setOrders((current) => current.map((item) => item.id === id ? saved : item));
+    await addOrderTimelineEvent(id, status, `Status changed to ${status}.`);
+  }
+
+  async function addOrderTimelineEvent(orderId, status, note) {
+    const saved = fromTimelineRow(await runRequest(
+      supabase
+        .from('order_timeline_events')
+        .insert(toTimelineRow({ orderId, status, note }, user.id))
+        .select()
+        .single()
+    ));
+
+    setOrderTimelines((current) => ({
+      ...current,
+      [orderId]: [...(current[orderId] || []), saved],
+    }));
+  }
+
+  async function addOrderTimelineNote(orderId, note) {
+    const order = orders.find((item) => item.id === orderId);
+    await addOrderTimelineEvent(orderId, order?.status || 'Inquiry', note);
   }
 
   async function saveCustomer(customer, editingId) {
@@ -462,6 +529,7 @@ function useSupabaseRecords(user) {
   return {
     vehicles,
     orders,
+    orderTimelines,
     customers,
     shipments,
     loading,
@@ -471,6 +539,7 @@ function useSupabaseRecords(user) {
     saveOrder,
     deleteOrder,
     updateOrderStatus,
+    addOrderTimelineNote,
     saveCustomer,
     deleteCustomer,
     saveShipment,
@@ -840,6 +909,8 @@ function Dashboard({ vehicles, orders, shipments }) {
       inventory: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.quantity), 0),
       activeOrders,
       completedOrders,
+      pendingOrders: activeOrders,
+      delayedOrders: delayedOrderCount(orders),
       revenue: orders.reduce((sum, order) => sum + orderRevenue(order), 0),
       profit: orders.reduce((sum, order) => sum + orderProfit(order), 0),
       shipments: shipments.length,
@@ -862,6 +933,8 @@ function Dashboard({ vehicles, orders, shipments }) {
         <Metric label="Vehicles in inventory" value={totals.inventory} />
         <Metric label="Active orders" value={totals.activeOrders} />
         <Metric label="Completed orders" value={totals.completedOrders} />
+        <Metric label="Pending orders" value={totals.pendingOrders} />
+        <Metric label="Delayed orders" value={totals.delayedOrders} tone="danger" />
         <Metric label="Total revenue" value={money.format(totals.revenue)} tone="accent" />
         <Metric label="Total profit" value={money.format(totals.profit)} tone="success" />
         <Metric label="Shipments" value={totals.shipments} />
@@ -978,10 +1051,11 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
   );
 }
 
-function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles }) {
+function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, orderTimelines, addOrderTimelineNote }) {
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankOrder);
   const [editingId, setEditingId] = useState('');
+  const [expandedOrderId, setExpandedOrderId] = useState('');
   const filtered = orders.filter((order) => matchesSearch(order, query));
 
   async function submitOrder(event) {
@@ -1026,28 +1100,40 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles })
           </thead>
           <tbody>
             {filtered.map((order) => (
-              <tr key={order.id}>
-                <td>{order.id}</td>
-                <td>{order.customerName}</td>
-                <td>{order.vehicle}</td>
-                <td>{order.quantity}</td>
-                <td>{order.orderDate}</td>
-                <td>{money.format(order.purchaseCost)}</td>
-                <td>{money.format(order.sellingPrice)}</td>
-                <td>{money.format(orderRevenue(order))}</td>
-                <td>{money.format(orderProfit(order))}</td>
-                <td>
-                  <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
-                    {orderStatuses.map((status) => (
-                      <option key={status}>{status}</option>
-                    ))}
-                  </select>
-                </td>
-                <td className="row-actions">
-                  <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>
-                </td>
-              </tr>
+              <React.Fragment key={order.id}>
+                <tr>
+                  <td>{order.id}</td>
+                  <td>{order.customerName}</td>
+                  <td>{order.vehicle}</td>
+                  <td>{order.quantity}</td>
+                  <td>{order.orderDate}</td>
+                  <td>{money.format(order.purchaseCost)}</td>
+                  <td>{money.format(order.sellingPrice)}</td>
+                  <td>{money.format(orderRevenue(order))}</td>
+                  <td>{money.format(orderProfit(order))}</td>
+                  <td>
+                    <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
+                      {orderStatuses.map((status) => (
+                        <option key={status}>{status}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="row-actions">
+                    <button className="mini" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? '' : order.id)}>
+                      {expandedOrderId === order.id ? 'Hide timeline' : 'Timeline'}
+                    </button>
+                    <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>
+                    <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>
+                  </td>
+                </tr>
+                {expandedOrderId === order.id && (
+                  <tr className="timeline-row">
+                    <td colSpan="11">
+                      <OrderTimeline order={order} events={orderTimelines[order.id] || []} addOrderTimelineNote={addOrderTimelineNote} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -1206,12 +1292,55 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
   );
 }
 
+function OrderTimeline({ order, events, addOrderTimelineNote }) {
+  const [note, setNote] = useState('');
+
+  async function submitNote(event) {
+    event.preventDefault();
+    if (!note.trim()) return;
+    await addOrderTimelineNote(order.id, note.trim());
+    setNote('');
+  }
+
+  return (
+    <div className="timeline-panel">
+      <div className="timeline-track">
+        {orderStatuses.map((status) => {
+          const event = events.find((item) => item.status === status);
+          const isCurrent = order.status === status;
+          return (
+            <div key={status} className={`timeline-step ${event ? 'complete' : ''} ${isCurrent ? 'current' : ''}`}>
+              <span className="timeline-dot" />
+              <div>
+                <strong>{status}</strong>
+                {event ? (
+                  <>
+                    <small>{new Date(event.createdAt).toLocaleString()}</small>
+                    {event.note && <p>{event.note}</p>}
+                  </>
+                ) : (
+                  <small>Pending</small>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <form className="timeline-note-form" onSubmit={submitNote}>
+        <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add timeline note" />
+        <button type="submit">Add note</button>
+      </form>
+    </div>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
   const { user, authLoading, authError, signOut } = useAuthSession();
   const {
     vehicles,
     orders,
+    orderTimelines,
     customers,
     shipments,
     loading,
@@ -1221,6 +1350,7 @@ function App() {
     saveOrder,
     deleteOrder,
     updateOrderStatus,
+    addOrderTimelineNote,
     saveCustomer,
     deleteCustomer,
     saveShipment,
@@ -1263,7 +1393,7 @@ function App() {
         {error && <div className="app-message error">{error}</div>}
         {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} shipments={shipments} />}
         {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} />}
-        {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} />}
+        {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} />}
         {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
         {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} />}
       </main>
