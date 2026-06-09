@@ -239,3 +239,89 @@ create policy "Users can delete own order timeline events"
 on order_timeline_events for delete
 to authenticated
 using (created_by = auth.uid());
+
+-- Phase 2 enterprise operations additions.
+-- Safe and non-destructive: creates new support tables and adds optional columns only.
+
+create table if not exists locations (
+  name text primary key,
+  department text,
+  notes text,
+  created_by uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+insert into locations (name, department, notes)
+values
+  ('Seoul HQ', 'Management', 'Executive operations and administration'),
+  ('New City Showroom', 'Sales', 'Retail and customer-facing sales operations'),
+  ('Port Operations Office', 'Logistics', 'Freight, customs, and port coordination'),
+  ('Warehouse', 'Inventory', 'Vehicle storage and inventory handling')
+on conflict (name) do nothing;
+
+create table if not exists departments (
+  name text primary key,
+  description text,
+  created_at timestamptz not null default now()
+);
+
+insert into departments (name, description)
+values
+  ('Sales', 'Customer, deal, and order operations'),
+  ('Inventory', 'Vehicle stock, pricing, and availability'),
+  ('Logistics', 'Shipment, port, freight, and delivery workflow'),
+  ('Finance', 'Revenue, profit, freight cost, and reporting'),
+  ('Management', 'Executive oversight, audit logs, and controls')
+on conflict (name) do nothing;
+
+create table if not exists alerts (
+  id uuid primary key default gen_random_uuid(),
+  alert_type text not null,
+  severity text not null check (severity in ('Low', 'Medium', 'High', 'Critical')),
+  title text not null,
+  message text not null,
+  linked_module text,
+  linked_record_id text,
+  resolved boolean not null default false,
+  created_by uuid default auth.uid() references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table vehicles add column if not exists location_name text default 'Seoul HQ';
+alter table vehicles add column if not exists department text default 'Inventory';
+alter table orders add column if not exists location_name text default 'Seoul HQ';
+alter table orders add column if not exists department text default 'Sales';
+alter table customers add column if not exists department text default 'Sales';
+alter table shipments add column if not exists location_name text default 'Port Operations Office';
+alter table shipments add column if not exists department text default 'Logistics';
+
+alter table locations enable row level security;
+alter table departments enable row level security;
+alter table alerts enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'locations' and policyname = 'Users can read locations') then
+    create policy "Users can read locations" on locations for select to authenticated using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'locations' and policyname = 'Users can manage own locations') then
+    create policy "Users can manage own locations" on locations for all to authenticated using (created_by = auth.uid() or created_by is null) with check (created_by = auth.uid() or created_by is null);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'departments' and policyname = 'Users can read departments') then
+    create policy "Users can read departments" on departments for select to authenticated using (true);
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'alerts' and policyname = 'Users can read own alerts') then
+    create policy "Users can read own alerts" on alerts for select to authenticated using (created_by = auth.uid());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'alerts' and policyname = 'Users can insert own alerts') then
+    create policy "Users can insert own alerts" on alerts for insert to authenticated with check (created_by = auth.uid());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'alerts' and policyname = 'Users can update own alerts') then
+    create policy "Users can update own alerts" on alerts for update to authenticated using (created_by = auth.uid()) with check (created_by = auth.uid());
+  end if;
+end $$;

@@ -5,11 +5,14 @@ import autoTable from 'jspdf-autotable';
 import {
   Activity,
   BarChart3,
+  Bell,
   Boxes,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Command,
   FileText,
+  Gauge,
   LayoutDashboard,
   Moon,
   PackageCheck,
@@ -19,12 +22,11 @@ import {
   Timeline as TimelineIcon,
   Truck,
   Users,
+  Warehouse,
 } from 'lucide-react';
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   Pie,
@@ -49,7 +51,7 @@ function formatIndianNumber(value) {
 
 const money = {
   format(value) {
-    return `₹${formatIndianNumber(value)}`;
+    return `\u20b9${formatIndianNumber(value)}`;
   },
 };
 
@@ -157,6 +159,8 @@ const blankVehicle = {
   purchasePrice: 0,
   sellingPrice: 0,
   status: 'Available',
+  locationName: 'Seoul HQ',
+  department: 'Inventory',
 };
 
 const blankOrder = {
@@ -169,6 +173,8 @@ const blankOrder = {
   purchaseCost: 0,
   sellingPrice: 0,
   status: 'Inquiry',
+  locationName: 'Seoul HQ',
+  department: 'Sales',
 };
 
 const blankCustomer = {
@@ -178,6 +184,7 @@ const blankCustomer = {
   email: '',
   location: '',
   notes: '',
+  department: 'Sales',
 };
 
 const blankShipment = {
@@ -194,20 +201,25 @@ const blankShipment = {
   eta: today,
   status: 'Preparing',
   notes: '',
+  locationName: 'Port Operations Office',
+  department: 'Logistics',
 };
 
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
-const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Audit Logs'];
+const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
+const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
+const pages = ['Command Center', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navIcons = {
-  Dashboard: LayoutDashboard,
+  'Command Center': LayoutDashboard,
   Inventory: Boxes,
   Orders: ClipboardList,
   Customers: Users,
   Shipments: Truck,
   Timeline: TimelineIcon,
   Reports: FileText,
+  'Alerts Center': Bell,
   'Audit Logs': ShieldCheck,
 };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -279,6 +291,160 @@ function countByStatus(items) {
     ...result,
     [item.status]: (result[item.status] || 0) + 1,
   }), {})).map(([name, value]) => ({ name, value }));
+}
+
+function daysUntil(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.ceil((date - new Date()) / 86400000);
+}
+
+function createAlerts({ vehicles, orders, customers, shipments, orderTimelines }) {
+  const alerts = [];
+
+  shipments.forEach((shipment) => {
+    const days = daysUntil(shipment.eta);
+    if (days !== null && days >= 0 && days <= 3 && shipment.status !== 'Delivered') {
+      alerts.push({
+        id: `eta-${shipment.shipmentId}`,
+        alert_type: 'Shipment ETA',
+        severity: days <= 1 ? 'High' : 'Medium',
+        title: `Shipment ${shipment.shipmentId} ETA is close`,
+        message: `${shipment.vehicle} arrives in ${days} day${days === 1 ? '' : 's'} at ${shipment.portOfArrival || shipment.destinationCountry}.`,
+        linked_module: 'Shipments',
+        linked_record_id: shipment.shipmentId,
+        resolved: false,
+        created_at: shipment.createdAt,
+      });
+    }
+    if (days !== null && days < 0 && shipment.status !== 'Delivered') {
+      alerts.push({
+        id: `overdue-${shipment.shipmentId}`,
+        alert_type: 'Shipment Overdue',
+        severity: 'Critical',
+        title: `Shipment ${shipment.shipmentId} is overdue`,
+        message: `${shipment.shippingCompany || 'Carrier'} missed ETA by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}.`,
+        linked_module: 'Shipments',
+        linked_record_id: shipment.shipmentId,
+        resolved: false,
+        created_at: shipment.createdAt,
+      });
+    }
+    if (numberValue(shipment.freightCost) > 500000) {
+      alerts.push({
+        id: `freight-${shipment.shipmentId}`,
+        alert_type: 'High Freight Cost',
+        severity: 'Medium',
+        title: `High freight cost on ${shipment.shipmentId}`,
+        message: `${money.format(shipment.freightCost)} freight cost needs finance review.`,
+        linked_module: 'Shipments',
+        linked_record_id: shipment.shipmentId,
+        resolved: false,
+        created_at: shipment.createdAt,
+      });
+    }
+  });
+
+  orders.forEach((order) => {
+    const latestEvent = [...(orderTimelines[order.id] || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+    const referenceDate = latestEvent?.createdAt || order.orderDate;
+    const daysStuck = Math.floor((new Date() - new Date(referenceDate)) / 86400000);
+    if (order.status !== 'Completed' && daysStuck > 7) {
+      alerts.push({
+        id: `stuck-${order.id}`,
+        alert_type: 'Order Stalled',
+        severity: daysStuck > 14 ? 'High' : 'Medium',
+        title: `Order ${order.orderNumber} is stuck`,
+        message: `${order.customerName} has been in ${order.status} for ${daysStuck} days.`,
+        linked_module: 'Orders',
+        linked_record_id: order.id,
+        resolved: false,
+        created_at: referenceDate,
+      });
+    }
+    if (profitMargin(order) < 0) {
+      alerts.push({
+        id: `negative-margin-${order.id}`,
+        alert_type: 'Negative Profit Margin',
+        severity: 'Critical',
+        title: `Negative margin on order ${order.orderNumber}`,
+        message: `Selling price is below purchase cost.`,
+        linked_module: 'Orders',
+        linked_record_id: order.id,
+        resolved: false,
+        created_at: order.createdAt,
+      });
+    } else if (profitMargin(order) > 0 && profitMargin(order) < 8) {
+      alerts.push({
+        id: `low-margin-${order.id}`,
+        alert_type: 'Low Profit Margin',
+        severity: 'Low',
+        title: `Low margin on order ${order.orderNumber}`,
+        message: `Profit margin is ${profitMargin(order).toFixed(1)}%.`,
+        linked_module: 'Orders',
+        linked_record_id: order.id,
+        resolved: false,
+        created_at: order.createdAt,
+      });
+    }
+  });
+
+  vehicles.filter((vehicle) => numberValue(vehicle.quantity) <= 1).forEach((vehicle) => {
+    alerts.push({
+      id: `low-stock-${vehicle.id}`,
+      alert_type: 'Low Inventory',
+      severity: numberValue(vehicle.quantity) === 0 ? 'High' : 'Medium',
+      title: `Low stock: ${vehicle.brand} ${vehicle.model}`,
+      message: `${vehicle.quantity} unit${vehicle.quantity === 1 ? '' : 's'} left at ${vehicle.locationName}.`,
+      linked_module: 'Inventory',
+      linked_record_id: vehicle.id,
+      resolved: false,
+      created_at: vehicle.createdAt,
+    });
+  });
+
+  customers.filter((customer) => !customer.phone || !customer.email).forEach((customer) => {
+    alerts.push({
+      id: `missing-customer-${customer.id}`,
+      alert_type: 'Missing Customer Info',
+      severity: 'Low',
+      title: `Missing details for ${customer.name}`,
+      message: `Add ${!customer.phone ? 'phone' : ''}${!customer.phone && !customer.email ? ' and ' : ''}${!customer.email ? 'email' : ''}.`,
+      linked_module: 'Customers',
+      linked_record_id: customer.id,
+      resolved: false,
+      created_at: customer.createdAt,
+    });
+  });
+
+  return alerts.sort((a, b) => {
+    const rank = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+    return rank[b.severity] - rank[a.severity];
+  });
+}
+
+function buildGlobalResults({ vehicles, orders, customers, shipments }, query) {
+  if (!query.trim()) return [];
+  const q = query.toLowerCase();
+  const toResult = (module, title, subtitle, page) => ({ module, title, subtitle, page });
+  return [
+    ...vehicles.map((item) => toResult('Vehicle', `${item.brand} ${item.model}`, `${item.id} - ${item.status}`, 'Inventory')),
+    ...orders.map((item) => toResult('Order', `Order ${item.orderNumber}`, `${item.customerName} - ${item.status}`, 'Orders')),
+    ...customers.map((item) => toResult('Customer', item.name, `${item.email || 'No email'} - ${item.location || 'No city'}`, 'Customers')),
+    ...shipments.map((item) => toResult('Shipment', item.shipmentId, `${item.destinationCountry} - ${item.status}`, 'Shipments')),
+    toResult('Report', 'Business reports', 'Exports, profit, freight, inventory value', 'Reports'),
+    toResult('Audit', 'Audit logs', 'Operational record feed', 'Audit Logs'),
+  ].filter((result) => `${result.module} ${result.title} ${result.subtitle}`.toLowerCase().includes(q)).slice(0, 8);
+}
+
+function buildAuditLogs({ orders, shipments, customers, vehicles }) {
+  return [
+    ...orders.map((order) => ({ label: `Order ${order.orderNumber} is ${order.status}`, meta: order.customerName, time: order.createdAt })),
+    ...shipments.map((shipment) => ({ label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry, time: shipment.createdAt })),
+    ...customers.map((customer) => ({ label: `Customer record: ${customer.name}`, meta: customer.location, time: customer.createdAt })),
+    ...vehicles.map((vehicle) => ({ label: `Inventory record: ${vehicle.brand} ${vehicle.model}`, meta: vehicle.status, time: vehicle.createdAt })),
+  ].sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
 }
 
 function nextOrderNumber(orders) {
@@ -371,6 +537,8 @@ function fromVehicleRow(row) {
     purchasePrice: Number(row.purchase_price),
     sellingPrice: Number(row.selling_price),
     status: row.status,
+    locationName: row.location_name || 'Seoul HQ',
+    department: row.department || 'Inventory',
     createdAt: row.created_at,
   };
 }
@@ -385,6 +553,8 @@ function toVehicleRow(vehicle, userId) {
     purchase_price: numberValue(vehicle.purchasePrice),
     selling_price: numberValue(vehicle.sellingPrice),
     status: vehicle.status,
+    location_name: vehicle.locationName,
+    department: vehicle.department,
     ...(userId ? { created_by: userId } : {}),
   };
 }
@@ -400,6 +570,8 @@ function fromOrderRow(row) {
     purchaseCost: Number(row.purchase_cost),
     sellingPrice: Number(row.selling_price),
     status: row.status,
+    locationName: row.location_name || 'Seoul HQ',
+    department: row.department || 'Sales',
     createdAt: row.created_at,
   };
 }
@@ -414,6 +586,8 @@ function toOrderRow(order, userId) {
     purchase_cost: numberValue(order.purchaseCost),
     selling_price: numberValue(order.sellingPrice),
     status: order.status,
+    location_name: order.locationName,
+    department: order.department,
     ...(userId ? { created_by: userId } : {}),
   };
   delete row.id;
@@ -447,6 +621,7 @@ function fromCustomerRow(row) {
     email: row.email || '',
     location: row.location || '',
     notes: row.notes || '',
+    department: row.department || 'Sales',
     createdAt: row.created_at,
   };
 }
@@ -459,6 +634,7 @@ function toCustomerRow(customer, userId) {
     email: customer.email,
     location: customer.location,
     notes: customer.notes,
+    department: customer.department,
     ...(userId ? { created_by: userId } : {}),
   };
 }
@@ -478,6 +654,8 @@ function fromShipmentRow(row) {
     eta: row.eta,
     status: row.status,
     notes: row.notes || '',
+    locationName: row.location_name || 'Port Operations Office',
+    department: row.department || 'Logistics',
     createdAt: row.created_at,
   };
 }
@@ -497,6 +675,8 @@ function toShipmentRow(shipment, userId) {
     eta: shipment.eta,
     status: shipment.status,
     notes: shipment.notes,
+    location_name: shipment.locationName,
+    department: shipment.department,
     ...(userId ? { created_by: userId } : {}),
   };
 }
@@ -770,6 +950,134 @@ function TableFooter({ count }) {
   );
 }
 
+function AlertBadge({ severity }) {
+  return <span className={`alert-severity severity-${severity.toLowerCase()}`}>{severity}</span>;
+}
+
+function SystemHealthPanel({ vehicles, orders, customers, shipments, error, authError }) {
+  const totalRecords = vehicles.length + orders.length + customers.length + shipments.length;
+  const lastActivity = buildAuditLogs({ vehicles, orders, customers, shipments })[0]?.time;
+  const hasError = Boolean(error || authError);
+  const checks = [
+    { label: 'Database Status', value: hasError ? 'Attention' : 'Connected', tone: hasError ? 'danger' : 'success' },
+    { label: 'Authentication Status', value: authError ? 'Check setup' : 'Active', tone: authError ? 'danger' : 'success' },
+    { label: 'Total Records', value: formatIndianNumber(totalRecords), tone: 'info' },
+    { label: 'Last Activity', value: lastActivity ? new Date(lastActivity).toLocaleString() : 'No activity yet', tone: 'info' },
+    { label: 'System Uptime', value: 'Operational', tone: 'success' },
+    { label: 'Recent Errors', value: error || authError || 'None', tone: hasError ? 'danger' : 'success' },
+  ];
+
+  return (
+    <section className="chart-card">
+      <div className="card-heading">
+        <div>
+          <p className="eyebrow">System health</p>
+          <h2>Platform status</h2>
+        </div>
+        <Gauge size={20} />
+      </div>
+      <div className="health-grid">
+        {checks.map((item) => (
+          <div className={`health-card ${item.tone}`} key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DepartmentShortcuts({ setActivePage }) {
+  const cards = [
+    { name: 'Sales', page: 'Orders', icon: ClipboardList, text: 'Orders and customer movement' },
+    { name: 'Inventory', page: 'Inventory', icon: Warehouse, text: 'Vehicle stock and value' },
+    { name: 'Logistics', page: 'Shipments', icon: Truck, text: 'Freight and delivery workflow' },
+    { name: 'Finance', page: 'Reports', icon: BarChart3, text: 'Revenue, profit, and exports' },
+    { name: 'Management', page: 'Audit Logs', icon: ShieldCheck, text: 'Activity and control view' },
+  ];
+
+  return (
+    <section className="chart-card wide">
+      <div className="card-heading">
+        <div>
+          <p className="eyebrow">Departments</p>
+          <h2>Operational shortcuts</h2>
+        </div>
+      </div>
+      <div className="department-grid">
+        {cards.map(({ name, page, icon: Icon, text }) => (
+          <button className="department-card" key={name} onClick={() => setActivePage(page)}>
+            <span><Icon size={18} /></span>
+            <strong>{name}</strong>
+            <small>{text}</small>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function GlobalSearch({ data, setActivePage }) {
+  const [query, setQuery] = useState('');
+  const results = useMemo(() => buildGlobalResults(data, query), [data, query]);
+
+  return (
+    <div className="global-search">
+      <Search size={16} />
+      <input placeholder="Search vehicles, orders, customers, shipments..." value={query} onChange={(event) => setQuery(event.target.value)} />
+      <kbd>Ctrl K</kbd>
+      {results.length > 0 && (
+        <div className="search-popover">
+          {results.map((result) => (
+            <button key={`${result.module}-${result.title}`} onClick={() => { setActivePage(result.page); setQuery(''); }}>
+              <span>{result.module}</span>
+              <strong>{result.title}</strong>
+              <small>{result.subtitle}</small>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommandPalette({ open, onClose, setActivePage }) {
+  const actions = [
+    { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
+    { label: 'Add Customer', page: 'Customers', icon: Users },
+    { label: 'Create Order', page: 'Orders', icon: ClipboardList },
+    { label: 'Create Shipment', page: 'Shipments', icon: Truck },
+    { label: 'Open Reports', page: 'Reports', icon: FileText },
+    { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
+    { label: 'Open Command Center', page: 'Command Center', icon: LayoutDashboard },
+  ];
+
+  if (!open) return null;
+
+  return (
+    <div className="command-backdrop" onClick={onClose}>
+      <section className="command-dialog" onClick={(event) => event.stopPropagation()}>
+        <div className="card-heading">
+          <div>
+            <p className="eyebrow">Command palette</p>
+            <h2>Quick actions</h2>
+          </div>
+          <kbd>Esc</kbd>
+        </div>
+        <div className="command-list">
+          {actions.map(({ label, page, icon: Icon }) => (
+            <button key={label} onClick={() => { setActivePage(page); onClose(); }}>
+              <Icon size={18} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
   return (
     <form className="entry-form" onSubmit={onSubmit}>
@@ -799,6 +1107,11 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
           {vehicleStatuses.map((status) => (
             <option key={status}>{status}</option>
           ))}
+        </select>
+      </Field>
+      <Field label="Location">
+        <select value={value.locationName} onChange={(e) => onChange({ ...value, locationName: e.target.value })}>
+          {locationOptions.map((location) => <option key={location}>{location}</option>)}
         </select>
       </Field>
       <div className="form-actions">
@@ -845,6 +1158,11 @@ function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOpti
           ))}
         </select>
       </Field>
+      <Field label="Location">
+        <select value={value.locationName} onChange={(e) => onChange({ ...value, locationName: e.target.value })}>
+          {locationOptions.map((location) => <option key={location}>{location}</option>)}
+        </select>
+      </Field>
       <div className="form-actions">
         <button type="submit">{editingId ? 'Save order' : 'Add order'}</button>
         {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
@@ -870,6 +1188,11 @@ function CustomerForm({ value, onChange, onSubmit, editingId, onCancel }) {
       </Field>
       <Field label="Notes">
         <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
+      </Field>
+      <Field label="Department">
+        <select value={value.department} onChange={(e) => onChange({ ...value, department: e.target.value })}>
+          {departments.map((department) => <option key={department}>{department}</option>)}
+        </select>
       </Field>
       <div className="form-actions">
         <button type="submit">{editingId ? 'Save customer' : 'Add customer'}</button>
@@ -938,6 +1261,11 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
           {shipmentStatuses.map((status) => (
             <option key={status}>{status}</option>
           ))}
+        </select>
+      </Field>
+      <Field label="Location">
+        <select value={value.locationName} onChange={(e) => onChange({ ...value, locationName: e.target.value })}>
+          {locationOptions.map((location) => <option key={location}>{location}</option>)}
         </select>
       </Field>
       <Field label="Notes">
@@ -1102,7 +1430,7 @@ function AuthView({ authError }) {
   );
 }
 
-function Dashboard({ vehicles, orders, shipments }) {
+function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, setActivePage, error, authError }) {
   const totals = useMemo(() => {
     const activeOrders = orders.filter((order) => order.status !== 'Completed').length;
     const completedOrders = orders.filter((order) => order.status === 'Completed').length;
@@ -1116,6 +1444,7 @@ function Dashboard({ vehicles, orders, shipments }) {
       profit: orders.reduce((sum, order) => sum + orderProfit(order), 0),
       shipments: shipments.length,
       activeShipments: shipments.filter((shipment) => shipment.status !== 'Delivered').length,
+      deliveredShipments: shipments.filter((shipment) => shipment.status === 'Delivered').length,
       freightCost: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
       inventoryValue: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
     };
@@ -1123,9 +1452,10 @@ function Dashboard({ vehicles, orders, shipments }) {
 
   const recentOrders = orders.slice(0, 4);
   const revenueTrend = trendByMonth(orders, 'orderDate', orderRevenue);
-  const ordersTrend = trendByMonth(orders, 'orderDate', () => 1);
   const profitTrend = trendByMonth(orders, 'orderDate', orderProfit);
   const shipmentBreakdown = countByStatus(shipments);
+  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines }), [vehicles, orders, customers, shipments, orderTimelines]);
+  const auditLogs = useMemo(() => buildAuditLogs({ vehicles, orders, customers, shipments }).slice(0, 5), [vehicles, orders, customers, shipments]);
   const recentActivity = [
     ...orders.slice(0, 3).map((order) => ({ label: `Order ${order.orderNumber} moved to ${order.status}`, meta: order.customerName })),
     ...shipments.slice(0, 3).map((shipment) => ({ label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry })),
@@ -1136,15 +1466,19 @@ function Dashboard({ vehicles, orders, shipments }) {
       <div className="hero premium-hero">
         <div>
           <p className="eyebrow">Velora Motors Ltd.</p>
-          <h1>Velora Motors Tracker</h1>
-          <p>Premium dealership operations, order workflow, freight visibility, and financial performance in one secure workspace.</p>
+          <h1>Operations Command Center</h1>
+          <p>Enterprise dealership operations, order workflow, freight visibility, critical alerts, and financial performance in one secure workspace.</p>
         </div>
       </div>
-      <div className="metrics-grid">
+      <div className="metrics-grid enterprise-metrics">
         <Metric label="Revenue" value={money.format(totals.revenue)} tone="accent" icon={BarChart3} />
         <Metric label="Profit" value={money.format(totals.profit)} tone="success" icon={Activity} />
+        <Metric label="Inventory value" value={money.format(totals.inventoryValue)} icon={Boxes} />
+        <Metric label="Active orders" value={totals.activeOrders} icon={ClipboardList} />
         <Metric label="Active shipments" value={totals.activeShipments} icon={Truck} />
-        <Metric label="Delayed orders" value={totals.delayedOrders} tone="danger" icon={ClipboardList} />
+        <Metric label="Delivered orders" value={totals.completedOrders} tone="success" icon={PackageCheck} />
+        <Metric label="Delivered shipments" value={totals.deliveredShipments} tone="success" icon={Truck} />
+        <Metric label="Freight cost" value={money.format(totals.freightCost)} tone="danger" icon={Gauge} />
       </div>
       <div className="dashboard-grid">
         <section className="chart-card wide">
@@ -1170,21 +1504,21 @@ function Dashboard({ vehicles, orders, shipments }) {
             </AreaChart>
           </ResponsiveContainer>
         </section>
-        <section className="chart-card">
+        <section className="chart-card wide">
           <div className="card-heading">
             <div>
-              <p className="eyebrow">Orders</p>
-              <h2>Order trend</h2>
+              <p className="eyebrow">Profit trend</p>
+              <h2>Monthly profit</h2>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={ordersTrend}>
+            <AreaChart data={profitTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
               <XAxis dataKey="month" stroke="var(--muted)" />
               <YAxis stroke="var(--muted)" />
-              <Tooltip contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
-              <Bar dataKey="value" fill="#38bdf8" radius={[8, 8, 0, 0]} />
-            </BarChart>
+              <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
+              <Area type="monotone" dataKey="value" stroke="#22c55e" fill="#22c55e33" strokeWidth={3} />
+            </AreaChart>
           </ResponsiveContainer>
         </section>
         <section className="chart-card">
@@ -1208,19 +1542,23 @@ function Dashboard({ vehicles, orders, shipments }) {
         <section className="chart-card">
           <div className="card-heading">
             <div>
-              <p className="eyebrow">Profit overview</p>
-              <h2>Monthly profit</h2>
+              <p className="eyebrow">Critical alerts</p>
+              <h2>Priority watchlist</h2>
             </div>
+            <button className="mini" onClick={() => setActivePage('Alerts Center')}>View all</button>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={profitTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-              <XAxis dataKey="month" stroke="var(--muted)" />
-              <YAxis stroke="var(--muted)" />
-              <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
-              <Area type="monotone" dataKey="value" stroke="#22c55e" fill="#22c55e33" strokeWidth={3} />
-            </AreaChart>
-          </ResponsiveContainer>
+          <div className="alert-list compact">
+            {alerts.slice(0, 4).map((alert) => (
+              <div className="alert-row" key={alert.id}>
+                <AlertBadge severity={alert.severity} />
+                <div>
+                  <strong>{alert.title}</strong>
+                  <small>{alert.message}</small>
+                </div>
+              </div>
+            ))}
+            {!alerts.length && <EmptyState label="No critical alerts right now." icon={Bell} />}
+          </div>
         </section>
         <section className="activity-card">
           <div className="card-heading">
@@ -1242,6 +1580,29 @@ function Dashboard({ vehicles, orders, shipments }) {
             {!recentActivity.length && <EmptyState label="No recent activity yet." icon={Activity} />}
           </div>
         </section>
+        <section className="activity-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Recent audit logs</p>
+              <h2>Governance feed</h2>
+            </div>
+            <button className="mini" onClick={() => setActivePage('Audit Logs')}>Open logs</button>
+          </div>
+          <div className="activity-list">
+            {auditLogs.map((item, index) => (
+              <div className="activity-item" key={`${item.label}-${index}`}>
+                <span><ShieldCheck size={16} /></span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <small>{item.meta || 'Velora record'}</small>
+                </div>
+              </div>
+            ))}
+            {!auditLogs.length && <EmptyState label="No audit logs yet." icon={ShieldCheck} />}
+          </div>
+        </section>
+        <DepartmentShortcuts setActivePage={setActivePage} />
+        <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} />
       </div>
       <div className="section-heading">
         <h2>Recent orders</h2>
@@ -1278,9 +1639,13 @@ function Dashboard({ vehicles, orders, shipments }) {
 
 function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
   const [query, setQuery] = useState('');
+  const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankVehicle);
   const [editingId, setEditingId] = useState('');
-  const filtered = vehicles.filter((vehicle) => matchesSearch(vehicle, query));
+  const filtered = vehicles.filter((vehicle) => {
+    const locationMatches = locationFilter === 'All' || vehicle.locationName === locationFilter;
+    return locationMatches && matchesSearch(vehicle, query);
+  });
 
   async function submitVehicle(event) {
     event.preventDefault();
@@ -1307,7 +1672,13 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
           <p className="eyebrow">Inventory</p>
           <h1>Vehicle stock</h1>
         </div>
-        <input className="search" placeholder="Search vehicles" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="toolbar">
+          <input className="search" placeholder="Search vehicles" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+            <option>All</option>
+            {locationOptions.map((location) => <option key={location}>{location}</option>)}
+          </select>
+        </div>
       </div>
       <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />
       <div className="table-shell">
@@ -1357,10 +1728,14 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
 
 function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, orderTimelines, addOrderTimelineNote }) {
   const [query, setQuery] = useState('');
+  const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankOrder);
   const [editingId, setEditingId] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState('');
-  const filtered = orders.filter((order) => matchesSearch(order, query));
+  const filtered = orders.filter((order) => {
+    const locationMatches = locationFilter === 'All' || order.locationName === locationFilter;
+    return locationMatches && matchesSearch(order, query);
+  });
 
   async function submitOrder(event) {
     event.preventDefault();
@@ -1382,7 +1757,13 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
           <p className="eyebrow">Orders</p>
           <h1>Customer orders</h1>
         </div>
-        <input className="search" placeholder="Search orders" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="toolbar">
+          <input className="search" placeholder="Search orders" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+            <option>All</option>
+            {locationOptions.map((location) => <option key={location}>{location}</option>)}
+          </select>
+        </div>
       </div>
       <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />
       <div className="table-shell">
@@ -1506,11 +1887,13 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
 function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankShipment);
   const [editingId, setEditingId] = useState('');
   const filtered = shipments.filter((shipment) => {
     const statusMatches = statusFilter === 'All' || shipment.status === statusFilter;
-    return statusMatches && matchesSearch(shipment, query);
+    const locationMatches = locationFilter === 'All' || shipment.locationName === locationFilter;
+    return statusMatches && locationMatches && matchesSearch(shipment, query);
   });
   const orderNumberById = useMemo(() => {
     return orders.reduce((lookup, order) => ({ ...lookup, [order.id]: order.orderNumber || order.id }), {});
@@ -1547,6 +1930,10 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
             {shipmentStatuses.map((status) => (
               <option key={status}>{status}</option>
             ))}
+          </select>
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+            <option>All</option>
+            {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
         </div>
       </div>
@@ -1812,7 +2199,7 @@ function TimelineOverview({ orders, orderTimelines }) {
             <div>
               <strong>Order {event.orderNumber}</strong>
               <p>{event.note || `Moved to ${event.status}`}</p>
-              <small>{event.customerName} · {new Date(event.createdAt).toLocaleString()}</small>
+              <small>{event.customerName} - {new Date(event.createdAt).toLocaleString()}</small>
             </div>
           </div>
         ))}
@@ -1822,13 +2209,57 @@ function TimelineOverview({ orders, orderTimelines }) {
   );
 }
 
+function AlertsCenter({ alerts }) {
+  const [severityFilter, setSeverityFilter] = useState('All');
+  const [resolvedFilter, setResolvedFilter] = useState('Open');
+  const filtered = alerts.filter((alert) => {
+    const severityMatches = severityFilter === 'All' || alert.severity === severityFilter;
+    const resolvedMatches = resolvedFilter === 'All' || (resolvedFilter === 'Open' ? !alert.resolved : alert.resolved);
+    return severityMatches && resolvedMatches;
+  });
+
+  return (
+    <section className="page-stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Risk operations</p>
+          <h1>Alerts Center</h1>
+        </div>
+        <div className="toolbar">
+          <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
+            <option>All</option>
+            <option>Critical</option>
+            <option>High</option>
+            <option>Medium</option>
+            <option>Low</option>
+          </select>
+          <select value={resolvedFilter} onChange={(event) => setResolvedFilter(event.target.value)}>
+            <option>Open</option>
+            <option>Resolved</option>
+            <option>All</option>
+          </select>
+        </div>
+      </div>
+      <div className="alert-grid">
+        {filtered.map((alert) => (
+          <article className={`alert-card severity-${alert.severity.toLowerCase()}`} key={alert.id}>
+            <div className="card-heading">
+              <AlertBadge severity={alert.severity} />
+              <span className="status">{alert.linked_module}</span>
+            </div>
+            <h2>{alert.title}</h2>
+            <p>{alert.message}</p>
+            <small>{alert.alert_type} - {alert.created_at ? new Date(alert.created_at).toLocaleString() : 'Generated now'}</small>
+          </article>
+        ))}
+      </div>
+      {!filtered.length && <EmptyState label="No alerts match this view." icon={Bell} />}
+    </section>
+  );
+}
+
 function AuditLogs({ orders, shipments, customers, vehicles }) {
-  const logs = [
-    ...orders.map((order) => ({ label: `Order ${order.orderNumber} is ${order.status}`, meta: order.customerName, time: order.createdAt })),
-    ...shipments.map((shipment) => ({ label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry, time: shipment.createdAt })),
-    ...customers.map((customer) => ({ label: `Customer record: ${customer.name}`, meta: customer.location, time: customer.createdAt })),
-    ...vehicles.map((vehicle) => ({ label: `Inventory record: ${vehicle.brand} ${vehicle.model}`, meta: vehicle.status, time: vehicle.createdAt })),
-  ].sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+  const logs = buildAuditLogs({ orders, shipments, customers, vehicles });
 
   return (
     <section className="page-stack">
@@ -1844,7 +2275,7 @@ function AuditLogs({ orders, shipments, customers, vehicles }) {
             <span><ShieldCheck size={16} /></span>
             <div>
               <strong>{log.label}</strong>
-              <small>{log.meta || 'Velora record'} · {log.time ? new Date(log.time).toLocaleString() : 'Recent'}</small>
+              <small>{log.meta || 'Velora record'} - {log.time ? new Date(log.time).toLocaleString() : 'Recent'}</small>
             </div>
           </div>
         ))}
@@ -1855,8 +2286,9 @@ function AuditLogs({ orders, shipments, customers, vehicles }) {
 }
 
 function App() {
-  const [activePage, setActivePage] = useState('Dashboard');
+  const [activePage, setActivePage] = useState('Command Center');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [theme, setTheme] = useTheme();
   const { user, authLoading, authError, signOut } = useAuthSession();
   const {
@@ -1878,6 +2310,21 @@ function App() {
     saveShipment,
     deleteShipment,
   } = useSupabaseRecords(user);
+  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines }), [vehicles, orders, customers, shipments, orderTimelines]);
+  const searchData = useMemo(() => ({ vehicles, orders, customers, shipments }), [vehicles, orders, customers, shipments]);
+
+  useEffect(() => {
+    function onKeyDown(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+      if (event.key === 'Escape') setCommandOpen(false);
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   if (authLoading) {
     return <div className="screen-loader">Checking Velora session...</div>;
@@ -1923,21 +2370,30 @@ function App() {
             <p className="eyebrow">Velora Motors</p>
             <h1>{activePage}</h1>
           </div>
-          <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-          </button>
+          <div className="topbar-actions">
+            <GlobalSearch data={searchData} setActivePage={setActivePage} />
+            <button className="theme-toggle command-button" onClick={() => setCommandOpen(true)}>
+              <Command size={17} />
+              <span>Commands</span>
+            </button>
+            <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+              <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+            </button>
+          </div>
         </header>
         {loading && <div className="app-message">Loading Velora records...</div>}
         {error && <div className="app-message error">{error}</div>}
-        {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} shipments={shipments} />}
+        {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} orderTimelines={orderTimelines} setActivePage={setActivePage} error={error} authError={authError} />}
         {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} />}
         {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} />}
         {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
         {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} />}
         {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
         {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} />}
+        {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
         {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
+        <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} setActivePage={setActivePage} />
       </main>
     </div>
   );
