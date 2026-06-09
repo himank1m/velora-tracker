@@ -7,6 +7,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.108.0",
     "@vitejs/plugin-react": "latest",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "react": "latest",
     "react-dom": "latest",
     "vite": "latest"

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 import './styles.css';
 
@@ -154,7 +156,7 @@ const blankShipment = {
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
-const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments'];
+const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Reports'];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function numberValue(value) {
@@ -203,6 +205,78 @@ function delayedOrderCount(orders) {
   }).length;
 }
 
+function inDateRange(value, startDate, endDate) {
+  if (!value) return true;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return true;
+  if (startDate && date < new Date(startDate)) return false;
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    if (date > end) return false;
+  }
+  return true;
+}
+
+function csvEscape(value) {
+  const text = String(value ?? '');
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCsv(report) {
+  const rows = [report.columns.map((column) => column.label)];
+  report.rows.forEach((row) => {
+    rows.push(report.columns.map((column) => row[column.key]));
+  });
+  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\n');
+  downloadFile(`${report.slug}.csv`, csv, 'text/csv;charset=utf-8');
+}
+
+function exportPdf(report, totals) {
+  const doc = new jsPDF({ orientation: 'landscape' });
+  const generatedAt = new Date().toLocaleString();
+
+  doc.setFillColor(18, 25, 36);
+  doc.rect(0, 0, 297, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.text('Velora Motors Tracker', 14, 12);
+  doc.setFontSize(10);
+  doc.text(report.title, 14, 20);
+  doc.text(`Generated: ${generatedAt}`, 220, 20);
+
+  doc.setTextColor(24, 32, 43);
+  doc.setFontSize(11);
+  const summary = [
+    `Revenue: ${money.format(totals.revenue)}`,
+    `Profit: ${money.format(totals.profit)}`,
+    `Freight: ${money.format(totals.freightCost)}`,
+    `Inventory Value: ${money.format(totals.inventoryValue)}`,
+  ];
+  doc.text(summary.join('   |   '), 14, 38);
+
+  autoTable(doc, {
+    startY: 46,
+    head: [report.columns.map((column) => column.label)],
+    body: report.rows.map((row) => report.columns.map((column) => row[column.key] ?? '')),
+    styles: { fontSize: 8, cellPadding: 2 },
+    headStyles: { fillColor: [18, 25, 36], textColor: 255 },
+  });
+
+  doc.save(`${report.slug}.pdf`);
+}
+
 function fromVehicleRow(row) {
   return {
     id: row.id,
@@ -213,6 +287,7 @@ function fromVehicleRow(row) {
     purchasePrice: Number(row.purchase_price),
     sellingPrice: Number(row.selling_price),
     status: row.status,
+    createdAt: row.created_at,
   };
 }
 
@@ -240,6 +315,7 @@ function fromOrderRow(row) {
     purchaseCost: Number(row.purchase_cost),
     sellingPrice: Number(row.selling_price),
     status: row.status,
+    createdAt: row.created_at,
   };
 }
 
@@ -284,6 +360,7 @@ function fromCustomerRow(row) {
     email: row.email || '',
     location: row.location || '',
     notes: row.notes || '',
+    createdAt: row.created_at,
   };
 }
 
@@ -1334,6 +1411,148 @@ function OrderTimeline({ order, events, addOrderTimelineNote }) {
   );
 }
 
+function Reports({ vehicles, orders, customers, shipments }) {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const filteredOrders = orders.filter((order) => inDateRange(order.orderDate, startDate, endDate));
+  const filteredShipments = shipments.filter((shipment) => inDateRange(shipment.eta || shipment.createdAt, startDate, endDate));
+  const filteredCustomers = customers.filter((customer) => inDateRange(customer.createdAt, startDate, endDate));
+  const filteredVehicles = vehicles.filter((vehicle) => inDateRange(vehicle.createdAt, startDate, endDate));
+
+  const totals = {
+    revenue: filteredOrders.reduce((sum, order) => sum + orderRevenue(order), 0),
+    profit: filteredOrders.reduce((sum, order) => sum + orderProfit(order), 0),
+    freightCost: filteredShipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
+    inventoryValue: filteredVehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
+  };
+
+  const reports = [
+    {
+      title: 'Inventory Report',
+      slug: 'velora-inventory-report',
+      summary: `${filteredVehicles.length} vehicles, ${filteredVehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.quantity), 0)} units`,
+      columns: [
+        { key: 'id', label: 'Vehicle ID' },
+        { key: 'brand', label: 'Brand' },
+        { key: 'model', label: 'Model' },
+        { key: 'category', label: 'Category' },
+        { key: 'quantity', label: 'Quantity' },
+        { key: 'purchasePrice', label: 'Purchase Price' },
+        { key: 'sellingPrice', label: 'Selling Price' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: filteredVehicles.map((vehicle) => ({
+        ...vehicle,
+        purchasePrice: money.format(vehicle.purchasePrice),
+        sellingPrice: money.format(vehicle.sellingPrice),
+      })),
+    },
+    {
+      title: 'Orders Report',
+      slug: 'velora-orders-report',
+      summary: `${filteredOrders.length} orders, ${money.format(totals.revenue)} revenue`,
+      columns: [
+        { key: 'id', label: 'Order ID' },
+        { key: 'customerName', label: 'Customer' },
+        { key: 'vehicle', label: 'Vehicle' },
+        { key: 'quantity', label: 'Quantity' },
+        { key: 'orderDate', label: 'Order Date' },
+        { key: 'revenue', label: 'Revenue' },
+        { key: 'profit', label: 'Profit' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: filteredOrders.map((order) => ({
+        ...order,
+        revenue: money.format(orderRevenue(order)),
+        profit: money.format(orderProfit(order)),
+      })),
+    },
+    {
+      title: 'Customers Report',
+      slug: 'velora-customers-report',
+      summary: `${filteredCustomers.length} customers`,
+      columns: [
+        { key: 'name', label: 'Customer' },
+        { key: 'phone', label: 'Phone' },
+        { key: 'email', label: 'Email' },
+        { key: 'location', label: 'Country / City' },
+        { key: 'notes', label: 'Notes' },
+      ],
+      rows: filteredCustomers,
+    },
+    {
+      title: 'Shipments Report',
+      slug: 'velora-shipments-report',
+      summary: `${filteredShipments.length} shipments, ${money.format(totals.freightCost)} freight`,
+      columns: [
+        { key: 'shipmentId', label: 'Shipment ID' },
+        { key: 'linkedOrderId', label: 'Order ID' },
+        { key: 'customerName', label: 'Customer' },
+        { key: 'vehicle', label: 'Vehicle' },
+        { key: 'destinationCountry', label: 'Destination' },
+        { key: 'freightCost', label: 'Freight Cost' },
+        { key: 'eta', label: 'ETA' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: filteredShipments.map((shipment) => ({
+        ...shipment,
+        freightCost: money.format(shipment.freightCost),
+      })),
+    },
+    {
+      title: 'Profit Summary Report',
+      slug: 'velora-profit-summary-report',
+      summary: `${money.format(totals.profit)} profit`,
+      columns: [
+        { key: 'metric', label: 'Metric' },
+        { key: 'value', label: 'Value' },
+      ],
+      rows: [
+        { metric: 'Total Revenue', value: money.format(totals.revenue) },
+        { metric: 'Total Profit', value: money.format(totals.profit) },
+        { metric: 'Total Freight Cost', value: money.format(totals.freightCost) },
+        { metric: 'Inventory Value', value: money.format(totals.inventoryValue) },
+      ],
+    },
+  ];
+
+  return (
+    <section className="page-stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Reports</p>
+          <h1>Business reports</h1>
+        </div>
+        <div className="toolbar">
+          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+        </div>
+      </div>
+      <div className="metrics-grid reports-summary">
+        <Metric label="Revenue" value={money.format(totals.revenue)} tone="accent" />
+        <Metric label="Profit" value={money.format(totals.profit)} tone="success" />
+        <Metric label="Freight cost" value={money.format(totals.freightCost)} />
+        <Metric label="Inventory value" value={money.format(totals.inventoryValue)} />
+      </div>
+      <div className="report-grid">
+        {reports.map((report) => (
+          <article className="report-card" key={report.slug}>
+            <div>
+              <p className="eyebrow">Velora Motors</p>
+              <h2>{report.title}</h2>
+              <p>{report.summary}</p>
+            </div>
+            <div className="report-actions">
+              <button onClick={() => exportCsv(report)}>Export CSV</button>
+              <button onClick={() => exportPdf(report, totals)}>Export PDF</button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
   const { user, authLoading, authError, signOut } = useAuthSession();
@@ -1396,6 +1615,7 @@ function App() {
         {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} />}
         {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
         {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} />}
+        {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} />}
       </main>
     </div>
   );
