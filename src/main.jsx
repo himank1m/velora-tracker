@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
-  Clock3,
   FileText,
   LayoutDashboard,
   Moon,
@@ -771,26 +770,6 @@ function TableFooter({ count }) {
   );
 }
 
-function LiveClock() {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return (
-    <article className="clock-card">
-      <div className="metric-icon"><Clock3 size={20} /></div>
-      <div>
-        <span>Local time</span>
-        <strong>{now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</strong>
-        <small>{now.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })}</small>
-      </div>
-    </article>
-  );
-}
-
 function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
   return (
     <form className="entry-form" onSubmit={onSubmit}>
@@ -1164,7 +1143,6 @@ function Dashboard({ vehicles, orders, shipments }) {
       <div className="metrics-grid">
         <Metric label="Revenue" value={money.format(totals.revenue)} tone="accent" icon={BarChart3} />
         <Metric label="Profit" value={money.format(totals.profit)} tone="success" icon={Activity} />
-        <LiveClock />
         <Metric label="Active shipments" value={totals.activeShipments} icon={Truck} />
         <Metric label="Delayed orders" value={totals.delayedOrders} tone="danger" icon={ClipboardList} />
       </div>
