@@ -947,6 +947,19 @@ function EmptyState({ label, icon: Icon = Search }) {
   );
 }
 
+function PageHeader({ eyebrow, title, description, children }) {
+  return (
+    <div className="section-heading page-header">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        {description && <p className="page-description">{description}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function TableFooter({ count }) {
   return (
     <div className="table-footer">
@@ -1614,8 +1627,11 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
         <DepartmentShortcuts setActivePage={setActivePage} />
         <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} />
       </div>
-      <div className="section-heading">
-        <h2>Recent orders</h2>
+      <div className="section-heading compact-heading">
+        <div>
+          <p className="eyebrow">Live pipeline</p>
+          <h2>Recent orders</h2>
+        </div>
       </div>
       <div className="table-shell">
         <table>
@@ -1677,11 +1693,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Inventory</p>
-          <h1>Vehicle stock</h1>
-        </div>
+      <PageHeader eyebrow="Inventory" title="Vehicle stock" description="Track available, reserved, and sold vehicles across Velora locations.">
         <div className="toolbar">
           <input className="search" placeholder="Search vehicles" value={query} onChange={(e) => setQuery(e.target.value)} />
           <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
@@ -1689,7 +1701,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
         </div>
-      </div>
+      </PageHeader>
       <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />
       <div className="table-shell">
         <table>
@@ -1762,11 +1774,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Orders</p>
-          <h1>Customer orders</h1>
-        </div>
+      <PageHeader eyebrow="Orders" title="Customer orders" description="Manage customer demand, pricing, workflow status, and order timelines.">
         <div className="toolbar">
           <input className="search" placeholder="Search orders" value={query} onChange={(e) => setQuery(e.target.value)} />
           <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
@@ -1774,7 +1782,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
         </div>
-      </div>
+      </PageHeader>
       <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />
       <div className="table-shell">
         <table>
@@ -1853,12 +1861,7 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Customers</p>
-          <h1>Customer records</h1>
-        </div>
-      </div>
+      <PageHeader eyebrow="Customers" title="Customer records" description="Maintain clean buyer contact details, notes, and commercial context." />
       <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />
       <div className="table-shell">
         <table>
@@ -1928,11 +1931,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Shipments</p>
-          <h1>Shipment tracking</h1>
-        </div>
+      <PageHeader eyebrow="Shipments" title="Shipment tracking" description="Monitor freight movement, ports, carriers, ETA, and delivery progress.">
         <div className="toolbar">
           <input className="search" placeholder="Search shipments" value={query} onChange={(e) => setQuery(e.target.value)} />
           <select className="status-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -1946,7 +1945,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
         </div>
-      </div>
+      </PageHeader>
       <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />
       <div className="table-shell">
         <table>
@@ -2152,16 +2151,12 @@ function Reports({ vehicles, orders, customers, shipments }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Reports</p>
-          <h1>Business reports</h1>
-        </div>
+      <PageHeader eyebrow="Reports" title="Business reports" description="Export operational summaries with revenue, profit, freight, and inventory totals.">
         <div className="toolbar">
           <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
         </div>
-      </div>
+      </PageHeader>
       <div className="metrics-grid reports-summary">
         <Metric label="Revenue" value={money.format(totals.revenue)} tone="accent" />
         <Metric label="Profit" value={money.format(totals.profit)} tone="success" />
@@ -2196,12 +2191,7 @@ function TimelineOverview({ orders, orderTimelines }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Workflow</p>
-          <h1>Order timeline</h1>
-        </div>
-      </div>
+      <PageHeader eyebrow="Workflow" title="Order timeline" description="Review order movement and staff notes across every workflow stage." />
       <div className="timeline-board">
         {events.map((event) => (
           <div className="timeline-event-card" key={event.id}>
@@ -2230,11 +2220,7 @@ function AlertsCenter({ alerts }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Risk operations</p>
-          <h1>Alerts Center</h1>
-        </div>
+      <PageHeader eyebrow="Risk operations" title="Alerts Center" description="Spot margin, ETA, stock, freight, and customer data issues before they slow operations.">
         <div className="toolbar">
           <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
             <option>All</option>
@@ -2249,7 +2235,7 @@ function AlertsCenter({ alerts }) {
             <option>All</option>
           </select>
         </div>
-      </div>
+      </PageHeader>
       <div className="alert-grid">
         {filtered.map((alert) => (
           <article className={`alert-card severity-${alert.severity.toLowerCase()}`} key={alert.id}>
@@ -2273,12 +2259,7 @@ function AuditLogs({ orders, shipments, customers, vehicles }) {
 
   return (
     <section className="page-stack">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Governance</p>
-          <h1>Audit logs</h1>
-        </div>
-      </div>
+      <PageHeader eyebrow="Governance" title="Audit logs" description="Trace recent operational changes across orders, shipments, customers, and inventory." />
       <div className="audit-list">
         {logs.map((log, index) => (
           <div className="activity-item audit-item" key={`${log.label}-${index}`}>
