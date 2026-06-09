@@ -2,6 +2,38 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import {
+  Activity,
+  BarChart3,
+  Boxes,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  FileText,
+  LayoutDashboard,
+  Moon,
+  PackageCheck,
+  Search,
+  ShieldCheck,
+  Sun,
+  Timeline as TimelineIcon,
+  Truck,
+  Users,
+} from 'lucide-react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 import './styles.css';
 
@@ -119,6 +151,7 @@ const blankVehicle = {
 
 const blankOrder = {
   id: '',
+  orderNumber: '',
   customerName: '',
   vehicle: '',
   quantity: 1,
@@ -156,7 +189,17 @@ const blankShipment = {
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
-const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Reports'];
+const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Audit Logs'];
+const navIcons = {
+  Dashboard: LayoutDashboard,
+  Inventory: Boxes,
+  Orders: ClipboardList,
+  Customers: Users,
+  Shipments: Truck,
+  Timeline: TimelineIcon,
+  Reports: FileText,
+  'Audit Logs': ShieldCheck,
+};
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function numberValue(value) {
@@ -203,6 +246,37 @@ function delayedOrderCount(orders) {
     const ageDays = (now - orderDate) / 86400000;
     return ageDays > 14;
   }).length;
+}
+
+function monthKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Unscheduled';
+  return date.toLocaleString('en-US', { month: 'short' });
+}
+
+function trendByMonth(items, dateKey, valueGetter) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const totals = months.reduce((result, month) => ({ ...result, [month]: 0 }), {});
+  items.forEach((item) => {
+    const key = monthKey(item[dateKey]);
+    if (totals[key] !== undefined) totals[key] += valueGetter(item);
+  });
+  return months.map((month) => ({ month, value: totals[month] })).filter((item) => item.value > 0);
+}
+
+function countByStatus(items) {
+  return Object.entries(items.reduce((result, item) => ({
+    ...result,
+    [item.status]: (result[item.status] || 0) + 1,
+  }), {})).map(([name, value]) => ({ name, value }));
+}
+
+function nextOrderNumber(orders) {
+  const max = orders.reduce((highest, order) => {
+    const value = Number.parseInt(order.orderNumber, 10);
+    return Number.isNaN(value) ? highest : Math.max(highest, value);
+  }, 0);
+  return String(max + 1).padStart(4, '0');
 }
 
 function inDateRange(value, startDate, endDate) {
@@ -308,6 +382,7 @@ function toVehicleRow(vehicle, userId) {
 function fromOrderRow(row) {
   return {
     id: row.id,
+    orderNumber: row.order_number || row.id,
     customerName: row.customer_name,
     vehicle: row.vehicle,
     quantity: row.quantity,
@@ -320,8 +395,8 @@ function fromOrderRow(row) {
 }
 
 function toOrderRow(order, userId) {
-  return {
-    id: order.id,
+  const row = {
+    order_number: order.orderNumber,
     customer_name: order.customerName,
     vehicle: order.vehicle,
     quantity: numberValue(order.quantity),
@@ -331,6 +406,8 @@ function toOrderRow(order, userId) {
     status: order.status,
     ...(userId ? { created_by: userId } : {}),
   };
+  delete row.id;
+  return row;
 }
 
 function fromTimelineRow(row) {
@@ -459,6 +536,17 @@ function useAuthSession() {
   return { session, user: session?.user || null, authLoading, authError, signOut };
 }
 
+function useTheme() {
+  const [theme, setTheme] = useState(() => window.localStorage.getItem('velora-theme') || 'dark');
+
+  useEffect(() => {
+    window.localStorage.setItem('velora-theme', theme);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  return [theme, setTheme];
+}
+
 function useSupabaseRecords(user) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -535,9 +623,13 @@ function useSupabaseRecords(user) {
   }
 
   async function saveOrder(order, editingId) {
+    const orderToSave = {
+      ...order,
+      orderNumber: order.orderNumber || nextOrderNumber(orders),
+    };
     const query = editingId
-      ? supabase.from('orders').update(toOrderRow(order)).eq('id', editingId).eq('created_by', user.id).select().single()
-      : supabase.from('orders').insert(toOrderRow(order, user.id)).select().single();
+      ? supabase.from('orders').update(toOrderRow(orderToSave)).eq('id', editingId).eq('created_by', user.id).select().single()
+      : supabase.from('orders').insert(toOrderRow(orderToSave, user.id)).select().single();
     const saved = fromOrderRow(await runRequest(query));
     setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
 
@@ -633,17 +725,39 @@ function Field({ label, children }) {
   );
 }
 
-function Metric({ label, value, tone }) {
+function Metric({ label, value, tone, icon: Icon = Activity }) {
   return (
     <article className={`metric ${tone || ''}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+      <div className="metric-icon"><Icon size={18} /></div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
     </article>
   );
 }
 
-function EmptyState({ label }) {
-  return <div className="empty-state">{label}</div>;
+function EmptyState({ label, icon: Icon = Search }) {
+  return (
+    <div className="empty-state">
+      <Icon size={30} />
+      <strong>{label}</strong>
+      <span>Try adjusting filters or add a new record to keep operations moving.</span>
+    </div>
+  );
+}
+
+function TableFooter({ count }) {
+  return (
+    <div className="table-footer">
+      <span>Showing {count} record{count === 1 ? '' : 's'}</span>
+      <div className="pagination">
+        <button disabled>Previous</button>
+        <strong>1</strong>
+        <button disabled>Next</button>
+      </div>
+    </div>
+  );
 }
 
 function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
@@ -688,8 +802,8 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
 function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOptions }) {
   return (
     <form className="entry-form" onSubmit={onSubmit}>
-      <Field label="Order ID">
-        <input value={value.id} onChange={(e) => onChange({ ...value, id: e.target.value })} required />
+      <Field label="Order Number">
+        <input value={value.orderNumber} onChange={(e) => onChange({ ...value, orderNumber: e.target.value })} placeholder="Auto, e.g. 0001" />
       </Field>
       <Field label="Customer Name">
         <input value={value.customerName} onChange={(e) => onChange({ ...value, customerName: e.target.value })} required />
@@ -774,13 +888,13 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
       <Field label="Shipment ID">
         <input value={value.shipmentId} onChange={(e) => onChange({ ...value, shipmentId: e.target.value })} required />
       </Field>
-      <Field label="Linked Order ID">
-        <input list="order-list" value={value.linkedOrderId} onChange={(e) => applyLinkedOrder(e.target.value)} />
-        <datalist id="order-list">
+      <Field label="Linked Order">
+        <select value={value.linkedOrderId} onChange={(e) => applyLinkedOrder(e.target.value)}>
+          <option value="">Select order</option>
           {orderOptions.map((order) => (
-            <option key={order.id} value={order.id}>{order.customerName}</option>
+            <option key={order.id} value={order.id}>{order.orderNumber || order.id} - {order.customerName}</option>
           ))}
-        </datalist>
+        </select>
       </Field>
       <Field label="Customer Name">
         <input value={value.customerName} onChange={(e) => onChange({ ...value, customerName: e.target.value })} required />
@@ -991,31 +1105,134 @@ function Dashboard({ vehicles, orders, shipments }) {
       revenue: orders.reduce((sum, order) => sum + orderRevenue(order), 0),
       profit: orders.reduce((sum, order) => sum + orderProfit(order), 0),
       shipments: shipments.length,
+      activeShipments: shipments.filter((shipment) => shipment.status !== 'Delivered').length,
       freightCost: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
+      inventoryValue: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
     };
   }, [vehicles, orders, shipments]);
 
   const recentOrders = orders.slice(0, 4);
+  const revenueTrend = trendByMonth(orders, 'orderDate', orderRevenue);
+  const ordersTrend = trendByMonth(orders, 'orderDate', () => 1);
+  const profitTrend = trendByMonth(orders, 'orderDate', orderProfit);
+  const shipmentBreakdown = countByStatus(shipments);
+  const recentActivity = [
+    ...orders.slice(0, 3).map((order) => ({ label: `Order ${order.orderNumber} moved to ${order.status}`, meta: order.customerName })),
+    ...shipments.slice(0, 3).map((shipment) => ({ label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry })),
+  ].slice(0, 5);
 
   return (
     <section className="page-stack">
-      <div className="hero">
+      <div className="hero premium-hero">
         <div>
           <p className="eyebrow">Velora Motors Ltd.</p>
           <h1>Velora Motors Tracker</h1>
-          <p>Inventory, customer orders, and profit records in one tidy Phase 1 workspace.</p>
+          <p>Premium dealership operations, order workflow, freight visibility, and financial performance in one secure workspace.</p>
         </div>
       </div>
       <div className="metrics-grid">
-        <Metric label="Vehicles in inventory" value={totals.inventory} />
-        <Metric label="Active orders" value={totals.activeOrders} />
-        <Metric label="Completed orders" value={totals.completedOrders} />
-        <Metric label="Pending orders" value={totals.pendingOrders} />
-        <Metric label="Delayed orders" value={totals.delayedOrders} tone="danger" />
-        <Metric label="Total revenue" value={money.format(totals.revenue)} tone="accent" />
-        <Metric label="Total profit" value={money.format(totals.profit)} tone="success" />
-        <Metric label="Shipments" value={totals.shipments} />
-        <Metric label="Total freight cost" value={money.format(totals.freightCost)} tone="accent" />
+        <Metric label="Revenue" value={money.format(totals.revenue)} tone="accent" icon={BarChart3} />
+        <Metric label="Profit" value={money.format(totals.profit)} tone="success" icon={Activity} />
+        <Metric label="Inventory value" value={money.format(totals.inventoryValue)} icon={Boxes} />
+        <Metric label="Active shipments" value={totals.activeShipments} icon={Truck} />
+        <Metric label="Delayed orders" value={totals.delayedOrders} tone="danger" icon={ClipboardList} />
+      </div>
+      <div className="dashboard-grid">
+        <section className="chart-card wide">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Revenue trend</p>
+              <h2>Monthly revenue</h2>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={revenueTrend}>
+              <defs>
+                <linearGradient id="revenue" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.55} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+              <XAxis dataKey="month" stroke="var(--muted)" />
+              <YAxis stroke="var(--muted)" />
+              <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
+              <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="url(#revenue)" strokeWidth={3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="chart-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Orders</p>
+              <h2>Order trend</h2>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={ordersTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+              <XAxis dataKey="month" stroke="var(--muted)" />
+              <YAxis stroke="var(--muted)" />
+              <Tooltip contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
+              <Bar dataKey="value" fill="#38bdf8" radius={[8, 8, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="chart-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Shipments</p>
+              <h2>Status breakdown</h2>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <PieChart>
+              <Pie data={shipmentBreakdown} dataKey="value" nameKey="name" innerRadius={56} outerRadius={92} paddingAngle={4}>
+                {shipmentBreakdown.map((entry, index) => (
+                  <Cell key={entry.name} fill={['#3b82f6', '#22c55e', '#f59e0b', '#38bdf8', '#ef4444'][index % 5]} />
+                ))}
+              </Pie>
+              <Tooltip contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="chart-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Profit overview</p>
+              <h2>Monthly profit</h2>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={profitTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+              <XAxis dataKey="month" stroke="var(--muted)" />
+              <YAxis stroke="var(--muted)" />
+              <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
+              <Area type="monotone" dataKey="value" stroke="#22c55e" fill="#22c55e33" strokeWidth={3} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </section>
+        <section className="activity-card">
+          <div className="card-heading">
+            <div>
+              <p className="eyebrow">Recent activity</p>
+              <h2>Operations pulse</h2>
+            </div>
+          </div>
+          <div className="activity-list">
+            {recentActivity.map((item, index) => (
+              <div className="activity-item" key={`${item.label}-${index}`}>
+                <span><Activity size={16} /></span>
+                <div>
+                  <strong>{item.label}</strong>
+                  <small>{item.meta}</small>
+                </div>
+              </div>
+            ))}
+            {!recentActivity.length && <EmptyState label="No recent activity yet." icon={Activity} />}
+          </div>
+        </section>
       </div>
       <div className="section-heading">
         <h2>Recent orders</h2>
@@ -1024,7 +1241,7 @@ function Dashboard({ vehicles, orders, shipments }) {
         <table>
           <thead>
             <tr>
-              <th>Order ID</th>
+              <th>Order Number</th>
               <th>Customer</th>
               <th>Vehicle</th>
               <th>Revenue</th>
@@ -1035,7 +1252,7 @@ function Dashboard({ vehicles, orders, shipments }) {
           <tbody>
             {recentOrders.map((order) => (
               <tr key={order.id}>
-                <td>{order.id}</td>
+                <td>{order.orderNumber}</td>
                 <td>{order.customerName}</td>
                 <td>{order.vehicle}</td>
                 <td>{money.format(orderRevenue(order))}</td>
@@ -1123,6 +1340,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No vehicles found." />}
+        <TableFooter count={filtered.length} />
       </div>
     </section>
   );
@@ -1162,7 +1380,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
         <table>
           <thead>
             <tr>
-              <th>Order ID</th>
+              <th>Order Number</th>
               <th>Customer Name</th>
               <th>Vehicle</th>
               <th>Qty</th>
@@ -1179,7 +1397,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
             {filtered.map((order) => (
               <React.Fragment key={order.id}>
                 <tr>
-                  <td>{order.id}</td>
+                  <td>{order.orderNumber}</td>
                   <td>{order.customerName}</td>
                   <td>{order.vehicle}</td>
                   <td>{order.quantity}</td>
@@ -1215,6 +1433,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No orders found." />}
+        <TableFooter count={filtered.length} />
       </div>
     </section>
   );
@@ -1269,6 +1488,7 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
             ))}
           </tbody>
         </table>
+        <TableFooter count={customers.length} />
       </div>
     </section>
   );
@@ -1283,6 +1503,9 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
     const statusMatches = statusFilter === 'All' || shipment.status === statusFilter;
     return statusMatches && matchesSearch(shipment, query);
   });
+  const orderNumberById = useMemo(() => {
+    return orders.reduce((lookup, order) => ({ ...lookup, [order.id]: order.orderNumber || order.id }), {});
+  }, [orders]);
 
   async function submitShipment(event) {
     event.preventDefault();
@@ -1324,7 +1547,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
           <thead>
             <tr>
               <th>Shipment ID</th>
-              <th>Order ID</th>
+              <th>Order Number</th>
               <th>Customer</th>
               <th>Vehicle</th>
               <th>Qty</th>
@@ -1343,7 +1566,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
             {filtered.map((shipment) => (
               <tr key={shipment.shipmentId}>
                 <td>{shipment.shipmentId}</td>
-                <td>{shipment.linkedOrderId}</td>
+                <td>{orderNumberById[shipment.linkedOrderId] || shipment.linkedOrderId}</td>
                 <td>{shipment.customerName}</td>
                 <td>{shipment.vehicle}</td>
                 <td>{shipment.quantity}</td>
@@ -1364,6 +1587,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No shipments found." />}
+        <TableFooter count={filtered.length} />
       </div>
     </section>
   );
@@ -1418,6 +1642,9 @@ function Reports({ vehicles, orders, customers, shipments }) {
   const filteredShipments = shipments.filter((shipment) => inDateRange(shipment.eta || shipment.createdAt, startDate, endDate));
   const filteredCustomers = customers.filter((customer) => inDateRange(customer.createdAt, startDate, endDate));
   const filteredVehicles = vehicles.filter((vehicle) => inDateRange(vehicle.createdAt, startDate, endDate));
+  const orderNumberById = useMemo(() => {
+    return orders.reduce((lookup, order) => ({ ...lookup, [order.id]: order.orderNumber || order.id }), {});
+  }, [orders]);
 
   const totals = {
     revenue: filteredOrders.reduce((sum, order) => sum + orderRevenue(order), 0),
@@ -1452,7 +1679,7 @@ function Reports({ vehicles, orders, customers, shipments }) {
       slug: 'velora-orders-report',
       summary: `${filteredOrders.length} orders, ${money.format(totals.revenue)} revenue`,
       columns: [
-        { key: 'id', label: 'Order ID' },
+        { key: 'orderNumber', label: 'Order Number' },
         { key: 'customerName', label: 'Customer' },
         { key: 'vehicle', label: 'Vehicle' },
         { key: 'quantity', label: 'Quantity' },
@@ -1486,7 +1713,7 @@ function Reports({ vehicles, orders, customers, shipments }) {
       summary: `${filteredShipments.length} shipments, ${money.format(totals.freightCost)} freight`,
       columns: [
         { key: 'shipmentId', label: 'Shipment ID' },
-        { key: 'linkedOrderId', label: 'Order ID' },
+        { key: 'linkedOrderNumber', label: 'Order Number' },
         { key: 'customerName', label: 'Customer' },
         { key: 'vehicle', label: 'Vehicle' },
         { key: 'destinationCountry', label: 'Destination' },
@@ -1496,6 +1723,7 @@ function Reports({ vehicles, orders, customers, shipments }) {
       ],
       rows: filteredShipments.map((shipment) => ({
         ...shipment,
+        linkedOrderNumber: orderNumberById[shipment.linkedOrderId] || shipment.linkedOrderId,
         freightCost: money.format(shipment.freightCost),
       })),
     },
@@ -1553,8 +1781,74 @@ function Reports({ vehicles, orders, customers, shipments }) {
   );
 }
 
+function TimelineOverview({ orders, orderTimelines }) {
+  const events = orders.flatMap((order) => (orderTimelines[order.id] || []).map((event) => ({
+    ...event,
+    orderNumber: order.orderNumber,
+    customerName: order.customerName,
+  }))).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return (
+    <section className="page-stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Workflow</p>
+          <h1>Order timeline</h1>
+        </div>
+      </div>
+      <div className="timeline-board">
+        {events.map((event) => (
+          <div className="timeline-event-card" key={event.id}>
+            <StatusBadge status={event.status} />
+            <div>
+              <strong>Order {event.orderNumber}</strong>
+              <p>{event.note || `Moved to ${event.status}`}</p>
+              <small>{event.customerName} · {new Date(event.createdAt).toLocaleString()}</small>
+            </div>
+          </div>
+        ))}
+        {!events.length && <EmptyState label="No workflow activity yet." icon={TimelineIcon} />}
+      </div>
+    </section>
+  );
+}
+
+function AuditLogs({ orders, shipments, customers, vehicles }) {
+  const logs = [
+    ...orders.map((order) => ({ label: `Order ${order.orderNumber} is ${order.status}`, meta: order.customerName, time: order.createdAt })),
+    ...shipments.map((shipment) => ({ label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry, time: shipment.createdAt })),
+    ...customers.map((customer) => ({ label: `Customer record: ${customer.name}`, meta: customer.location, time: customer.createdAt })),
+    ...vehicles.map((vehicle) => ({ label: `Inventory record: ${vehicle.brand} ${vehicle.model}`, meta: vehicle.status, time: vehicle.createdAt })),
+  ].sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
+
+  return (
+    <section className="page-stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Governance</p>
+          <h1>Audit logs</h1>
+        </div>
+      </div>
+      <div className="audit-list">
+        {logs.map((log, index) => (
+          <div className="activity-item audit-item" key={`${log.label}-${index}`}>
+            <span><ShieldCheck size={16} /></span>
+            <div>
+              <strong>{log.label}</strong>
+              <small>{log.meta || 'Velora record'} · {log.time ? new Date(log.time).toLocaleString() : 'Recent'}</small>
+            </div>
+          </div>
+        ))}
+        {!logs.length && <EmptyState label="No audit activity yet." icon={ShieldCheck} />}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useTheme();
   const { user, authLoading, authError, signOut } = useAuthSession();
   const {
     vehicles,
@@ -1585,7 +1879,7 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="brand-mark">
           <span>VM</span>
@@ -1594,20 +1888,37 @@ function App() {
             <small>Tracker</small>
           </div>
         </div>
+        <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} aria-label="Toggle sidebar">
+          {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+        </button>
         <div className="user-profile">
           <strong>{userName(user)}</strong>
           <small>{user.email}</small>
           <button onClick={signOut}>Sign Out</button>
         </div>
         <nav>
-          {pages.map((page) => (
+          {pages.map((page) => {
+            const Icon = navIcons[page];
+            return (
             <button key={page} className={activePage === page ? 'active' : ''} onClick={() => setActivePage(page)}>
-              {page}
+              <Icon size={18} />
+              <span>{page}</span>
             </button>
-          ))}
+            );
+          })}
         </nav>
       </aside>
       <main>
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Velora Motors</p>
+            <h1>{activePage}</h1>
+          </div>
+          <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+            <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+          </button>
+        </header>
         {loading && <div className="app-message">Loading Velora records...</div>}
         {error && <div className="app-message error">{error}</div>}
         {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} shipments={shipments} />}
@@ -1615,7 +1926,9 @@ function App() {
         {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} />}
         {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
         {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} />}
+        {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
         {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} />}
+        {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
       </main>
     </div>
   );
