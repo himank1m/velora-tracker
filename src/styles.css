@@ -375,7 +375,7 @@ main {
 .metrics-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .metric,
@@ -441,6 +441,11 @@ main {
   overflow-wrap: anywhere;
   white-space: normal;
   word-break: break-word;
+}
+
+.dashboard-grid .metric strong,
+.metrics-grid .metric strong {
+  font-size: clamp(16px, 1.2vw, 23px);
 }
 
 .clock-card {
@@ -908,7 +913,6 @@ tbody tr:hover {
 }
 
 @media (max-width: 1180px) {
-  .metrics-grid,
   .dashboard-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
