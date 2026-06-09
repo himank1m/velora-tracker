@@ -35,13 +35,33 @@ create table if not exists orders (
   created_at timestamptz not null default now()
 );
 
+create table if not exists shipments (
+  shipment_id text primary key,
+  linked_order_id text,
+  customer_name text not null,
+  vehicle text not null,
+  quantity integer not null default 1,
+  destination_country text not null,
+  port_of_departure text,
+  port_of_arrival text,
+  shipping_company text,
+  freight_cost numeric(12, 2) not null default 0,
+  eta date,
+  status text not null default 'Preparing',
+  notes text,
+  created_by uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
 alter table vehicles add column if not exists created_by uuid default auth.uid() references auth.users(id) on delete cascade;
 alter table customers add column if not exists created_by uuid default auth.uid() references auth.users(id) on delete cascade;
 alter table orders add column if not exists created_by uuid default auth.uid() references auth.users(id) on delete cascade;
+alter table shipments add column if not exists created_by uuid default auth.uid() references auth.users(id) on delete cascade;
 
 alter table vehicles enable row level security;
 alter table customers enable row level security;
 alter table orders enable row level security;
+alter table shipments enable row level security;
 
 drop policy if exists "Allow anon read vehicles" on vehicles;
 drop policy if exists "Allow anon insert vehicles" on vehicles;
@@ -130,5 +150,31 @@ with check (created_by = auth.uid());
 
 create policy "Users can delete own orders"
 on orders for delete
+to authenticated
+using (created_by = auth.uid());
+
+drop policy if exists "Users can read own shipments" on shipments;
+drop policy if exists "Users can insert own shipments" on shipments;
+drop policy if exists "Users can update own shipments" on shipments;
+drop policy if exists "Users can delete own shipments" on shipments;
+
+create policy "Users can read own shipments"
+on shipments for select
+to authenticated
+using (created_by = auth.uid());
+
+create policy "Users can insert own shipments"
+on shipments for insert
+to authenticated
+with check (created_by = auth.uid());
+
+create policy "Users can update own shipments"
+on shipments for update
+to authenticated
+using (created_by = auth.uid())
+with check (created_by = auth.uid());
+
+create policy "Users can delete own shipments"
+on shipments for delete
 to authenticated
 using (created_by = auth.uid());

@@ -330,6 +330,13 @@ main {
   width: min(320px, 100%);
 }
 
+.toolbar {
+  display: flex;
+  gap: 10px;
+  justify-content: end;
+  width: min(520px, 100%);
+}
+
 .entry-form {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -342,6 +349,10 @@ main {
 
 .customer-form {
   grid-template-columns: repeat(3, minmax(160px, 1fr));
+}
+
+.shipment-form {
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
 }
 
 .field {
@@ -478,6 +489,19 @@ tr:last-child td {
   color: #526070;
 }
 
+.status-preparing,
+.status-at-port {
+  background: #fff2d8;
+  color: #8a5a12;
+}
+
+.status-loaded,
+.status-in-transit,
+.status-customs-clearance {
+  background: #e6efff;
+  color: #2454a6;
+}
+
 .status-select {
   min-width: 132px;
   padding: 8px 10px;
@@ -519,7 +543,8 @@ tr:last-child td {
   }
 
   .entry-form,
-  .customer-form {
+  .customer-form,
+  .shipment-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -540,13 +565,19 @@ tr:last-child td {
 
   .metrics-grid,
   .entry-form,
-  .customer-form {
+  .customer-form,
+  .shipment-form {
     grid-template-columns: 1fr;
   }
 
   .section-heading {
     display: grid;
     align-items: start;
+  }
+
+  .toolbar {
+    display: grid;
+    justify-content: stretch;
   }
 
   .form-actions {

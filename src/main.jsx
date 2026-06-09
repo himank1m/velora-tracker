@@ -135,9 +135,26 @@ const blankCustomer = {
   notes: '',
 };
 
+const blankShipment = {
+  shipmentId: '',
+  linkedOrderId: '',
+  customerName: '',
+  vehicle: '',
+  quantity: 1,
+  destinationCountry: '',
+  portOfDeparture: '',
+  portOfArrival: '',
+  shippingCompany: '',
+  freightCost: 0,
+  eta: today,
+  status: 'Preparing',
+  notes: '',
+};
+
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Ready', 'Delivered', 'Completed'];
-const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers'];
+const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
+const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers', 'Shipments'];
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function numberValue(value) {
@@ -244,6 +261,44 @@ function toCustomerRow(customer, userId) {
   };
 }
 
+function fromShipmentRow(row) {
+  return {
+    shipmentId: row.shipment_id,
+    linkedOrderId: row.linked_order_id || '',
+    customerName: row.customer_name,
+    vehicle: row.vehicle,
+    quantity: row.quantity,
+    destinationCountry: row.destination_country,
+    portOfDeparture: row.port_of_departure,
+    portOfArrival: row.port_of_arrival,
+    shippingCompany: row.shipping_company,
+    freightCost: Number(row.freight_cost),
+    eta: row.eta,
+    status: row.status,
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toShipmentRow(shipment, userId) {
+  return {
+    shipment_id: shipment.shipmentId,
+    linked_order_id: shipment.linkedOrderId,
+    customer_name: shipment.customerName,
+    vehicle: shipment.vehicle,
+    quantity: numberValue(shipment.quantity),
+    destination_country: shipment.destinationCountry,
+    port_of_departure: shipment.portOfDeparture,
+    port_of_arrival: shipment.portOfArrival,
+    shipping_company: shipment.shippingCompany,
+    freight_cost: numberValue(shipment.freightCost),
+    eta: shipment.eta,
+    status: shipment.status,
+    notes: shipment.notes,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
 function userName(user) {
   return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Velora user';
 }
@@ -293,6 +348,7 @@ function useSupabaseRecords(user) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -317,6 +373,7 @@ function useSupabaseRecords(user) {
       setVehicles([]);
       setOrders([]);
       setCustomers([]);
+      setShipments([]);
       setLoading(false);
       return;
     }
@@ -325,15 +382,17 @@ function useSupabaseRecords(user) {
     setError('');
 
     try {
-      const [vehicleRows, orderRows, customerRows] = await Promise.all([
+      const [vehicleRows, orderRows, customerRows, shipmentRows] = await Promise.all([
         runRequest(supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
         runRequest(supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
         runRequest(supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
+        runRequest(supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
       setOrders(orderRows.map(fromOrderRow));
       setCustomers(customerRows.map(fromCustomerRow));
+      setShipments(shipmentRows.map(fromShipmentRow));
     } finally {
       setLoading(false);
     }
@@ -387,10 +446,24 @@ function useSupabaseRecords(user) {
     setCustomers((current) => current.filter((item) => item.id !== id));
   }
 
+  async function saveShipment(shipment, editingId) {
+    const query = editingId
+      ? supabase.from('shipments').update(toShipmentRow(shipment)).eq('shipment_id', editingId).eq('created_by', user.id).select().single()
+      : supabase.from('shipments').insert(toShipmentRow(shipment, user.id)).select().single();
+    const saved = fromShipmentRow(await runRequest(query));
+    setShipments((current) => editingId ? current.map((item) => item.shipmentId === editingId ? saved : item) : [saved, ...current]);
+  }
+
+  async function deleteShipment(id) {
+    await runRequest(supabase.from('shipments').delete().eq('shipment_id', id).eq('created_by', user.id));
+    setShipments((current) => current.filter((item) => item.shipmentId !== id));
+  }
+
   return {
     vehicles,
     orders,
     customers,
+    shipments,
     loading,
     error,
     saveVehicle,
@@ -400,6 +473,8 @@ function useSupabaseRecords(user) {
     updateOrderStatus,
     saveCustomer,
     deleteCustomer,
+    saveShipment,
+    deleteShipment,
   };
 }
 
@@ -528,6 +603,78 @@ function CustomerForm({ value, onChange, onSubmit, editingId, onCancel }) {
       </Field>
       <div className="form-actions">
         <button type="submit">{editingId ? 'Save customer' : 'Add customer'}</button>
+        {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  );
+}
+
+function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOptions }) {
+  function applyLinkedOrder(orderId) {
+    const linkedOrder = orderOptions.find((order) => order.id === orderId);
+    onChange({
+      ...value,
+      linkedOrderId: orderId,
+      ...(linkedOrder ? {
+        customerName: linkedOrder.customerName,
+        vehicle: linkedOrder.vehicle,
+        quantity: linkedOrder.quantity,
+      } : {}),
+    });
+  }
+
+  return (
+    <form className="entry-form shipment-form" onSubmit={onSubmit}>
+      <Field label="Shipment ID">
+        <input value={value.shipmentId} onChange={(e) => onChange({ ...value, shipmentId: e.target.value })} required />
+      </Field>
+      <Field label="Linked Order ID">
+        <input list="order-list" value={value.linkedOrderId} onChange={(e) => applyLinkedOrder(e.target.value)} />
+        <datalist id="order-list">
+          {orderOptions.map((order) => (
+            <option key={order.id} value={order.id}>{order.customerName}</option>
+          ))}
+        </datalist>
+      </Field>
+      <Field label="Customer Name">
+        <input value={value.customerName} onChange={(e) => onChange({ ...value, customerName: e.target.value })} required />
+      </Field>
+      <Field label="Vehicle">
+        <input value={value.vehicle} onChange={(e) => onChange({ ...value, vehicle: e.target.value })} required />
+      </Field>
+      <Field label="Quantity">
+        <input type="number" min="1" value={value.quantity} onChange={(e) => onChange({ ...value, quantity: e.target.value })} />
+      </Field>
+      <Field label="Destination Country">
+        <input value={value.destinationCountry} onChange={(e) => onChange({ ...value, destinationCountry: e.target.value })} required />
+      </Field>
+      <Field label="Port of Departure">
+        <input value={value.portOfDeparture} onChange={(e) => onChange({ ...value, portOfDeparture: e.target.value })} />
+      </Field>
+      <Field label="Port of Arrival">
+        <input value={value.portOfArrival} onChange={(e) => onChange({ ...value, portOfArrival: e.target.value })} />
+      </Field>
+      <Field label="Shipping Company">
+        <input value={value.shippingCompany} onChange={(e) => onChange({ ...value, shippingCompany: e.target.value })} />
+      </Field>
+      <Field label="Freight Cost">
+        <input type="number" min="0" value={value.freightCost} onChange={(e) => onChange({ ...value, freightCost: e.target.value })} />
+      </Field>
+      <Field label="ETA">
+        <input type="date" value={value.eta} onChange={(e) => onChange({ ...value, eta: e.target.value })} />
+      </Field>
+      <Field label="Status">
+        <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
+          {shipmentStatuses.map((status) => (
+            <option key={status}>{status}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Notes">
+        <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
+      </Field>
+      <div className="form-actions">
+        <button type="submit">{editingId ? 'Save shipment' : 'Add shipment'}</button>
         {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
       </div>
     </form>
@@ -685,7 +832,7 @@ function AuthView({ authError }) {
   );
 }
 
-function Dashboard({ vehicles, orders }) {
+function Dashboard({ vehicles, orders, shipments }) {
   const totals = useMemo(() => {
     const activeOrders = orders.filter((order) => order.status !== 'Completed').length;
     const completedOrders = orders.filter((order) => order.status === 'Completed').length;
@@ -695,8 +842,10 @@ function Dashboard({ vehicles, orders }) {
       completedOrders,
       revenue: orders.reduce((sum, order) => sum + orderRevenue(order), 0),
       profit: orders.reduce((sum, order) => sum + orderProfit(order), 0),
+      shipments: shipments.length,
+      freightCost: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
     };
-  }, [vehicles, orders]);
+  }, [vehicles, orders, shipments]);
 
   const recentOrders = orders.slice(0, 4);
 
@@ -715,6 +864,8 @@ function Dashboard({ vehicles, orders }) {
         <Metric label="Completed orders" value={totals.completedOrders} />
         <Metric label="Total revenue" value={money.format(totals.revenue)} tone="accent" />
         <Metric label="Total profit" value={money.format(totals.profit)} tone="success" />
+        <Metric label="Shipments" value={totals.shipments} />
+        <Metric label="Total freight cost" value={money.format(totals.freightCost)} tone="accent" />
       </div>
       <div className="section-heading">
         <h2>Recent orders</h2>
@@ -960,6 +1111,101 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
   );
 }
 
+function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [form, setForm] = useState(blankShipment);
+  const [editingId, setEditingId] = useState('');
+  const filtered = shipments.filter((shipment) => {
+    const statusMatches = statusFilter === 'All' || shipment.status === statusFilter;
+    return statusMatches && matchesSearch(shipment, query);
+  });
+
+  async function submitShipment(event) {
+    event.preventDefault();
+    const saved = {
+      ...form,
+      quantity: numberValue(form.quantity),
+      freightCost: numberValue(form.freightCost),
+    };
+    await saveShipment(saved, editingId);
+    setForm(blankShipment);
+    setEditingId('');
+  }
+
+  function editShipment(shipment) {
+    setForm(shipment);
+    setEditingId(shipment.shipmentId);
+  }
+
+  return (
+    <section className="page-stack">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Shipments</p>
+          <h1>Shipment tracking</h1>
+        </div>
+        <div className="toolbar">
+          <input className="search" placeholder="Search shipments" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="status-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option>All</option>
+            {shipmentStatuses.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />
+      <div className="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Shipment ID</th>
+              <th>Order ID</th>
+              <th>Customer</th>
+              <th>Vehicle</th>
+              <th>Qty</th>
+              <th>Destination</th>
+              <th>Departure Port</th>
+              <th>Arrival Port</th>
+              <th>Shipping Company</th>
+              <th>Freight Cost</th>
+              <th>ETA</th>
+              <th>Status</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((shipment) => (
+              <tr key={shipment.shipmentId}>
+                <td>{shipment.shipmentId}</td>
+                <td>{shipment.linkedOrderId}</td>
+                <td>{shipment.customerName}</td>
+                <td>{shipment.vehicle}</td>
+                <td>{shipment.quantity}</td>
+                <td>{shipment.destinationCountry}</td>
+                <td>{shipment.portOfDeparture}</td>
+                <td>{shipment.portOfArrival}</td>
+                <td>{shipment.shippingCompany}</td>
+                <td>{money.format(shipment.freightCost)}</td>
+                <td>{shipment.eta}</td>
+                <td><StatusBadge status={shipment.status} /></td>
+                <td>{shipment.notes}</td>
+                <td className="row-actions">
+                  <button className="mini" onClick={() => editShipment(shipment)}>Edit</button>
+                  <button className="mini danger" onClick={() => deleteShipment(shipment.shipmentId)}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!filtered.length && <EmptyState label="No shipments found." />}
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
   const { user, authLoading, authError, signOut } = useAuthSession();
@@ -967,6 +1213,7 @@ function App() {
     vehicles,
     orders,
     customers,
+    shipments,
     loading,
     error,
     saveVehicle,
@@ -976,6 +1223,8 @@ function App() {
     updateOrderStatus,
     saveCustomer,
     deleteCustomer,
+    saveShipment,
+    deleteShipment,
   } = useSupabaseRecords(user);
 
   if (authLoading) {
@@ -1012,10 +1261,11 @@ function App() {
       <main>
         {loading && <div className="app-message">Loading Velora records...</div>}
         {error && <div className="app-message error">{error}</div>}
-        {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} />}
+        {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} shipments={shipments} />}
         {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} />}
         {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} />}
         {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
+        {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} />}
       </main>
     </div>
   );
