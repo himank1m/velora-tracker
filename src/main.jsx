@@ -14,8 +14,10 @@ import {
   FileText,
   Gauge,
   LayoutDashboard,
+  Menu,
   Moon,
   PackageCheck,
+  Plus,
   Search,
   ShieldCheck,
   Sun,
@@ -23,6 +25,7 @@ import {
   Truck,
   Users,
   Warehouse,
+  X,
 } from 'lucide-react';
 import {
   Area,
@@ -211,6 +214,13 @@ const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Custo
 const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
 const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
 const pages = ['Command Center', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const navGroups = [
+  { label: 'Command', pages: ['Command Center'] },
+  { label: 'Operations', pages: ['Inventory', 'Orders', 'Customers'] },
+  { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
+  { label: 'Intelligence', pages: ['Reports', 'Alerts Center'] },
+  { label: 'System', pages: ['Audit Logs'] },
+];
 const navIcons = {
   'Command Center': LayoutDashboard,
   Inventory: Boxes,
@@ -2288,6 +2298,7 @@ function AuditLogs({ orders, shipments, customers, vehicles }) {
 function App() {
   const [activePage, setActivePage] = useState('Command Center');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [theme, setTheme] = useTheme();
   const { user, authLoading, authError, signOut } = useAuthSession();
@@ -2334,40 +2345,62 @@ function App() {
     return <AuthView authError={authError} />;
   }
 
+  function goToPage(page) {
+    setActivePage(page);
+    setMobileNavOpen(false);
+  }
+
   return (
-    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand-mark">
           <span>VM</span>
           <div>
             <strong>Velora Motors</strong>
-            <small>Tracker</small>
+            <small>Enterprise Operations</small>
           </div>
         </div>
+        <button className="mobile-close" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">
+          <X size={18} />
+        </button>
         <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} aria-label="Toggle sidebar">
           {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
         </button>
+        <button className="quick-action" onClick={() => setCommandOpen(true)}>
+          <Plus size={18} />
+          <span>Quick action</span>
+        </button>
         <div className="user-profile">
+          <div className="avatar">{userName(user).slice(0, 1).toUpperCase()}</div>
           <strong>{userName(user)}</strong>
           <small>{user.email}</small>
           <button onClick={signOut}>Sign Out</button>
         </div>
         <nav>
-          {pages.map((page) => {
-            const Icon = navIcons[page];
-            return (
-            <button key={page} className={activePage === page ? 'active' : ''} onClick={() => setActivePage(page)}>
-              <Icon size={18} />
-              <span>{page}</span>
-            </button>
-            );
-          })}
+          {navGroups.map((group) => (
+            <div className="nav-group" key={group.label}>
+              <small>{group.label}</small>
+              {group.pages.map((page) => {
+                const Icon = navIcons[page];
+                return (
+                  <button key={page} className={activePage === page ? 'active' : ''} onClick={() => goToPage(page)}>
+                    <Icon size={18} />
+                    <span>{page}</span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </aside>
+      <button className="mobile-scrim" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation overlay" />
       <main>
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Velora Motors</p>
+          <button className="mobile-menu" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
+            <Menu size={20} />
+          </button>
+          <div className="page-title">
+            <p className="breadcrumb">Velora Motors / {activePage}</p>
             <h1>{activePage}</h1>
           </div>
           <div className="topbar-actions">
