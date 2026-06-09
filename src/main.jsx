@@ -1011,13 +1011,13 @@ function SystemHealthPanel({ vehicles, orders, customers, shipments, error, auth
   );
 }
 
-function DepartmentShortcuts({ setActivePage }) {
+function DepartmentShortcuts({ setActivePage, alerts, totals }) {
   const cards = [
-    { name: 'Sales', page: 'Orders', icon: ClipboardList, text: 'Orders and customer movement' },
-    { name: 'Inventory', page: 'Inventory', icon: Warehouse, text: 'Vehicle stock and value' },
-    { name: 'Logistics', page: 'Shipments', icon: Truck, text: 'Freight and delivery workflow' },
-    { name: 'Finance', page: 'Reports', icon: BarChart3, text: 'Revenue, profit, and exports' },
-    { name: 'Management', page: 'Audit Logs', icon: ShieldCheck, text: 'Activity and control view' },
+    { name: 'Sales', page: 'Orders', icon: ClipboardList, text: 'Orders and customer movement', stat: totals.activeOrders, statLabel: 'active orders' },
+    { name: 'Inventory', page: 'Inventory', icon: Warehouse, text: 'Vehicle stock and value', stat: formatIndianNumber(totals.inventory), statLabel: 'units in stock' },
+    { name: 'Logistics', page: 'Shipments', icon: Truck, text: 'Freight and delivery workflow', stat: totals.activeShipments, statLabel: 'active shipments' },
+    { name: 'Finance', page: 'Reports', icon: BarChart3, text: 'Revenue, profit, and exports', stat: money.format(totals.profit), statLabel: 'total profit' },
+    { name: 'Management', page: 'Audit Logs', icon: ShieldCheck, text: 'Activity and control view', stat: alerts.length, statLabel: 'open alerts' },
   ];
 
   return (
@@ -1029,11 +1029,15 @@ function DepartmentShortcuts({ setActivePage }) {
         </div>
       </div>
       <div className="department-grid">
-        {cards.map(({ name, page, icon: Icon, text }) => (
+        {cards.map(({ name, page, icon: Icon, text, stat, statLabel }) => (
           <button className="department-card" key={name} onClick={() => setActivePage(page)}>
             <span><Icon size={18} /></span>
             <strong>{name}</strong>
             <small>{text}</small>
+            <div className="department-stat">
+              <b>{stat}</b>
+              <em>{statLabel}</em>
+            </div>
           </button>
         ))}
       </div>
@@ -1624,7 +1628,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
             {!auditLogs.length && <EmptyState label="No audit logs yet." icon={ShieldCheck} />}
           </div>
         </section>
-        <DepartmentShortcuts setActivePage={setActivePage} />
+        <DepartmentShortcuts setActivePage={setActivePage} alerts={alerts} totals={totals} />
         <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} />
       </div>
       <div className="section-heading compact-heading">

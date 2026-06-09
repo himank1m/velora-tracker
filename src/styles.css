@@ -930,6 +930,10 @@ kbd {
   grid-column: 1 / -1;
 }
 
+.department-panel .card-heading {
+  margin-bottom: 4px;
+}
+
 .department-card {
   align-content: start;
   background:
@@ -939,8 +943,9 @@ kbd {
   border-radius: 20px;
   color: var(--ink);
   display: grid;
-  gap: 10px;
-  min-height: 142px;
+  gap: 11px;
+  grid-template-rows: auto auto minmax(42px, 1fr) auto;
+  min-height: 230px;
   min-width: 0;
   overflow: hidden;
   padding: 18px;
@@ -967,6 +972,37 @@ kbd {
 .department-card small {
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.department-stat {
+  background: rgba(8, 13, 23, .34);
+  border: 1px solid rgba(148, 163, 184, .14);
+  border-radius: 16px;
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.department-stat b {
+  color: #bfdbfe;
+  font-size: clamp(18px, 1.5vw, 24px);
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.department-stat em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 850;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+:root[data-theme="light"] .department-stat {
+  background: rgba(248, 250, 252, .82);
 }
 
 .health-grid {
