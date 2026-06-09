@@ -375,15 +375,18 @@ main {
 .metrics-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(5, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .metric {
   align-items: center;
   border-radius: 20px;
-  display: flex;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 14px;
   min-height: 116px;
+  min-width: 0;
+  overflow: hidden;
   padding: 18px;
 }
 
@@ -418,10 +421,20 @@ main {
   margin-bottom: 7px;
 }
 
+.metric > div:last-child {
+  min-width: 0;
+  width: 100%;
+}
+
 .metric strong {
   color: var(--ink);
   display: block;
-  font-size: 25px;
+  font-size: clamp(17px, 1.45vw, 25px);
+  line-height: 1.12;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .metric.accent strong {

@@ -37,11 +37,21 @@ import {
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 import './styles.css';
 
-const money = new Intl.NumberFormat('en-IN', {
-  style: 'currency',
-  currency: 'INR',
-  maximumFractionDigits: 0,
-});
+function formatIndianNumber(value) {
+  const rounded = Math.round(Number(value) || 0);
+  const sign = rounded < 0 ? '-' : '';
+  const digits = String(Math.abs(rounded));
+  if (digits.length <= 3) return `${sign}${digits}`;
+  const lastThree = digits.slice(-3);
+  const leading = digits.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  return `${sign}${leading},${lastThree}`;
+}
+
+const money = {
+  format(value) {
+    return `₹${formatIndianNumber(value)}`;
+  },
+};
 
 const today = new Date().toISOString().slice(0, 10);
 
