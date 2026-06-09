@@ -991,7 +991,7 @@ function SystemHealthPanel({ vehicles, orders, customers, shipments, error, auth
   ];
 
   return (
-    <section className="chart-card">
+    <section className="chart-card health-panel">
       <div className="card-heading">
         <div>
           <p className="eyebrow">System health</p>

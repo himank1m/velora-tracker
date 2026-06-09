@@ -949,7 +949,11 @@ kbd {
 }
 
 .health-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.health-panel {
+  grid-column: 1 / -1;
 }
 
 .health-card {
@@ -959,7 +963,8 @@ kbd {
   display: grid;
   gap: 5px;
   min-width: 0;
-  padding: 12px;
+  min-height: 112px;
+  padding: 14px;
 }
 
 .health-card span {
@@ -969,6 +974,8 @@ kbd {
 }
 
 .health-card strong {
+  font-size: clamp(15px, 1.1vw, 20px);
+  line-height: 1.2;
   overflow-wrap: anywhere;
 }
 
@@ -1479,6 +1486,10 @@ tbody tr:hover {
   }
 
   .department-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .health-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
