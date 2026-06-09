@@ -1567,12 +1567,12 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
           </ResponsiveContainer>
         </section>
         <section className="chart-card">
-          <div className="card-heading">
+          <div className="card-heading alert-heading">
             <div>
               <p className="eyebrow">Critical alerts</p>
               <h2>Priority watchlist</h2>
             </div>
-            <button className="mini" onClick={() => setActivePage('Alerts Center')}>View all</button>
+            <button className="mini view-all-button" onClick={() => setActivePage('Alerts Center')}>View all</button>
           </div>
           <div className="alert-list compact">
             {alerts.slice(0, 4).map((alert) => (

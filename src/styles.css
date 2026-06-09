@@ -781,6 +781,18 @@ kbd {
   justify-content: space-between;
 }
 
+.alert-heading {
+  align-items: start;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.view-all-button {
+  min-width: 84px;
+  white-space: nowrap;
+}
+
 .section-heading {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, .032), rgba(255, 255, 255, .01)),
@@ -884,8 +896,13 @@ kbd {
   border-radius: 16px;
   display: grid;
   gap: 10px;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
   padding: 12px;
+}
+
+.alert-row strong,
+.alert-row small {
+  overflow-wrap: anywhere;
 }
 
 .alert-severity {
