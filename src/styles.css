@@ -378,7 +378,8 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
-.metric {
+.metric,
+.clock-card {
   align-items: center;
   border-radius: 20px;
   display: grid;
@@ -391,12 +392,14 @@ main {
 }
 
 .metric:hover,
+.clock-card:hover,
 .report-card:hover,
 .chart-card:hover {
   transform: translateY(-2px);
 }
 
 .metric,
+.clock-card,
 .report-card,
 .chart-card {
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
@@ -414,19 +417,22 @@ main {
   width: 42px;
 }
 
-.metric span {
+.metric span,
+.clock-card span {
   color: var(--muted);
   display: block;
   font-size: 13px;
   margin-bottom: 7px;
 }
 
-.metric > div:last-child {
+.metric > div:last-child,
+.clock-card > div:last-child {
   min-width: 0;
   width: 100%;
 }
 
-.metric strong {
+.metric strong,
+.clock-card strong {
   color: var(--ink);
   display: block;
   font-size: clamp(17px, 1.45vw, 25px);
@@ -435,6 +441,25 @@ main {
   overflow-wrap: anywhere;
   white-space: normal;
   word-break: break-word;
+}
+
+.clock-card {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, .22), transparent 18rem),
+    var(--panel);
+  border: 1px solid rgba(59, 130, 246, .28);
+  box-shadow: var(--shadow);
+}
+
+.clock-card strong {
+  font-size: clamp(24px, 2.5vw, 36px);
+  letter-spacing: 0;
+}
+
+.clock-card small {
+  color: var(--muted);
+  display: block;
+  margin-top: 4px;
 }
 
 .metric.accent strong {
