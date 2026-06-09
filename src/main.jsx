@@ -39,7 +39,7 @@ import './styles.css';
 
 const money = new Intl.NumberFormat('en-US', {
   style: 'currency',
-  currency: 'USD',
+  currency: 'INR',
   maximumFractionDigits: 0,
 });
 
