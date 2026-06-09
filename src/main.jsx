@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { isSupabaseConfigured, supabase } from './supabaseClient';
 import './styles.css';
 
 const money = new Intl.NumberFormat('en-US', {
@@ -165,21 +166,184 @@ function matchesSearch(record, query) {
   return text.includes(query.toLowerCase());
 }
 
-function useLocalRecords(key, initialRecords) {
-  const [records, setRecords] = useState(() => {
-    try {
-      const saved = window.localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : initialRecords;
-    } catch {
-      return initialRecords;
+function fromVehicleRow(row) {
+  return {
+    id: row.id,
+    brand: row.brand,
+    model: row.model,
+    category: row.category,
+    quantity: row.quantity,
+    purchasePrice: Number(row.purchase_price),
+    sellingPrice: Number(row.selling_price),
+    status: row.status,
+  };
+}
+
+function toVehicleRow(vehicle) {
+  return {
+    id: vehicle.id,
+    brand: vehicle.brand,
+    model: vehicle.model,
+    category: vehicle.category,
+    quantity: numberValue(vehicle.quantity),
+    purchase_price: numberValue(vehicle.purchasePrice),
+    selling_price: numberValue(vehicle.sellingPrice),
+    status: vehicle.status,
+  };
+}
+
+function fromOrderRow(row) {
+  return {
+    id: row.id,
+    customerName: row.customer_name,
+    vehicle: row.vehicle,
+    quantity: row.quantity,
+    orderDate: row.order_date,
+    purchaseCost: Number(row.purchase_cost),
+    sellingPrice: Number(row.selling_price),
+    status: row.status,
+  };
+}
+
+function toOrderRow(order) {
+  return {
+    id: order.id,
+    customer_name: order.customerName,
+    vehicle: order.vehicle,
+    quantity: numberValue(order.quantity),
+    order_date: order.orderDate,
+    purchase_cost: numberValue(order.purchaseCost),
+    selling_price: numberValue(order.sellingPrice),
+    status: order.status,
+  };
+}
+
+function fromCustomerRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone || '',
+    email: row.email || '',
+    location: row.location || '',
+    notes: row.notes || '',
+  };
+}
+
+function toCustomerRow(customer) {
+  return {
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone,
+    email: customer.email,
+    location: customer.location,
+    notes: customer.notes,
+  };
+}
+
+function useSupabaseRecords() {
+  const [vehicles, setVehicles] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  async function runRequest(request) {
+    setError('');
+    const { data, error: requestError } = await request;
+    if (requestError) {
+      setError(requestError.message);
+      throw requestError;
     }
-  });
+    return data;
+  }
+
+  async function loadRecords() {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      setError('Supabase environment variables are missing.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const [vehicleRows, orderRows, customerRows] = await Promise.all([
+        runRequest(supabase.from('vehicles').select('*').order('created_at', { ascending: false })),
+        runRequest(supabase.from('orders').select('*').order('created_at', { ascending: false })),
+        runRequest(supabase.from('customers').select('*').order('created_at', { ascending: false })),
+      ]);
+
+      setVehicles(vehicleRows.map(fromVehicleRow));
+      setOrders(orderRows.map(fromOrderRow));
+      setCustomers(customerRows.map(fromCustomerRow));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    window.localStorage.setItem(key, JSON.stringify(records));
-  }, [key, records]);
+    loadRecords();
+  }, []);
 
-  return [records, setRecords];
+  async function saveVehicle(vehicle, editingId) {
+    const query = editingId
+      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).select().single()
+      : supabase.from('vehicles').insert(toVehicleRow(vehicle)).select().single();
+    const saved = fromVehicleRow(await runRequest(query));
+    setVehicles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+  }
+
+  async function deleteVehicle(id) {
+    await runRequest(supabase.from('vehicles').delete().eq('id', id));
+    setVehicles((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveOrder(order, editingId) {
+    const query = editingId
+      ? supabase.from('orders').update(toOrderRow(order)).eq('id', editingId).select().single()
+      : supabase.from('orders').insert(toOrderRow(order)).select().single();
+    const saved = fromOrderRow(await runRequest(query));
+    setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+  }
+
+  async function deleteOrder(id) {
+    await runRequest(supabase.from('orders').delete().eq('id', id));
+    setOrders((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function updateOrderStatus(id, status) {
+    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).select().single()));
+    setOrders((current) => current.map((item) => item.id === id ? saved : item));
+  }
+
+  async function saveCustomer(customer, editingId) {
+    const query = editingId
+      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).select().single()
+      : supabase.from('customers').insert(toCustomerRow(customer)).select().single();
+    const saved = fromCustomerRow(await runRequest(query));
+    setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+  }
+
+  async function deleteCustomer(id) {
+    await runRequest(supabase.from('customers').delete().eq('id', id));
+    setCustomers((current) => current.filter((item) => item.id !== id));
+  }
+
+  return {
+    vehicles,
+    orders,
+    customers,
+    loading,
+    error,
+    saveVehicle,
+    deleteVehicle,
+    saveOrder,
+    deleteOrder,
+    updateOrderStatus,
+    saveCustomer,
+    deleteCustomer,
+  };
 }
 
 function Field({ label, children }) {
@@ -381,13 +545,13 @@ function Dashboard({ vehicles, orders }) {
   );
 }
 
-function Inventory({ vehicles, setVehicles }) {
+function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankVehicle);
   const [editingId, setEditingId] = useState('');
   const filtered = vehicles.filter((vehicle) => matchesSearch(vehicle, query));
 
-  function submitVehicle(event) {
+  async function submitVehicle(event) {
     event.preventDefault();
     const saved = {
       ...form,
@@ -395,7 +559,7 @@ function Inventory({ vehicles, setVehicles }) {
       purchasePrice: numberValue(form.purchasePrice),
       sellingPrice: numberValue(form.sellingPrice),
     };
-    setVehicles((current) => editingId ? current.map((vehicle) => vehicle.id === editingId ? saved : vehicle) : [saved, ...current]);
+    await saveVehicle(saved, editingId);
     setForm(blankVehicle);
     setEditingId('');
   }
@@ -447,7 +611,7 @@ function Inventory({ vehicles, setVehicles }) {
                 <td><StatusBadge status={vehicle.status} /></td>
                 <td className="row-actions">
                   <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>
-                  <button className="mini danger" onClick={() => setVehicles((current) => current.filter((item) => item.id !== vehicle.id))}>Delete</button>
+                  <button className="mini danger" onClick={() => deleteVehicle(vehicle.id)}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -459,13 +623,13 @@ function Inventory({ vehicles, setVehicles }) {
   );
 }
 
-function Orders({ orders, setOrders, vehicles }) {
+function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles }) {
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankOrder);
   const [editingId, setEditingId] = useState('');
   const filtered = orders.filter((order) => matchesSearch(order, query));
 
-  function submitOrder(event) {
+  async function submitOrder(event) {
     event.preventDefault();
     const saved = {
       ...form,
@@ -473,7 +637,7 @@ function Orders({ orders, setOrders, vehicles }) {
       purchaseCost: numberValue(form.purchaseCost),
       sellingPrice: numberValue(form.sellingPrice),
     };
-    setOrders((current) => editingId ? current.map((order) => order.id === editingId ? saved : order) : [saved, ...current]);
+    await saveOrder(saved, editingId);
     setForm(blankOrder);
     setEditingId('');
   }
@@ -518,7 +682,7 @@ function Orders({ orders, setOrders, vehicles }) {
                 <td>{money.format(orderRevenue(order))}</td>
                 <td>{money.format(orderProfit(order))}</td>
                 <td>
-                  <select className="status-select" value={order.status} onChange={(event) => setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status: event.target.value } : item))}>
+                  <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
                     {orderStatuses.map((status) => (
                       <option key={status}>{status}</option>
                     ))}
@@ -526,7 +690,7 @@ function Orders({ orders, setOrders, vehicles }) {
                 </td>
                 <td className="row-actions">
                   <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>
-                  <button className="mini danger" onClick={() => setOrders((current) => current.filter((item) => item.id !== order.id))}>Delete</button>
+                  <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -538,14 +702,14 @@ function Orders({ orders, setOrders, vehicles }) {
   );
 }
 
-function Customers({ customers, setCustomers }) {
+function Customers({ customers, saveCustomer, deleteCustomer }) {
   const [form, setForm] = useState(blankCustomer);
   const [editingId, setEditingId] = useState('');
 
-  function submitCustomer(event) {
+  async function submitCustomer(event) {
     event.preventDefault();
     const saved = { ...form, id: editingId || `CUS-${Date.now().toString().slice(-5)}` };
-    setCustomers((current) => editingId ? current.map((customer) => customer.id === editingId ? saved : customer) : [saved, ...current]);
+    await saveCustomer(saved, editingId);
     setForm(blankCustomer);
     setEditingId('');
   }
@@ -581,7 +745,7 @@ function Customers({ customers, setCustomers }) {
                 <td>{customer.notes}</td>
                 <td className="row-actions">
                   <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>
-                  <button className="mini danger" onClick={() => setCustomers((current) => current.filter((item) => item.id !== customer.id))}>Delete</button>
+                  <button className="mini danger" onClick={() => deleteCustomer(customer.id)}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -594,9 +758,20 @@ function Customers({ customers, setCustomers }) {
 
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
-  const [vehicles, setVehicles] = useLocalRecords('velora-vehicles', initialVehicles);
-  const [orders, setOrders] = useLocalRecords('velora-orders', initialOrders);
-  const [customers, setCustomers] = useLocalRecords('velora-customers', initialCustomers);
+  const {
+    vehicles,
+    orders,
+    customers,
+    loading,
+    error,
+    saveVehicle,
+    deleteVehicle,
+    saveOrder,
+    deleteOrder,
+    updateOrderStatus,
+    saveCustomer,
+    deleteCustomer,
+  } = useSupabaseRecords();
 
   return (
     <div className="app">
@@ -617,10 +792,12 @@ function App() {
         </nav>
       </aside>
       <main>
+        {loading && <div className="app-message">Loading Velora records...</div>}
+        {error && <div className="app-message error">{error}</div>}
         {activePage === 'Dashboard' && <Dashboard vehicles={vehicles} orders={orders} />}
-        {activePage === 'Inventory' && <Inventory vehicles={vehicles} setVehicles={setVehicles} />}
-        {activePage === 'Orders' && <Orders orders={orders} setOrders={setOrders} vehicles={vehicles} />}
-        {activePage === 'Customers' && <Customers customers={customers} setCustomers={setCustomers} />}
+        {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} />}
+        {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} />}
+        {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
       </main>
     </div>
   );

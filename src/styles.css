@@ -104,6 +104,22 @@ main {
   min-width: 0;
 }
 
+.app-message {
+  background: #e8edf5;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-weight: 800;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+}
+
+.app-message.error {
+  background: #f7e7e5;
+  border-color: #efc5c0;
+  color: var(--red);
+}
+
 .page-stack {
   display: grid;
   gap: 22px;
