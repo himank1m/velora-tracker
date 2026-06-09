@@ -97,39 +97,6 @@ button {
   overflow-wrap: anywhere;
 }
 
-.role-badge {
-  background: #fff2d8;
-  border-radius: 999px;
-  color: #8a5a12;
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 900;
-  justify-content: center;
-  margin-top: 4px;
-  padding: 5px 9px;
-  width: fit-content;
-}
-
-.role-ceo {
-  background: #dff7ee;
-  color: #0f6b4e;
-}
-
-.role-manager {
-  background: #e6efff;
-  color: #2454a6;
-}
-
-.role-sales-executive {
-  background: #fff2d8;
-  color: #8a5a12;
-}
-
-.role-logistics-officer {
-  background: #eef1f5;
-  color: #526070;
-}
-
 .user-profile button {
   background: #e8edf5;
   border-radius: 6px;
