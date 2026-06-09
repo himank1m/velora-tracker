@@ -138,6 +138,7 @@ const blankCustomer = {
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Ready', 'Delivered', 'Completed'];
 const pages = ['Dashboard', 'Inventory', 'Orders', 'Customers'];
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function numberValue(value) {
   return Number(value) || 0;
@@ -179,7 +180,7 @@ function fromVehicleRow(row) {
   };
 }
 
-function toVehicleRow(vehicle) {
+function toVehicleRow(vehicle, userId) {
   return {
     id: vehicle.id,
     brand: vehicle.brand,
@@ -189,6 +190,7 @@ function toVehicleRow(vehicle) {
     purchase_price: numberValue(vehicle.purchasePrice),
     selling_price: numberValue(vehicle.sellingPrice),
     status: vehicle.status,
+    ...(userId ? { created_by: userId } : {}),
   };
 }
 
@@ -205,7 +207,7 @@ function fromOrderRow(row) {
   };
 }
 
-function toOrderRow(order) {
+function toOrderRow(order, userId) {
   return {
     id: order.id,
     customer_name: order.customerName,
@@ -215,6 +217,7 @@ function toOrderRow(order) {
     purchase_cost: numberValue(order.purchaseCost),
     selling_price: numberValue(order.sellingPrice),
     status: order.status,
+    ...(userId ? { created_by: userId } : {}),
   };
 }
 
@@ -229,7 +232,7 @@ function fromCustomerRow(row) {
   };
 }
 
-function toCustomerRow(customer) {
+function toCustomerRow(customer, userId) {
   return {
     id: customer.id,
     name: customer.name,
@@ -237,10 +240,56 @@ function toCustomerRow(customer) {
     email: customer.email,
     location: customer.location,
     notes: customer.notes,
+    ...(userId ? { created_by: userId } : {}),
   };
 }
 
-function useSupabaseRecords() {
+function userName(user) {
+  return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Velora user';
+}
+
+function useAuthSession() {
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setAuthLoading(false);
+      setAuthError('Supabase environment variables are missing.');
+      return undefined;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) setAuthError(error.message);
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function signOut() {
+    setAuthError('');
+    const { error } = await supabase.auth.signOut();
+    if (error) setAuthError(error.message);
+  }
+
+  return { session, user: session?.user || null, authLoading, authError, signOut };
+}
+
+function useSupabaseRecords(user) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -264,14 +313,22 @@ function useSupabaseRecords() {
       return;
     }
 
+    if (!user) {
+      setVehicles([]);
+      setOrders([]);
+      setCustomers([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
       const [vehicleRows, orderRows, customerRows] = await Promise.all([
-        runRequest(supabase.from('vehicles').select('*').order('created_at', { ascending: false })),
-        runRequest(supabase.from('orders').select('*').order('created_at', { ascending: false })),
-        runRequest(supabase.from('customers').select('*').order('created_at', { ascending: false })),
+        runRequest(supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
+        runRequest(supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
+        runRequest(supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -284,49 +341,49 @@ function useSupabaseRecords() {
 
   useEffect(() => {
     loadRecords();
-  }, []);
+  }, [user?.id]);
 
   async function saveVehicle(vehicle, editingId) {
     const query = editingId
-      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).select().single()
-      : supabase.from('vehicles').insert(toVehicleRow(vehicle)).select().single();
+      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).eq('created_by', user.id).select().single()
+      : supabase.from('vehicles').insert(toVehicleRow(vehicle, user.id)).select().single();
     const saved = fromVehicleRow(await runRequest(query));
     setVehicles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteVehicle(id) {
-    await runRequest(supabase.from('vehicles').delete().eq('id', id));
+    await runRequest(supabase.from('vehicles').delete().eq('id', id).eq('created_by', user.id));
     setVehicles((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveOrder(order, editingId) {
     const query = editingId
-      ? supabase.from('orders').update(toOrderRow(order)).eq('id', editingId).select().single()
-      : supabase.from('orders').insert(toOrderRow(order)).select().single();
+      ? supabase.from('orders').update(toOrderRow(order)).eq('id', editingId).eq('created_by', user.id).select().single()
+      : supabase.from('orders').insert(toOrderRow(order, user.id)).select().single();
     const saved = fromOrderRow(await runRequest(query));
     setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteOrder(id) {
-    await runRequest(supabase.from('orders').delete().eq('id', id));
+    await runRequest(supabase.from('orders').delete().eq('id', id).eq('created_by', user.id));
     setOrders((current) => current.filter((item) => item.id !== id));
   }
 
   async function updateOrderStatus(id, status) {
-    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).select().single()));
+    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).eq('created_by', user.id).select().single()));
     setOrders((current) => current.map((item) => item.id === id ? saved : item));
   }
 
   async function saveCustomer(customer, editingId) {
     const query = editingId
-      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).select().single()
-      : supabase.from('customers').insert(toCustomerRow(customer)).select().single();
+      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).eq('created_by', user.id).select().single()
+      : supabase.from('customers').insert(toCustomerRow(customer, user.id)).select().single();
     const saved = fromCustomerRow(await runRequest(query));
     setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteCustomer(id) {
-    await runRequest(supabase.from('customers').delete().eq('id', id));
+    await runRequest(supabase.from('customers').delete().eq('id', id).eq('created_by', user.id));
     setCustomers((current) => current.filter((item) => item.id !== id));
   }
 
@@ -479,6 +536,153 @@ function CustomerForm({ value, onChange, onSubmit, editingId, onCancel }) {
 
 function StatusBadge({ status }) {
   return <span className={`status status-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</span>;
+}
+
+function AuthView({ authError }) {
+  const [mode, setMode] = useState('signin');
+  const [form, setForm] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+  });
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState(authError);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    setError(authError);
+  }, [authError]);
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setError('');
+    setMessage('');
+  }
+
+  function validateEmail() {
+    if (!emailPattern.test(form.email)) {
+      setError('Please enter a valid email address.');
+      return false;
+    }
+    return true;
+  }
+
+  async function submitAuth(event) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+
+    if (!isSupabaseConfigured) {
+      setError('Supabase environment variables are missing.');
+      return;
+    }
+
+    if (!validateEmail()) return;
+
+    if (mode !== 'forgot' && form.password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    if (mode === 'signup' && form.password !== form.confirmPassword) {
+      setError('Passwords must match.');
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (mode === 'signin') {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
+        if (signInError) throw signInError;
+      }
+
+      if (mode === 'signup') {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: form.email,
+          password: form.password,
+          options: {
+            data: { full_name: form.fullName },
+            emailRedirectTo: window.location.origin,
+          },
+        });
+        if (signUpError) throw signUpError;
+        setMessage('Account created. Check your email if confirmation is enabled.');
+      }
+
+      if (mode === 'forgot') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(form.email, {
+          redirectTo: window.location.origin,
+        });
+        if (resetError) throw resetError;
+        setMessage('Password reset instructions have been sent to your email.');
+      }
+    } catch (requestError) {
+      setError(requestError.message || 'Authentication failed. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const title = mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Reset password';
+  const helper = mode === 'signin'
+    ? 'Access Velora inventory, orders, and customer records.'
+    : mode === 'signup'
+      ? 'Create a secure Velora Tracker account.'
+      : 'Enter your email and we will send reset instructions.';
+
+  return (
+    <main className="auth-page">
+      <section className="auth-card">
+        <div className="brand-mark auth-brand">
+          <span>VM</span>
+          <div>
+            <strong>Velora Motors</strong>
+            <small>Tracker</small>
+          </div>
+        </div>
+        <div>
+          <p className="eyebrow">Secure access</p>
+          <h1>{title}</h1>
+          <p>{helper}</p>
+        </div>
+        <form className="auth-form" onSubmit={submitAuth}>
+          {mode === 'signup' && (
+            <Field label="Full Name">
+              <input value={form.fullName} onChange={(e) => updateField('fullName', e.target.value)} required />
+            </Field>
+          )}
+          <Field label="Email">
+            <input type="email" value={form.email} onChange={(e) => updateField('email', e.target.value)} required />
+          </Field>
+          {mode !== 'forgot' && (
+            <Field label="Password">
+              <input type="password" value={form.password} onChange={(e) => updateField('password', e.target.value)} minLength="8" required />
+            </Field>
+          )}
+          {mode === 'signup' && (
+            <Field label="Confirm Password">
+              <input type="password" value={form.confirmPassword} onChange={(e) => updateField('confirmPassword', e.target.value)} minLength="8" required />
+            </Field>
+          )}
+          {error && <div className="auth-alert error">{error}</div>}
+          {message && <div className="auth-alert">{message}</div>}
+          <button className="auth-submit" type="submit" disabled={submitting}>
+            {submitting ? 'Please wait...' : title}
+          </button>
+        </form>
+        <div className="auth-links">
+          {mode !== 'signin' && <button onClick={() => setMode('signin')}>Back to sign in</button>}
+          {mode !== 'signup' && <button onClick={() => setMode('signup')}>Create account</button>}
+          {mode !== 'forgot' && <button onClick={() => setMode('forgot')}>Forgot password?</button>}
+        </div>
+      </section>
+    </main>
+  );
 }
 
 function Dashboard({ vehicles, orders }) {
@@ -758,6 +962,7 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
 
 function App() {
   const [activePage, setActivePage] = useState('Dashboard');
+  const { user, authLoading, authError, signOut } = useAuthSession();
   const {
     vehicles,
     orders,
@@ -771,7 +976,15 @@ function App() {
     updateOrderStatus,
     saveCustomer,
     deleteCustomer,
-  } = useSupabaseRecords();
+  } = useSupabaseRecords(user);
+
+  if (authLoading) {
+    return <div className="screen-loader">Checking Velora session...</div>;
+  }
+
+  if (!user) {
+    return <AuthView authError={authError} />;
+  }
 
   return (
     <div className="app">
@@ -782,6 +995,11 @@ function App() {
             <strong>Velora Motors</strong>
             <small>Tracker</small>
           </div>
+        </div>
+        <div className="user-profile">
+          <strong>{userName(user)}</strong>
+          <small>{user.email}</small>
+          <button onClick={signOut}>Sign Out</button>
         </div>
         <nav>
           {pages.map((page) => (

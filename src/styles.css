@@ -80,6 +80,32 @@ button {
   margin-top: 2px;
 }
 
+.user-profile {
+  border: 1px solid #2f3d53;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+}
+
+.user-profile strong {
+  color: #fff;
+}
+
+.user-profile small {
+  color: #b8c1cf;
+  overflow-wrap: anywhere;
+}
+
+.user-profile button {
+  background: #e8edf5;
+  border-radius: 6px;
+  color: var(--ink);
+  font-weight: 800;
+  margin-top: 8px;
+  padding: 9px 10px;
+}
+
 nav {
   display: grid;
   gap: 8px;
@@ -118,6 +144,100 @@ main {
   background: #f7e7e5;
   border-color: #efc5c0;
   color: var(--red);
+}
+
+.screen-loader,
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.screen-loader {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.auth-page {
+  background:
+    linear-gradient(90deg, rgba(18, 25, 36, .94), rgba(18, 25, 36, .66)),
+    url("https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1600&q=80");
+  background-position: center;
+  background-size: cover;
+}
+
+.auth-card {
+  background: rgba(255, 255, 255, .97);
+  border: 1px solid rgba(220, 227, 237, .88);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .25);
+  display: grid;
+  gap: 20px;
+  max-width: 460px;
+  padding: 28px;
+  width: 100%;
+}
+
+.auth-brand strong {
+  color: var(--ink);
+}
+
+.auth-card h1 {
+  margin: 6px 0 8px;
+  font-size: 34px;
+  letter-spacing: 0;
+}
+
+.auth-card p {
+  color: var(--muted);
+  margin: 0;
+}
+
+.auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+.auth-submit {
+  background: var(--blue);
+  border-radius: 6px;
+  color: #fff;
+  font-weight: 900;
+  padding: 12px 14px;
+}
+
+.auth-submit:disabled {
+  cursor: not-allowed;
+  opacity: .7;
+}
+
+.auth-alert {
+  background: #dff7ee;
+  border: 1px solid #b8ead7;
+  border-radius: 6px;
+  color: #0f6b4e;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.auth-alert.error {
+  background: #f7e7e5;
+  border-color: #efc5c0;
+  color: var(--red);
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.auth-links button {
+  background: transparent;
+  color: var(--blue);
+  font-weight: 800;
+  padding: 0;
 }
 
 .page-stack {
