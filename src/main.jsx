@@ -37,7 +37,7 @@ import {
 import { isSupabaseConfigured, supabase } from './supabaseClient';
 import './styles.css';
 
-const money = new Intl.NumberFormat('en-US', {
+const money = new Intl.NumberFormat('en-IN', {
   style: 'currency',
   currency: 'INR',
   maximumFractionDigits: 0,
