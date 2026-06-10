@@ -1325,14 +1325,19 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
   );
 }
 
-function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOptions }) {
+function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOptions, customerOptions }) {
   return (
     <form className="entry-form" onSubmit={onSubmit}>
       <Field label="Order Number">
         <input value={value.orderNumber} onChange={(e) => onChange({ ...value, orderNumber: e.target.value })} placeholder="Auto, e.g. 0001" />
       </Field>
       <Field label="Customer Name">
-        <input value={value.customerName} onChange={(e) => onChange({ ...value, customerName: e.target.value })} required />
+        <input list="customer-list" value={value.customerName} onChange={(e) => onChange({ ...value, customerName: e.target.value })} placeholder="Select existing or type new" required />
+        <datalist id="customer-list">
+          {customerOptions.map((customer) => (
+            <option key={customer.id} value={customer.name} />
+          ))}
+        </datalist>
       </Field>
       <Field label="Vehicle">
         <input list="vehicle-list" value={value.vehicle} onChange={(e) => onChange({ ...value, vehicle: e.target.value })} required />
@@ -1982,7 +1987,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
   );
 }
 
-function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, orderTimelines, addOrderTimelineNote, canEdit, canDelete }) {
+function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, customers, orderTimelines, addOrderTimelineNote, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankOrder);
@@ -2017,7 +2022,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
           </select>
         </div>
       </PageHeader>
-      {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />}
+      {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -2657,7 +2662,7 @@ function App() {
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
-            {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
+            {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
             {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
             {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
