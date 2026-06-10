@@ -225,6 +225,8 @@ const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Rea
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
 const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
 const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
+const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
+const exclusiveRoles = ['CEO', 'Company Manager'];
 const pages = ['Command Center', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center'] },
@@ -707,6 +709,58 @@ function userName(user) {
   return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Velora user';
 }
 
+function normalizeRole(role) {
+  return roleOptions.includes(role) ? role : 'Inventory Manager';
+}
+
+function createPermissions(role) {
+  const normalizedRole = normalizeRole(role);
+  const isExecutive = normalizedRole === 'CEO' || normalizedRole === 'Company Manager';
+  const allowedPagesByRole = {
+    CEO: pages,
+    'Company Manager': pages,
+    'Logistics Manager': ['Shipments', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Inventory', 'Alerts Center'],
+    'Finance Manager': ['Reports', 'Alerts Center'],
+  };
+  const allowedPages = allowedPagesByRole[normalizedRole] || [];
+
+  return {
+    role: normalizedRole,
+    allowedPages,
+    isExecutive,
+    canViewPage(page) {
+      return allowedPages.includes(page);
+    },
+    canManageUsers() {
+      return normalizedRole === 'CEO';
+    },
+    canManageInventory() {
+      return isExecutive || normalizedRole === 'Inventory Manager';
+    },
+    canManageOrders() {
+      return isExecutive;
+    },
+    canManageCustomers() {
+      return isExecutive;
+    },
+    canManageShipments() {
+      return isExecutive || normalizedRole === 'Logistics Manager';
+    },
+    canViewReports() {
+      return isExecutive || normalizedRole === 'Finance Manager';
+    },
+    canViewFinancials() {
+      return isExecutive || normalizedRole === 'Finance Manager';
+    },
+    canDeleteRecords(moduleName) {
+      if (isExecutive) return true;
+      return moduleName === 'Inventory' && normalizedRole === 'Inventory Manager'
+        || moduleName === 'Shipments' && normalizedRole === 'Logistics Manager';
+    },
+  };
+}
+
 function useAuthSession() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -759,7 +813,78 @@ function useTheme() {
   return [theme, setTheme];
 }
 
-function useSupabaseRecords(user) {
+function useUserProfile(user) {
+  const [profile, setProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState('');
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadProfile() {
+      if (!user || !isSupabaseConfigured) {
+        setProfile(null);
+        setProfileLoading(false);
+        return;
+      }
+
+      setProfileLoading(true);
+      setProfileError('');
+
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        const fallbackProfile = {
+          id: user.id,
+          full_name: userName(user),
+          email: user.email,
+          role: normalizeRole(user.user_metadata?.role),
+        };
+
+        if (!data) {
+          const fallbackRole = normalizeRole(user.user_metadata?.role || 'Company Manager');
+          fallbackProfile.role = fallbackRole;
+          const { data: createdProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert(fallbackProfile)
+            .select()
+            .maybeSingle();
+          if (createError) throw createError;
+          if (mounted) setProfile(createdProfile || fallbackProfile);
+        } else if (mounted) {
+          setProfile({ ...data, role: normalizeRole(data.role) });
+        }
+      } catch (requestError) {
+        if (mounted) {
+          setProfile({
+            id: user.id,
+            full_name: userName(user),
+            email: user.email,
+            role: normalizeRole(user.user_metadata?.role),
+          });
+          setProfileError(requestError.message || 'Could not load profile role.');
+        }
+      } finally {
+        if (mounted) setProfileLoading(false);
+      }
+    }
+
+    loadProfile();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
+  return { profile, profileLoading, profileError };
+}
+
+function useSupabaseRecords(user, permissions) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
   const [orderTimelines, setOrderTimelines] = useState({});
@@ -785,7 +910,7 @@ function useSupabaseRecords(user) {
       return;
     }
 
-    if (!user) {
+    if (!user || !permissions) {
       setVehicles([]);
       setOrders([]);
       setOrderTimelines({});
@@ -799,12 +924,29 @@ function useSupabaseRecords(user) {
     setError('');
 
     try {
+      const readAll = permissions.isExecutive || permissions.role === 'Finance Manager';
+      const vehicleQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+        ? supabase.from('vehicles').select('*').order('created_at', { ascending: false })
+        : supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const orderQuery = readAll || permissions.role === 'Logistics Manager'
+        ? supabase.from('orders').select('*').order('created_at', { ascending: false })
+        : supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const customerQuery = readAll
+        ? supabase.from('customers').select('*').order('created_at', { ascending: false })
+        : supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const shipmentQuery = permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
+        ? supabase.from('shipments').select('*').order('created_at', { ascending: false })
+        : supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const timelineQuery = permissions.isExecutive || permissions.role === 'Logistics Manager'
+        ? supabase.from('order_timeline_events').select('*').order('created_at', { ascending: true })
+        : supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+
       const [vehicleRows, orderRows, customerRows, shipmentRows, timelineRows] = await Promise.all([
-        runRequest(supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
-        runRequest(supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
-        runRequest(supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
-        runRequest(supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false })),
-        runRequest(supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true })),
+        runRequest(vehicleQuery),
+        runRequest(orderQuery),
+        runRequest(customerQuery),
+        runRequest(shipmentQuery),
+        runRequest(timelineQuery),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -819,28 +961,31 @@ function useSupabaseRecords(user) {
 
   useEffect(() => {
     loadRecords();
-  }, [user?.id]);
+  }, [user?.id, permissions?.role]);
 
   async function saveVehicle(vehicle, editingId) {
+    if (!permissions?.canManageInventory()) throw new Error('Your role cannot manage inventory.');
     const query = editingId
-      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).select().single()
       : supabase.from('vehicles').insert(toVehicleRow(vehicle, user.id)).select().single();
     const saved = fromVehicleRow(await runRequest(query));
     setVehicles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteVehicle(id) {
-    await runRequest(supabase.from('vehicles').delete().eq('id', id).eq('created_by', user.id));
+    if (!permissions?.canDeleteRecords('Inventory')) throw new Error('Your role cannot delete inventory records.');
+    await runRequest(supabase.from('vehicles').delete().eq('id', id));
     setVehicles((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveOrder(order, editingId) {
+    if (!permissions?.canManageOrders()) throw new Error('Your role cannot manage orders.');
     const orderToSave = {
       ...order,
       orderNumber: order.orderNumber || nextOrderNumber(orders),
     };
     const query = editingId
-      ? supabase.from('orders').update(toOrderRow(orderToSave)).eq('id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('orders').update(toOrderRow(orderToSave)).eq('id', editingId).select().single()
       : supabase.from('orders').insert(toOrderRow(orderToSave, user.id)).select().single();
     const saved = fromOrderRow(await runRequest(query));
     setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
@@ -851,12 +996,14 @@ function useSupabaseRecords(user) {
   }
 
   async function deleteOrder(id) {
-    await runRequest(supabase.from('orders').delete().eq('id', id).eq('created_by', user.id));
+    if (!permissions?.canDeleteRecords('Orders')) throw new Error('Your role cannot delete orders.');
+    await runRequest(supabase.from('orders').delete().eq('id', id));
     setOrders((current) => current.filter((item) => item.id !== id));
   }
 
   async function updateOrderStatus(id, status) {
-    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).eq('created_by', user.id).select().single()));
+    if (!permissions?.canManageOrders()) throw new Error('Your role cannot update order status.');
+    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).select().single()));
     setOrders((current) => current.map((item) => item.id === id ? saved : item));
     await addOrderTimelineEvent(id, status, `Status changed to ${status}.`);
   }
@@ -877,33 +1024,38 @@ function useSupabaseRecords(user) {
   }
 
   async function addOrderTimelineNote(orderId, note) {
+    if (!permissions?.isExecutive && permissions?.role !== 'Logistics Manager') throw new Error('Your role cannot add timeline notes.');
     const order = orders.find((item) => item.id === orderId);
     await addOrderTimelineEvent(orderId, order?.status || 'Inquiry', note);
   }
 
   async function saveCustomer(customer, editingId) {
+    if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customers.');
     const query = editingId
-      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).select().single()
       : supabase.from('customers').insert(toCustomerRow(customer, user.id)).select().single();
     const saved = fromCustomerRow(await runRequest(query));
     setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteCustomer(id) {
-    await runRequest(supabase.from('customers').delete().eq('id', id).eq('created_by', user.id));
+    if (!permissions?.canDeleteRecords('Customers')) throw new Error('Your role cannot delete customers.');
+    await runRequest(supabase.from('customers').delete().eq('id', id));
     setCustomers((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveShipment(shipment, editingId) {
+    if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage shipments.');
     const query = editingId
-      ? supabase.from('shipments').update(toShipmentRow(shipment)).eq('shipment_id', editingId).eq('created_by', user.id).select().single()
+      ? supabase.from('shipments').update(toShipmentRow(shipment)).eq('shipment_id', editingId).select().single()
       : supabase.from('shipments').insert(toShipmentRow(shipment, user.id)).select().single();
     const saved = fromShipmentRow(await runRequest(query));
     setShipments((current) => editingId ? current.map((item) => item.shipmentId === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteShipment(id) {
-    await runRequest(supabase.from('shipments').delete().eq('shipment_id', id).eq('created_by', user.id));
+    if (!permissions?.canDeleteRecords('Shipments')) throw new Error('Your role cannot delete shipments.');
+    await runRequest(supabase.from('shipments').delete().eq('shipment_id', id));
     setShipments((current) => current.filter((item) => item.shipmentId !== id));
   }
 
@@ -1068,9 +1220,9 @@ function DepartmentShortcuts({ setActivePage, alerts, totals }) {
   );
 }
 
-function GlobalSearch({ data, setActivePage }) {
+function GlobalSearch({ data, setActivePage, allowedPages }) {
   const [query, setQuery] = useState('');
-  const results = useMemo(() => buildGlobalResults(data, query), [data, query]);
+  const results = useMemo(() => buildGlobalResults(data, query).filter((result) => allowedPages.includes(result.page)), [data, query, allowedPages]);
 
   return (
     <div className="global-search">
@@ -1092,7 +1244,7 @@ function GlobalSearch({ data, setActivePage }) {
   );
 }
 
-function CommandPalette({ open, onClose, setActivePage }) {
+function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const actions = [
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
@@ -1104,6 +1256,7 @@ function CommandPalette({ open, onClose, setActivePage }) {
   ];
 
   if (!open) return null;
+  const visibleActions = actions.filter((action) => allowedPages.includes(action.page));
 
   return (
     <div className="command-backdrop" onClick={onClose}>
@@ -1116,7 +1269,7 @@ function CommandPalette({ open, onClose, setActivePage }) {
           <kbd>Esc</kbd>
         </div>
         <div className="command-list">
-          {actions.map(({ label, page, icon: Icon }) => (
+          {visibleActions.map(({ label, page, icon: Icon }) => (
             <button key={label} onClick={() => { setActivePage(page); onClose(); }}>
               <Icon size={18} />
               <span>{label}</span>
@@ -1340,6 +1493,7 @@ function AuthView({ authError }) {
     email: '',
     password: '',
     confirmPassword: '',
+    role: 'Inventory Manager',
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState(authError);
@@ -1388,24 +1542,67 @@ function AuthView({ authError }) {
     setSubmitting(true);
 
     try {
+      async function roleAlreadyAssigned(role) {
+        if (!exclusiveRoles.includes(role)) return false;
+        const { count, error: countError } = await supabase
+          .from('profiles')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', role);
+        if (countError) return false;
+        return Number(count) > 0;
+      }
+
       if (mode === 'signin') {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email: form.email,
           password: form.password,
         });
         if (signInError) throw signInError;
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', signInData.user.id)
+          .maybeSingle();
+        if (profileData?.role && normalizeRole(profileData.role) !== form.role) {
+          await supabase.auth.signOut();
+          throw new Error(`This account is registered as ${profileData.role}. Please select that role to sign in.`);
+        }
+        if (!profileData) {
+          if (await roleAlreadyAssigned(form.role)) {
+            await supabase.auth.signOut();
+            throw new Error(`${form.role} is already assigned to another account.`);
+          }
+          await supabase.from('profiles').insert({
+            id: signInData.user.id,
+            full_name: userName(signInData.user),
+            email: signInData.user.email,
+            role: form.role,
+          });
+        }
       }
 
       if (mode === 'signup') {
-        const { error: signUpError } = await supabase.auth.signUp({
+        if (await roleAlreadyAssigned(form.role)) {
+          throw new Error(`${form.role} is already assigned. Please choose another role or ask the CEO to update access.`);
+        }
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: form.email,
           password: form.password,
           options: {
-            data: { full_name: form.fullName },
+            data: { full_name: form.fullName, role: form.role },
             emailRedirectTo: window.location.origin,
           },
         });
         if (signUpError) throw signUpError;
+        if (signUpData.user && signUpData.session) {
+          const { error: profileError } = await supabase.from('profiles').insert({
+            id: signUpData.user.id,
+            full_name: form.fullName,
+            email: form.email,
+            role: form.role,
+          });
+          if (profileError) throw profileError;
+        }
         setMessage('Account created. Check your email if confirmation is enabled.');
       }
 
@@ -1449,6 +1646,15 @@ function AuthView({ authError }) {
           {mode === 'signup' && (
             <Field label="Full Name">
               <input value={form.fullName} onChange={(e) => updateField('fullName', e.target.value)} required />
+            </Field>
+          )}
+          {mode !== 'forgot' && (
+            <Field label="Role">
+              <select value={form.role} onChange={(e) => updateField('role', e.target.value)}>
+                {roleOptions.map((role) => (
+                  <option key={role}>{role}</option>
+                ))}
+              </select>
             </Field>
           )}
           <Field label="Email">
@@ -1690,7 +1896,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
   );
 }
 
-function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
+function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankVehicle);
@@ -1729,7 +1935,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
           </select>
         </div>
       </PageHeader>
-      <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />
+      {canEdit && <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -1761,8 +1967,9 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
                 <td>{profitMargin(vehicle).toFixed(1)}%</td>
                 <td><StatusBadge status={vehicle.status} /></td>
                 <td className="row-actions">
-                  <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteVehicle(vehicle.id)}>Delete</button>
+                  {canEdit && <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>}
+                  {canDelete && <button className="mini danger" onClick={() => deleteVehicle(vehicle.id)}>Delete</button>}
+                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
             ))}
@@ -1775,7 +1982,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle }) {
   );
 }
 
-function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, orderTimelines, addOrderTimelineNote }) {
+function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, orderTimelines, addOrderTimelineNote, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankOrder);
@@ -1810,7 +2017,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
           </select>
         </div>
       </PageHeader>
-      <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />
+      {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -1842,18 +2049,20 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
                   <td>{money.format(orderRevenue(order))}</td>
                   <td>{money.format(orderProfit(order))}</td>
                   <td>
-                    <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
-                      {orderStatuses.map((status) => (
-                        <option key={status}>{status}</option>
-                      ))}
-                    </select>
+                    {canEdit ? (
+                      <select className="status-select" value={order.status} onChange={(event) => updateOrderStatus(order.id, event.target.value)}>
+                        {orderStatuses.map((status) => (
+                          <option key={status}>{status}</option>
+                        ))}
+                      </select>
+                    ) : <StatusBadge status={order.status} />}
                   </td>
                   <td className="row-actions">
                     <button className="mini" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? '' : order.id)}>
                       {expandedOrderId === order.id ? 'Hide timeline' : 'Timeline'}
                     </button>
-                    <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>
-                    <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>
+                    {canEdit && <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>}
+                    {canDelete && <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>}
                   </td>
                 </tr>
                 {expandedOrderId === order.id && (
@@ -1874,7 +2083,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, o
   );
 }
 
-function Customers({ customers, saveCustomer, deleteCustomer }) {
+function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete }) {
   const [form, setForm] = useState(blankCustomer);
   const [editingId, setEditingId] = useState('');
 
@@ -1889,7 +2098,7 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Customers" title="Customer records" description="Maintain clean buyer contact details, notes, and commercial context." />
-      <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />
+      {canEdit && <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -1911,8 +2120,9 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
                 <td>{customer.location}</td>
                 <td>{customer.notes}</td>
                 <td className="row-actions">
-                  <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteCustomer(customer.id)}>Delete</button>
+                  {canEdit && <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>}
+                  {canDelete && <button className="mini danger" onClick={() => deleteCustomer(customer.id)}>Delete</button>}
+                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
             ))}
@@ -1924,7 +2134,7 @@ function Customers({ customers, saveCustomer, deleteCustomer }) {
   );
 }
 
-function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
+function Shipments({ shipments, saveShipment, deleteShipment, orders, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [locationFilter, setLocationFilter] = useState('All');
@@ -1973,7 +2183,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
           </select>
         </div>
       </PageHeader>
-      <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />
+      {canEdit && <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -2011,8 +2221,9 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders }) {
                 <td><StatusBadge status={shipment.status} /></td>
                 <td>{shipment.notes}</td>
                 <td className="row-actions">
-                  <button className="mini" onClick={() => editShipment(shipment)}>Edit</button>
-                  <button className="mini danger" onClick={() => deleteShipment(shipment.shipmentId)}>Delete</button>
+                  {canEdit && <button className="mini" onClick={() => editShipment(shipment)}>Edit</button>}
+                  {canDelete && <button className="mini danger" onClick={() => deleteShipment(shipment.shipmentId)}>Delete</button>}
+                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
             ))}
@@ -2310,6 +2521,8 @@ function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [theme, setTheme] = useTheme();
   const { user, authLoading, authError, signOut } = useAuthSession();
+  const { profile, profileLoading, profileError } = useUserProfile(user);
+  const permissions = useMemo(() => createPermissions(profile?.role), [profile?.role]);
   const {
     vehicles,
     orders,
@@ -2328,9 +2541,18 @@ function App() {
     deleteCustomer,
     saveShipment,
     deleteShipment,
-  } = useSupabaseRecords(user);
+  } = useSupabaseRecords(user, profileLoading ? null : permissions);
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines }), [vehicles, orders, customers, shipments, orderTimelines]);
   const searchData = useMemo(() => ({ vehicles, orders, customers, shipments }), [vehicles, orders, customers, shipments]);
+  const visibleNavGroups = useMemo(() => navGroups
+    .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
+    .filter((group) => group.pages.length), [permissions]);
+
+  useEffect(() => {
+    if (!profileLoading && !permissions.canViewPage(activePage) && permissions.allowedPages[0]) {
+      setActivePage(permissions.allowedPages[0]);
+    }
+  }, [activePage, permissions, profileLoading]);
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -2353,8 +2575,12 @@ function App() {
     return <AuthView authError={authError} />;
   }
 
+  if (profileLoading) {
+    return <div className="screen-loader">Loading Velora role access...</div>;
+  }
+
   function goToPage(page) {
-    setActivePage(page);
+    setActivePage(permissions.canViewPage(page) ? page : permissions.allowedPages[0]);
     setMobileNavOpen(false);
   }
 
@@ -2382,10 +2608,11 @@ function App() {
           <div className="avatar">{userName(user).slice(0, 1).toUpperCase()}</div>
           <strong>{userName(user)}</strong>
           <small>{user.email}</small>
+          <span className="role-badge">{permissions.role}</span>
           <button onClick={signOut}>Sign Out</button>
         </div>
         <nav>
-          {navGroups.map((group) => (
+          {visibleNavGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <small>{group.label}</small>
               {group.pages.map((page) => {
@@ -2412,7 +2639,7 @@ function App() {
             <h1>{activePage}</h1>
           </div>
           <div className="topbar-actions">
-            <GlobalSearch data={searchData} setActivePage={setActivePage} />
+            <GlobalSearch data={searchData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
             <button className="theme-toggle command-button" onClick={() => setCommandOpen(true)}>
               <Command size={17} />
               <span>Commands</span>
@@ -2425,16 +2652,23 @@ function App() {
         </header>
         {loading && <div className="app-message">Loading Velora records...</div>}
         {error && <div className="app-message error">{error}</div>}
-        {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} orderTimelines={orderTimelines} setActivePage={setActivePage} error={error} authError={authError} />}
-        {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} />}
-        {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} />}
-        {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} />}
-        {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} />}
-        {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
-        {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} />}
-        {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
-        {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
-        <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} setActivePage={setActivePage} />
+        {profileError && <div className="app-message error">{profileError}</div>}
+        {permissions.canViewPage(activePage) ? (
+          <>
+            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} />}
+            {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
+            {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
+            {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
+            {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
+            {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
+            {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} />}
+            {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
+            {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
+          </>
+        ) : (
+          <div className="app-message error">This area is locked for {permissions.role}.</div>
+        )}
+        <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
       </main>
     </div>
   );

@@ -325,3 +325,108 @@ begin
     create policy "Users can update own alerts" on alerts for update to authenticated using (created_by = auth.uid()) with check (created_by = auth.uid());
   end if;
 end $$;
+
+-- Role-based access control additions.
+-- Safe and non-destructive: creates profiles and additive policies only.
+
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  full_name text,
+  email text,
+  role text not null default 'Inventory Manager' check (role in ('CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager')),
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists profiles_one_ceo
+on profiles (role)
+where role = 'CEO';
+
+create unique index if not exists profiles_one_company_manager
+on profiles (role)
+where role = 'Company Manager';
+
+alter table profiles enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'Users can read own profile') then
+    create policy "Users can read own profile" on profiles for select to authenticated using (id = auth.uid());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'profiles' and policyname = 'Users can insert own profile') then
+    create policy "Users can insert own profile" on profiles for insert to authenticated with check (id = auth.uid());
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'vehicles' and policyname = 'Role read vehicles') then
+    create policy "Role read vehicles" on vehicles for select to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Inventory Manager', 'Finance Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'vehicles' and policyname = 'Role manage vehicles') then
+    create policy "Role manage vehicles" on vehicles for all to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Inventory Manager'))
+    ) with check (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Inventory Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'orders' and policyname = 'Role read orders') then
+    create policy "Role read orders" on orders for select to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager', 'Finance Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'orders' and policyname = 'Role manage orders') then
+    create policy "Role manage orders" on orders for all to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager'))
+    ) with check (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'customers' and policyname = 'Role read customers') then
+    create policy "Role read customers" on customers for select to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Finance Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'customers' and policyname = 'Role manage customers') then
+    create policy "Role manage customers" on customers for all to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager'))
+    ) with check (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'shipments' and policyname = 'Role read shipments') then
+    create policy "Role read shipments" on shipments for select to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager', 'Finance Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'shipments' and policyname = 'Role manage shipments') then
+    create policy "Role manage shipments" on shipments for all to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
+    ) with check (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'order_timeline_events' and policyname = 'Role read order timeline events') then
+    create policy "Role read order timeline events" on order_timeline_events for select to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'order_timeline_events' and policyname = 'Role manage order timeline events') then
+    create policy "Role manage order timeline events" on order_timeline_events for all to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
+    ) with check (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
+    );
+  end if;
+end $$;
+
+-- To make your existing signed-in account CEO manually:
+-- update profiles set role = 'CEO' where email = 'your-email@example.com';

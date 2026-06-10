@@ -262,6 +262,27 @@ nav button span {
   margin-top: 8px;
 }
 
+.role-badge,
+.locked-label {
+  align-items: center;
+  background: rgba(96, 165, 250, .12);
+  border: 1px solid rgba(96, 165, 250, .22);
+  border-radius: 999px;
+  color: #bfdbfe;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  min-height: 26px;
+  padding: 5px 9px;
+  width: fit-content;
+}
+
+.locked-label {
+  background: rgba(148, 163, 184, .1);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
 nav {
   display: grid;
   gap: 18px;
