@@ -52,6 +52,18 @@ function formatIndianNumber(value) {
   return `${sign}${leading},${lastThree}`;
 }
 
+function formatIndianInput(value) {
+  const text = String(value ?? '').replace(/,/g, '').replace(/[^\d.]/g, '');
+  if (!text) return '';
+  const [rawWhole, ...decimalParts] = text.split('.');
+  const whole = rawWhole || '0';
+  const lastThree = whole.slice(-3);
+  const leading = whole.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',');
+  const formattedWhole = leading ? `${leading},${lastThree}` : lastThree;
+  const decimal = decimalParts.length ? `.${decimalParts.join('').slice(0, 2)}` : '';
+  return `${formattedWhole}${decimal}`;
+}
+
 const money = {
   format(value) {
     return `\u20b9${formatIndianNumber(value)}`;
@@ -235,7 +247,7 @@ const navIcons = {
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function numberValue(value) {
-  return Number(value) || 0;
+  return Number(String(value ?? '').replace(/,/g, '')) || 0;
 }
 
 function profitAmount(record) {
@@ -925,6 +937,17 @@ function Field({ label, children }) {
   );
 }
 
+function FormattedNumberInput({ value, onChange, min = 0 }) {
+  return (
+    <input
+      inputMode="decimal"
+      min={min}
+      value={formatIndianInput(value)}
+      onChange={(event) => onChange(formatIndianInput(event.target.value))}
+    />
+  );
+}
+
 function Metric({ label, value, tone, icon: Icon = Activity }) {
   return (
     <article className={`metric ${tone || ''}`}>
@@ -1121,13 +1144,13 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
         <input value={value.category} onChange={(e) => onChange({ ...value, category: e.target.value })} required />
       </Field>
       <Field label="Quantity">
-        <input type="number" min="0" value={value.quantity} onChange={(e) => onChange({ ...value, quantity: e.target.value })} />
+        <FormattedNumberInput value={value.quantity} onChange={(nextValue) => onChange({ ...value, quantity: nextValue })} />
       </Field>
       <Field label="Purchase Price">
-        <input type="number" min="0" value={value.purchasePrice} onChange={(e) => onChange({ ...value, purchasePrice: e.target.value })} />
+        <FormattedNumberInput value={value.purchasePrice} onChange={(nextValue) => onChange({ ...value, purchasePrice: nextValue })} />
       </Field>
       <Field label="Selling Price">
-        <input type="number" min="0" value={value.sellingPrice} onChange={(e) => onChange({ ...value, sellingPrice: e.target.value })} />
+        <FormattedNumberInput value={value.sellingPrice} onChange={(nextValue) => onChange({ ...value, sellingPrice: nextValue })} />
       </Field>
       <Field label="Status">
         <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
@@ -1167,16 +1190,16 @@ function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOpti
         </datalist>
       </Field>
       <Field label="Quantity">
-        <input type="number" min="1" value={value.quantity} onChange={(e) => onChange({ ...value, quantity: e.target.value })} />
+        <FormattedNumberInput min={1} value={value.quantity} onChange={(nextValue) => onChange({ ...value, quantity: nextValue })} />
       </Field>
       <Field label="Order Date">
         <input type="date" value={value.orderDate} onChange={(e) => onChange({ ...value, orderDate: e.target.value })} />
       </Field>
       <Field label="Purchase Cost">
-        <input type="number" min="0" value={value.purchaseCost} onChange={(e) => onChange({ ...value, purchaseCost: e.target.value })} />
+        <FormattedNumberInput value={value.purchaseCost} onChange={(nextValue) => onChange({ ...value, purchaseCost: nextValue })} />
       </Field>
       <Field label="Selling Price">
-        <input type="number" min="0" value={value.sellingPrice} onChange={(e) => onChange({ ...value, sellingPrice: e.target.value })} />
+        <FormattedNumberInput value={value.sellingPrice} onChange={(nextValue) => onChange({ ...value, sellingPrice: nextValue })} />
       </Field>
       <Field label="Status">
         <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
@@ -1263,7 +1286,7 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
         <input value={value.vehicle} onChange={(e) => onChange({ ...value, vehicle: e.target.value })} required />
       </Field>
       <Field label="Quantity">
-        <input type="number" min="1" value={value.quantity} onChange={(e) => onChange({ ...value, quantity: e.target.value })} />
+        <FormattedNumberInput min={1} value={value.quantity} onChange={(nextValue) => onChange({ ...value, quantity: nextValue })} />
       </Field>
       <Field label="Destination Country">
         <input value={value.destinationCountry} onChange={(e) => onChange({ ...value, destinationCountry: e.target.value })} required />
@@ -1278,7 +1301,7 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
         <input value={value.shippingCompany} onChange={(e) => onChange({ ...value, shippingCompany: e.target.value })} />
       </Field>
       <Field label="Freight Cost">
-        <input type="number" min="0" value={value.freightCost} onChange={(e) => onChange({ ...value, freightCost: e.target.value })} />
+        <FormattedNumberInput value={value.freightCost} onChange={(nextValue) => onChange({ ...value, freightCost: nextValue })} />
       </Field>
       <Field label="ETA">
         <input type="date" value={value.eta} onChange={(e) => onChange({ ...value, eta: e.target.value })} />
