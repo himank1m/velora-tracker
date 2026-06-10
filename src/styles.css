@@ -855,6 +855,21 @@ kbd {
   grid-column: 1 / -1;
 }
 
+.audit-feed-card .card-heading {
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.open-logs-button {
+  align-self: start;
+  transform: translateY(-6px);
+  white-space: nowrap;
+}
+
+.open-logs-button:hover {
+  transform: translateY(-7px);
+}
+
 .audit-feed-card .activity-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

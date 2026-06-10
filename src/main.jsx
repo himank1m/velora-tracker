@@ -1613,7 +1613,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
               <p className="eyebrow">Recent audit logs</p>
               <h2>Governance feed</h2>
             </div>
-            <button className="mini" onClick={() => setActivePage('Audit Logs')}>Open logs</button>
+            <button className="mini open-logs-button" onClick={() => setActivePage('Audit Logs')}>Open logs</button>
           </div>
           <div className="activity-list">
             {auditLogs.map((item, index) => (
