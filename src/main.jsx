@@ -220,23 +220,48 @@ const blankShipment = {
   department: 'Logistics',
 };
 
+const blankProcurementRequest = {
+  procurementId: '',
+  vehicleBrand: '',
+  vehicleModel: '',
+  quantity: 1,
+  supplierName: '',
+  supplierCountry: '',
+  estimatedPurchaseCost: 0,
+  estimatedFreightCost: 0,
+  requestedBy: '',
+  status: 'Requested',
+  notes: '',
+};
+
+const blankSupplier = {
+  supplierName: '',
+  country: '',
+  contactPerson: '',
+  phone: '',
+  email: '',
+  notes: '',
+};
+
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
+const procurementStatuses = ['Requested', 'Supplier Identified', 'Negotiation', 'Approved', 'Purchased', 'In Transit', 'Arrived', 'Added To Inventory'];
 const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
 const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
 const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
 const exclusiveRoles = ['CEO', 'Company Manager'];
-const pages = ['Command Center', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center'] },
-  { label: 'Operations', pages: ['Inventory', 'Orders', 'Customers'] },
+  { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Reports', 'Alerts Center'] },
   { label: 'System', pages: ['Audit Logs'] },
 ];
 const navIcons = {
   'Command Center': LayoutDashboard,
+  Procurement: ClipboardList,
   Inventory: Boxes,
   Orders: ClipboardList,
   Customers: Users,
@@ -270,6 +295,10 @@ function orderProfit(order) {
   return profitAmount(order) * numberValue(order.quantity);
 }
 
+function procurementValue(request) {
+  return (numberValue(request.estimatedPurchaseCost) + numberValue(request.estimatedFreightCost)) * numberValue(request.quantity);
+}
+
 function matchesSearch(record, query) {
   const text = Object.values(record).join(' ').toLowerCase();
   return text.includes(query.toLowerCase());
@@ -277,9 +306,10 @@ function matchesSearch(record, query) {
 
 function groupTimelineRows(events) {
   return events.reduce((groups, event) => {
+    const key = event.orderId || event.procurementId;
     return {
       ...groups,
-      [event.orderId]: [...(groups[event.orderId] || []), event],
+      [key]: [...(groups[key] || []), event],
     };
   }, {});
 }
@@ -324,7 +354,7 @@ function daysUntil(value) {
   return Math.ceil((date - new Date()) / 86400000);
 }
 
-function createAlerts({ vehicles, orders, customers, shipments, orderTimelines }) {
+function createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests = [], suppliers = [] }) {
   const alerts = [];
 
   shipments.forEach((shipment) => {
@@ -442,13 +472,57 @@ function createAlerts({ vehicles, orders, customers, shipments, orderTimelines }
     });
   });
 
+  procurementRequests.forEach((request) => {
+    const ageDays = Math.floor((new Date() - new Date(request.createdAt || today)) / 86400000);
+    if (request.status !== 'Added To Inventory' && ageDays > 14) {
+      alerts.push({
+        id: `proc-delay-${request.procurementId}`,
+        alert_type: 'Delayed Procurement',
+        severity: ageDays > 30 ? 'High' : 'Medium',
+        title: `Procurement ${request.procurementId} is delayed`,
+        message: `${request.vehicleBrand} ${request.vehicleModel} has been in ${request.status} for ${ageDays} days.`,
+        linked_module: 'Procurement',
+        linked_record_id: request.procurementId,
+        resolved: false,
+        created_at: request.createdAt,
+      });
+    }
+    if (procurementValue(request) > 5000000) {
+      alerts.push({
+        id: `proc-cost-${request.procurementId}`,
+        alert_type: 'High Purchase Cost',
+        severity: 'Medium',
+        title: `High procurement value on ${request.procurementId}`,
+        message: `${money.format(procurementValue(request))} estimated acquisition value needs review.`,
+        linked_module: 'Procurement',
+        linked_record_id: request.procurementId,
+        resolved: false,
+        created_at: request.createdAt,
+      });
+    }
+  });
+
+  suppliers.filter((supplier) => !supplier.phone && !supplier.email).forEach((supplier) => {
+    alerts.push({
+      id: `supplier-inactive-${supplier.id || supplier.supplierName}`,
+      alert_type: 'Supplier Inactivity',
+      severity: 'Low',
+      title: `Missing contact for ${supplier.supplierName}`,
+      message: 'Add phone or email so procurement follow-up is not blocked.',
+      linked_module: 'Procurement',
+      linked_record_id: supplier.id,
+      resolved: false,
+      created_at: supplier.createdAt,
+    });
+  });
+
   return alerts.sort((a, b) => {
     const rank = { Critical: 4, High: 3, Medium: 2, Low: 1 };
     return rank[b.severity] - rank[a.severity];
   });
 }
 
-function buildGlobalResults({ vehicles, orders, customers, shipments }, query) {
+function buildGlobalResults({ vehicles, orders, customers, shipments, procurementRequests = [], suppliers = [] }, query) {
   if (!query.trim()) return [];
   const q = query.toLowerCase();
   const toResult = (module, title, subtitle, page) => ({ module, title, subtitle, page });
@@ -457,6 +531,8 @@ function buildGlobalResults({ vehicles, orders, customers, shipments }, query) {
     ...orders.map((item) => toResult('Order', `Order ${item.orderNumber}`, `${item.customerName} - ${item.status}`, 'Orders')),
     ...customers.map((item) => toResult('Customer', item.name, `${item.email || 'No email'} - ${item.location || 'No city'}`, 'Customers')),
     ...shipments.map((item) => toResult('Shipment', item.shipmentId, `${item.destinationCountry} - ${item.status}`, 'Shipments')),
+    ...procurementRequests.map((item) => toResult('Procurement', item.procurementId, `${item.vehicleBrand} ${item.vehicleModel} - ${item.status}`, 'Procurement')),
+    ...suppliers.map((item) => toResult('Supplier', item.supplierName, `${item.country || 'No country'} - ${item.email || 'No email'}`, 'Procurement')),
     toResult('Report', 'Business reports', 'Exports, profit, freight, inventory value', 'Reports'),
     toResult('Audit', 'Audit logs', 'Operational record feed', 'Audit Logs'),
   ].filter((result) => `${result.module} ${result.title} ${result.subtitle}`.toLowerCase().includes(q)).slice(0, 8);
@@ -490,6 +566,10 @@ function nextDisplayId(items, key) {
   }, { prefix: '', width: 4, value: 0 });
 
   return `${best.prefix}${String(best.value + 1).padStart(Math.max(best.width, 4), '0')}`;
+}
+
+function nextProcurementId(requests) {
+  return nextDisplayId(requests, 'procurementId') || 'PR-0001';
 }
 
 function inDateRange(value, startDate, endDate) {
@@ -718,6 +798,84 @@ function toShipmentRow(shipment, userId) {
   };
 }
 
+function fromProcurementRow(row) {
+  return {
+    procurementId: row.procurement_id,
+    vehicleBrand: row.vehicle_brand,
+    vehicleModel: row.vehicle_model,
+    quantity: row.quantity,
+    supplierName: row.supplier_name || '',
+    supplierCountry: row.supplier_country || '',
+    estimatedPurchaseCost: Number(row.estimated_purchase_cost),
+    estimatedFreightCost: Number(row.estimated_freight_cost),
+    requestedBy: row.requested_by || '',
+    status: row.status || 'Requested',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toProcurementRow(request, userId) {
+  return {
+    procurement_id: request.procurementId,
+    vehicle_brand: request.vehicleBrand,
+    vehicle_model: request.vehicleModel,
+    quantity: numberValue(request.quantity),
+    supplier_name: request.supplierName,
+    supplier_country: request.supplierCountry,
+    estimated_purchase_cost: numberValue(request.estimatedPurchaseCost),
+    estimated_freight_cost: numberValue(request.estimatedFreightCost),
+    requested_by: request.requestedBy,
+    status: request.status,
+    notes: request.notes,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromSupplierRow(row) {
+  return {
+    id: row.id,
+    supplierName: row.supplier_name,
+    country: row.country || '',
+    contactPerson: row.contact_person || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toSupplierRow(supplier, userId) {
+  return {
+    supplier_name: supplier.supplierName,
+    country: supplier.country,
+    contact_person: supplier.contactPerson,
+    phone: supplier.phone,
+    email: supplier.email,
+    notes: supplier.notes,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromProcurementTimelineRow(row) {
+  return {
+    id: row.id,
+    procurementId: row.procurement_id,
+    status: row.status,
+    note: row.note || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toProcurementTimelineRow(event, userId) {
+  return {
+    procurement_id: event.procurementId,
+    status: event.status,
+    note: event.note,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
 function userName(user) {
   return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Velora user';
 }
@@ -733,8 +891,8 @@ function createPermissions(role) {
     CEO: pages,
     'Company Manager': pages,
     'Logistics Manager': ['Shipments', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Inventory', 'Alerts Center'],
-    'Finance Manager': ['Reports', 'Alerts Center'],
+    'Inventory Manager': ['Procurement', 'Inventory', 'Alerts Center'],
+    'Finance Manager': ['Procurement', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -749,6 +907,9 @@ function createPermissions(role) {
       return normalizedRole === 'CEO';
     },
     canManageInventory() {
+      return isExecutive || normalizedRole === 'Inventory Manager';
+    },
+    canManageProcurement() {
       return isExecutive || normalizedRole === 'Inventory Manager';
     },
     canManageOrders() {
@@ -768,7 +929,8 @@ function createPermissions(role) {
     },
     canDeleteRecords(moduleName) {
       if (isExecutive) return true;
-      return moduleName === 'Inventory' && normalizedRole === 'Inventory Manager'
+      return moduleName === 'Procurement' && normalizedRole === 'Inventory Manager'
+        || moduleName === 'Inventory' && normalizedRole === 'Inventory Manager'
         || moduleName === 'Shipments' && normalizedRole === 'Logistics Manager';
     },
   };
@@ -901,8 +1063,11 @@ function useSupabaseRecords(user, permissions) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
   const [orderTimelines, setOrderTimelines] = useState({});
+  const [procurementTimelines, setProcurementTimelines] = useState({});
   const [customers, setCustomers] = useState([]);
   const [shipments, setShipments] = useState([]);
+  const [procurementRequests, setProcurementRequests] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -916,6 +1081,17 @@ function useSupabaseRecords(user, permissions) {
     return data;
   }
 
+  async function runOptionalRequest(request) {
+    const { data, error: requestError } = await request;
+    if (requestError) {
+      const message = requestError.message || '';
+      if (requestError.code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) return [];
+      setError(requestError.message);
+      throw requestError;
+    }
+    return data || [];
+  }
+
   async function loadRecords() {
     if (!isSupabaseConfigured) {
       setLoading(false);
@@ -927,8 +1103,11 @@ function useSupabaseRecords(user, permissions) {
       setVehicles([]);
       setOrders([]);
       setOrderTimelines({});
+      setProcurementTimelines({});
       setCustomers([]);
       setShipments([]);
+      setProcurementRequests([]);
+      setSuppliers([]);
       setLoading(false);
       return;
     }
@@ -953,13 +1132,25 @@ function useSupabaseRecords(user, permissions) {
       const timelineQuery = permissions.isExecutive || permissions.role === 'Logistics Manager'
         ? supabase.from('order_timeline_events').select('*').order('created_at', { ascending: true })
         : supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+      const procurementQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+        ? supabase.from('procurement_requests').select('*').order('created_at', { ascending: false })
+        : supabase.from('procurement_requests').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const supplierQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+        ? supabase.from('suppliers').select('*').order('created_at', { ascending: false })
+        : supabase.from('suppliers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const procurementTimelineQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+        ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
+        : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
 
-      const [vehicleRows, orderRows, customerRows, shipmentRows, timelineRows] = await Promise.all([
+      const [vehicleRows, orderRows, customerRows, shipmentRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
         runRequest(vehicleQuery),
         runRequest(orderQuery),
         runRequest(customerQuery),
         runRequest(shipmentQuery),
         runRequest(timelineQuery),
+        runOptionalRequest(procurementQuery),
+        runOptionalRequest(supplierQuery),
+        runOptionalRequest(procurementTimelineQuery),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -967,6 +1158,9 @@ function useSupabaseRecords(user, permissions) {
       setCustomers(customerRows.map(fromCustomerRow));
       setShipments(shipmentRows.map(fromShipmentRow));
       setOrderTimelines(groupTimelineRows(timelineRows.map(fromTimelineRow)));
+      setProcurementRequests(procurementRows.map(fromProcurementRow));
+      setSuppliers(supplierRows.map(fromSupplierRow));
+      setProcurementTimelines(groupTimelineRows(procurementTimelineRows.map(fromProcurementTimelineRow)));
     } finally {
       setLoading(false);
     }
@@ -1072,12 +1266,108 @@ function useSupabaseRecords(user, permissions) {
     setShipments((current) => current.filter((item) => item.shipmentId !== id));
   }
 
+  async function syncProcurementToInventory(request) {
+    const vehicleName = `${request.vehicleBrand} ${request.vehicleModel}`.trim().toLowerCase();
+    const existing = vehicles.find((vehicle) => `${vehicle.brand} ${vehicle.model}`.trim().toLowerCase() === vehicleName);
+    if (existing) {
+      const updated = {
+        ...existing,
+        quantity: numberValue(existing.quantity) + numberValue(request.quantity),
+        purchasePrice: request.estimatedPurchaseCost || existing.purchasePrice,
+        status: 'Available',
+      };
+      await saveVehicle(updated, existing.id);
+      return;
+    }
+
+    const newVehicle = {
+      ...blankVehicle,
+      id: nextDisplayId(vehicles, 'id'),
+      brand: request.vehicleBrand,
+      model: request.vehicleModel,
+      category: 'Procured Vehicle',
+      quantity: numberValue(request.quantity),
+      purchasePrice: numberValue(request.estimatedPurchaseCost),
+      sellingPrice: numberValue(request.estimatedPurchaseCost),
+      status: 'Available',
+    };
+    await saveVehicle(newVehicle, '');
+  }
+
+  async function addProcurementTimelineEvent(procurementId, status, note) {
+    const saved = fromProcurementTimelineRow(await runRequest(
+      supabase
+        .from('procurement_timeline')
+        .insert(toProcurementTimelineRow({ procurementId, status, note }, user.id))
+        .select()
+        .single()
+    ));
+
+    setProcurementTimelines((current) => ({
+      ...current,
+      [procurementId]: [...(current[procurementId] || []), saved],
+    }));
+  }
+
+  async function saveProcurementRequest(request, editingId) {
+    if (!permissions?.canManageProcurement()) throw new Error('Your role cannot manage procurement.');
+    const requestToSave = {
+      ...request,
+      procurementId: request.procurementId || nextProcurementId(procurementRequests),
+    };
+    const previous = procurementRequests.find((item) => item.procurementId === editingId);
+    const query = editingId
+      ? supabase.from('procurement_requests').update(toProcurementRow(requestToSave)).eq('procurement_id', editingId).select().single()
+      : supabase.from('procurement_requests').insert(toProcurementRow(requestToSave, user.id)).select().single();
+    const saved = fromProcurementRow(await runRequest(query));
+    setProcurementRequests((current) => editingId ? current.map((item) => item.procurementId === editingId ? saved : item) : [saved, ...current]);
+
+    if (!editingId) {
+      await addProcurementTimelineEvent(saved.procurementId, saved.status, 'Procurement request created.');
+    } else if (previous?.status !== saved.status) {
+      await addProcurementTimelineEvent(saved.procurementId, saved.status, `Status changed to ${saved.status}.`);
+    }
+
+    if (saved.status === 'Added To Inventory' && previous?.status !== 'Added To Inventory') {
+      await syncProcurementToInventory(saved);
+    }
+  }
+
+  async function deleteProcurementRequest(id) {
+    if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete procurement records.');
+    await runRequest(supabase.from('procurement_requests').delete().eq('procurement_id', id));
+    setProcurementRequests((current) => current.filter((item) => item.procurementId !== id));
+  }
+
+  async function addProcurementTimelineNote(procurementId, note) {
+    const request = procurementRequests.find((item) => item.procurementId === procurementId);
+    await addProcurementTimelineEvent(procurementId, request?.status || 'Requested', note);
+  }
+
+  async function saveSupplier(supplier, editingId) {
+    if (!permissions?.canManageProcurement()) throw new Error('Your role cannot manage suppliers.');
+    const query = editingId
+      ? supabase.from('suppliers').update(toSupplierRow(supplier)).eq('id', editingId).select().single()
+      : supabase.from('suppliers').insert(toSupplierRow(supplier, user.id)).select().single();
+    const saved = fromSupplierRow(await runRequest(query));
+    setSuppliers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+  }
+
+  async function deleteSupplier(id) {
+    if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete suppliers.');
+    await runRequest(supabase.from('suppliers').delete().eq('id', id));
+    setSuppliers((current) => current.filter((item) => item.id !== id));
+  }
+
   return {
     vehicles,
     orders,
     orderTimelines,
+    procurementTimelines,
     customers,
     shipments,
+    procurementRequests,
+    suppliers,
     loading,
     error,
     saveVehicle,
@@ -1090,6 +1380,11 @@ function useSupabaseRecords(user, permissions) {
     deleteCustomer,
     saveShipment,
     deleteShipment,
+    saveProcurementRequest,
+    deleteProcurementRequest,
+    addProcurementTimelineNote,
+    saveSupplier,
+    deleteSupplier,
   };
 }
 
@@ -1259,6 +1554,7 @@ function GlobalSearch({ data, setActivePage, allowedPages }) {
 
 function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const actions = [
+    { label: 'Open Procurement', page: 'Procurement', icon: ClipboardList },
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
     { label: 'Create Order', page: 'Orders', icon: ClipboardList },
@@ -1500,6 +1796,93 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
   );
 }
 
+function ProcurementRequestForm({ value, onChange, onSubmit, editingId, onCancel, suppliers }) {
+  function applySupplier(name) {
+    const supplier = suppliers.find((item) => item.supplierName === name);
+    onChange({
+      ...value,
+      supplierName: name,
+      ...(supplier ? { supplierCountry: supplier.country } : {}),
+    });
+  }
+
+  return (
+    <form className="entry-form procurement-form" onSubmit={onSubmit}>
+      <Field label="Procurement ID">
+        <input value={value.procurementId} onChange={(e) => onChange({ ...value, procurementId: e.target.value })} required />
+      </Field>
+      <Field label="Vehicle Brand">
+        <input value={value.vehicleBrand} onChange={(e) => onChange({ ...value, vehicleBrand: e.target.value })} required />
+      </Field>
+      <Field label="Vehicle Model">
+        <input value={value.vehicleModel} onChange={(e) => onChange({ ...value, vehicleModel: e.target.value })} required />
+      </Field>
+      <Field label="Quantity">
+        <FormattedNumberInput min={1} value={value.quantity} onChange={(nextValue) => onChange({ ...value, quantity: nextValue })} />
+      </Field>
+      <Field label="Supplier Name">
+        <input list="supplier-list" value={value.supplierName} onChange={(e) => applySupplier(e.target.value)} required />
+        <datalist id="supplier-list">
+          {suppliers.map((supplier) => <option key={supplier.id} value={supplier.supplierName} />)}
+        </datalist>
+      </Field>
+      <Field label="Supplier Country">
+        <input value={value.supplierCountry} onChange={(e) => onChange({ ...value, supplierCountry: e.target.value })} />
+      </Field>
+      <Field label="Estimated Purchase Cost">
+        <FormattedNumberInput value={value.estimatedPurchaseCost} onChange={(nextValue) => onChange({ ...value, estimatedPurchaseCost: nextValue })} />
+      </Field>
+      <Field label="Estimated Freight Cost">
+        <FormattedNumberInput value={value.estimatedFreightCost} onChange={(nextValue) => onChange({ ...value, estimatedFreightCost: nextValue })} />
+      </Field>
+      <Field label="Requested By">
+        <input value={value.requestedBy} onChange={(e) => onChange({ ...value, requestedBy: e.target.value })} />
+      </Field>
+      <Field label="Status">
+        <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
+          {procurementStatuses.map((status) => <option key={status}>{status}</option>)}
+        </select>
+      </Field>
+      <Field label="Notes">
+        <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
+      </Field>
+      <div className="form-actions">
+        <button type="submit">{editingId ? 'Save request' : 'Create request'}</button>
+        {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  );
+}
+
+function SupplierForm({ value, onChange, onSubmit, editingId, onCancel }) {
+  return (
+    <form className="entry-form supplier-form" onSubmit={onSubmit}>
+      <Field label="Supplier Name">
+        <input value={value.supplierName} onChange={(e) => onChange({ ...value, supplierName: e.target.value })} required />
+      </Field>
+      <Field label="Country">
+        <input value={value.country} onChange={(e) => onChange({ ...value, country: e.target.value })} />
+      </Field>
+      <Field label="Contact Person">
+        <input value={value.contactPerson} onChange={(e) => onChange({ ...value, contactPerson: e.target.value })} />
+      </Field>
+      <Field label="Phone">
+        <input value={value.phone} onChange={(e) => onChange({ ...value, phone: e.target.value })} />
+      </Field>
+      <Field label="Email">
+        <input type="email" value={value.email} onChange={(e) => onChange({ ...value, email: e.target.value })} />
+      </Field>
+      <Field label="Notes">
+        <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
+      </Field>
+      <div className="form-actions">
+        <button type="submit">{editingId ? 'Save supplier' : 'Add supplier'}</button>
+        {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  );
+}
+
 function StatusBadge({ status }) {
   return <span className={`status status-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</span>;
 }
@@ -1704,7 +2087,7 @@ function AuthView({ authError }) {
   );
 }
 
-function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, setActivePage, error, authError }) {
+function Dashboard({ vehicles, orders, customers, shipments, procurementRequests, suppliers, orderTimelines, setActivePage, error, authError }) {
   const totals = useMemo(() => {
     const activeOrders = orders.filter((order) => order.status !== 'Completed').length;
     const completedOrders = orders.filter((order) => order.status === 'Completed').length;
@@ -1721,14 +2104,17 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
       deliveredShipments: shipments.filter((shipment) => shipment.status === 'Delivered').length,
       freightCost: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
       inventoryValue: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
+      activeProcurements: procurementRequests.filter((request) => request.status !== 'Added To Inventory').length,
+      procurementValue: procurementRequests.reduce((sum, request) => sum + procurementValue(request), 0),
+      incomingInventory: procurementRequests.filter((request) => request.status !== 'Added To Inventory').reduce((sum, request) => sum + numberValue(request.quantity), 0),
     };
-  }, [vehicles, orders, shipments]);
+  }, [vehicles, orders, shipments, procurementRequests]);
 
   const recentOrders = orders.slice(0, 4);
   const revenueTrend = trendByMonth(orders, 'orderDate', orderRevenue);
   const profitTrend = trendByMonth(orders, 'orderDate', orderProfit);
   const shipmentBreakdown = countByStatus(shipments);
-  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines }), [vehicles, orders, customers, shipments, orderTimelines]);
+  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
   const auditLogs = useMemo(() => buildAuditLogs({ vehicles, orders, customers, shipments }).slice(0, 5), [vehicles, orders, customers, shipments]);
   const recentActivity = [
     ...orders.slice(0, 3).map((order) => ({ label: `Order ${order.orderNumber} moved to ${order.status}`, meta: order.customerName })),
@@ -1753,6 +2139,9 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
         <Metric label="Delivered orders" value={totals.completedOrders} tone="success" icon={PackageCheck} />
         <Metric label="Delivered shipments" value={totals.deliveredShipments} tone="success" icon={Truck} />
         <Metric label="Freight cost" value={money.format(totals.freightCost)} tone="danger" icon={Gauge} />
+        <Metric label="Active procurements" value={totals.activeProcurements} icon={ClipboardList} />
+        <Metric label="Procurement value" value={money.format(totals.procurementValue)} tone="accent" icon={BarChart3} />
+        <Metric label="Incoming inventory" value={totals.incomingInventory} tone="success" icon={Warehouse} />
       </div>
       <div className="dashboard-grid">
         <section className="chart-card wide">
@@ -2001,6 +2390,186 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
         </table>
         {!filtered.length && <EmptyState label="No vehicles found." />}
         <TableFooter count={filtered.length} />
+      </div>
+    </section>
+  );
+}
+
+function Procurement({ procurementRequests, suppliers, procurementTimelines, saveProcurementRequest, deleteProcurementRequest, addProcurementTimelineNote, saveSupplier, deleteSupplier, canEdit, canDelete }) {
+  const nextId = useMemo(() => nextProcurementId(procurementRequests), [procurementRequests]);
+  const newRequestForm = useMemo(() => ({ ...blankProcurementRequest, procurementId: nextId }), [nextId]);
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [requestForm, setRequestForm] = useState(newRequestForm);
+  const [editingRequestId, setEditingRequestId] = useState('');
+  const [supplierForm, setSupplierForm] = useState(blankSupplier);
+  const [editingSupplierId, setEditingSupplierId] = useState('');
+  const [expandedId, setExpandedId] = useState('');
+  const [timelineNote, setTimelineNote] = useState('');
+
+  useEffect(() => {
+    if (!editingRequestId) setRequestForm(newRequestForm);
+  }, [newRequestForm, editingRequestId]);
+
+  const filtered = procurementRequests.filter((request) => {
+    const statusMatches = statusFilter === 'All' || request.status === statusFilter;
+    return statusMatches && matchesSearch(request, query);
+  });
+  const totals = {
+    active: procurementRequests.filter((request) => request.status !== 'Added To Inventory').length,
+    value: procurementRequests.reduce((sum, request) => sum + procurementValue(request), 0),
+    pendingApprovals: procurementRequests.filter((request) => ['Requested', 'Supplier Identified', 'Negotiation'].includes(request.status)).length,
+    inTransit: procurementRequests.filter((request) => request.status === 'In Transit').length,
+    incomingInventory: procurementRequests.filter((request) => request.status !== 'Added To Inventory').reduce((sum, request) => sum + numberValue(request.quantity), 0),
+  };
+
+  async function submitRequest(event) {
+    event.preventDefault();
+    await saveProcurementRequest(requestForm, editingRequestId);
+    setRequestForm(newRequestForm);
+    setEditingRequestId('');
+  }
+
+  async function submitSupplier(event) {
+    event.preventDefault();
+    await saveSupplier(supplierForm, editingSupplierId);
+    setSupplierForm(blankSupplier);
+    setEditingSupplierId('');
+  }
+
+  async function submitTimelineNote(event, procurementId) {
+    event.preventDefault();
+    if (!timelineNote.trim()) return;
+    await addProcurementTimelineNote(procurementId, timelineNote.trim());
+    setTimelineNote('');
+  }
+
+  return (
+    <section className="page-stack">
+      <PageHeader eyebrow="Procurement" title="Vehicle acquisition" description="Track sourcing, supplier negotiation, purchase progress, and incoming inventory before stock entry.">
+        <div className="toolbar">
+          <input className="search" placeholder="Search procurement" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option>All</option>
+            {procurementStatuses.map((status) => <option key={status}>{status}</option>)}
+          </select>
+        </div>
+      </PageHeader>
+      <div className="metrics-grid reports-summary">
+        <Metric label="Active procurements" value={totals.active} icon={ClipboardList} />
+        <Metric label="Procurement value" value={money.format(totals.value)} tone="accent" icon={BarChart3} />
+        <Metric label="Pending approvals" value={totals.pendingApprovals} tone="danger" icon={ShieldCheck} />
+        <Metric label="Incoming inventory" value={totals.incomingInventory} tone="success" icon={Warehouse} />
+      </div>
+      {canEdit && <ProcurementRequestForm value={requestForm} onChange={setRequestForm} onSubmit={submitRequest} editingId={editingRequestId} suppliers={suppliers} onCancel={() => { setRequestForm(newRequestForm); setEditingRequestId(''); }} />}
+      <div className="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Procurement ID</th>
+              <th>Vehicle</th>
+              <th>Qty</th>
+              <th>Supplier</th>
+              <th>Country</th>
+              <th>Purchase Cost</th>
+              <th>Freight Cost</th>
+              <th>Total Value</th>
+              <th>Requested By</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((request) => (
+              <React.Fragment key={request.procurementId}>
+                <tr>
+                  <td>{request.procurementId}</td>
+                  <td>{request.vehicleBrand} {request.vehicleModel}</td>
+                  <td>{request.quantity}</td>
+                  <td>{request.supplierName}</td>
+                  <td>{request.supplierCountry}</td>
+                  <td>{money.format(request.estimatedPurchaseCost)}</td>
+                  <td>{money.format(request.estimatedFreightCost)}</td>
+                  <td>{money.format(procurementValue(request))}</td>
+                  <td>{request.requestedBy}</td>
+                  <td><StatusBadge status={request.status} /></td>
+                  <td className="row-actions">
+                    <button className="mini" onClick={() => setExpandedId(expandedId === request.procurementId ? '' : request.procurementId)}>{expandedId === request.procurementId ? 'Hide timeline' : 'Timeline'}</button>
+                    {canEdit && <button className="mini" onClick={() => { setRequestForm(request); setEditingRequestId(request.procurementId); }}>Edit</button>}
+                    {canDelete && <button className="mini danger" onClick={() => deleteProcurementRequest(request.procurementId)}>Delete</button>}
+                  </td>
+                </tr>
+                {expandedId === request.procurementId && (
+                  <tr className="timeline-row">
+                    <td colSpan="11">
+                      <div className="timeline-panel">
+                        <div className="timeline-track">
+                          {procurementStatuses.map((status) => {
+                            const event = (procurementTimelines[request.procurementId] || []).find((item) => item.status === status);
+                            return (
+                              <div key={status} className={`timeline-step ${event ? 'complete' : ''} ${request.status === status ? 'current' : ''}`}>
+                                <span className="timeline-dot" />
+                                <div>
+                                  <strong>{status}</strong>
+                                  <small>{event ? new Date(event.createdAt).toLocaleString() : 'Pending'}</small>
+                                  {event?.note && <p>{event.note}</p>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {canEdit && (
+                          <form className="timeline-note-form" onSubmit={(event) => submitTimelineNote(event, request.procurementId)}>
+                            <input placeholder="Add procurement note" value={timelineNote} onChange={(event) => setTimelineNote(event.target.value)} />
+                            <button type="submit">Add note</button>
+                          </form>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+        {!filtered.length && <EmptyState label="No procurement requests found." icon={ClipboardList} />}
+        <TableFooter count={filtered.length} />
+      </div>
+      <PageHeader eyebrow="Suppliers" title="Supplier management" description="Maintain sourcing partners and their contact details for procurement follow-up." />
+      {canEdit && <SupplierForm value={supplierForm} onChange={setSupplierForm} onSubmit={submitSupplier} editingId={editingSupplierId} onCancel={() => { setSupplierForm(blankSupplier); setEditingSupplierId(''); }} />}
+      <div className="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Supplier</th>
+              <th>Country</th>
+              <th>Contact</th>
+              <th>Phone</th>
+              <th>Email</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {suppliers.map((supplier) => (
+              <tr key={supplier.id}>
+                <td>{supplier.supplierName}</td>
+                <td>{supplier.country}</td>
+                <td>{supplier.contactPerson}</td>
+                <td>{supplier.phone}</td>
+                <td>{supplier.email}</td>
+                <td>{supplier.notes}</td>
+                <td className="row-actions">
+                  {canEdit && <button className="mini" onClick={() => { setSupplierForm(supplier); setEditingSupplierId(supplier.id); }}>Edit</button>}
+                  {canDelete && <button className="mini danger" onClick={() => deleteSupplier(supplier.id)}>Delete</button>}
+                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!suppliers.length && <EmptyState label="No suppliers saved yet." icon={Users} />}
+        <TableFooter count={suppliers.length} />
       </div>
     </section>
   );
@@ -2308,11 +2877,12 @@ function OrderTimeline({ order, events, addOrderTimelineNote }) {
   );
 }
 
-function Reports({ vehicles, orders, customers, shipments }) {
+function Reports({ vehicles, orders, customers, shipments, procurementRequests, suppliers }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const filteredOrders = orders.filter((order) => inDateRange(order.orderDate, startDate, endDate));
   const filteredShipments = shipments.filter((shipment) => inDateRange(shipment.eta || shipment.createdAt, startDate, endDate));
+  const filteredProcurements = procurementRequests.filter((request) => inDateRange(request.createdAt, startDate, endDate));
   const filteredCustomers = customers.filter((customer) => inDateRange(customer.createdAt, startDate, endDate));
   const filteredVehicles = vehicles.filter((vehicle) => inDateRange(vehicle.createdAt, startDate, endDate));
   const orderNumberById = useMemo(() => {
@@ -2324,6 +2894,7 @@ function Reports({ vehicles, orders, customers, shipments }) {
     profit: filteredOrders.reduce((sum, order) => sum + orderProfit(order), 0),
     freightCost: filteredShipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
     inventoryValue: filteredVehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
+    procurementValue: filteredProcurements.reduce((sum, request) => sum + procurementValue(request), 0),
   };
 
   const reports = [
@@ -2415,6 +2986,29 @@ function Reports({ vehicles, orders, customers, shipments }) {
         { metric: 'Inventory Value', value: money.format(totals.inventoryValue) },
       ],
     },
+    {
+      title: 'Procurement Report',
+      slug: 'velora-procurement-report',
+      summary: `${filteredProcurements.length} requests, ${money.format(totals.procurementValue)} estimated value`,
+      columns: [
+        { key: 'procurementId', label: 'Procurement ID' },
+        { key: 'vehicle', label: 'Vehicle' },
+        { key: 'quantity', label: 'Quantity' },
+        { key: 'supplierName', label: 'Supplier' },
+        { key: 'supplierCountry', label: 'Country' },
+        { key: 'estimatedPurchaseCost', label: 'Purchase Cost' },
+        { key: 'estimatedFreightCost', label: 'Freight Cost' },
+        { key: 'totalValue', label: 'Total Value' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: filteredProcurements.map((request) => ({
+        ...request,
+        vehicle: `${request.vehicleBrand} ${request.vehicleModel}`,
+        estimatedPurchaseCost: money.format(request.estimatedPurchaseCost),
+        estimatedFreightCost: money.format(request.estimatedFreightCost),
+        totalValue: money.format(procurementValue(request)),
+      })),
+    },
   ];
 
   return (
@@ -2430,6 +3024,7 @@ function Reports({ vehicles, orders, customers, shipments }) {
         <Metric label="Profit" value={money.format(totals.profit)} tone="success" />
         <Metric label="Freight cost" value={money.format(totals.freightCost)} />
         <Metric label="Inventory value" value={money.format(totals.inventoryValue)} />
+        <Metric label="Procurement value" value={money.format(totals.procurementValue)} />
       </div>
       <div className="report-grid">
         {reports.map((report) => (
@@ -2557,8 +3152,11 @@ function App() {
     vehicles,
     orders,
     orderTimelines,
+    procurementTimelines,
     customers,
     shipments,
+    procurementRequests,
+    suppliers,
     loading,
     error,
     saveVehicle,
@@ -2571,9 +3169,14 @@ function App() {
     deleteCustomer,
     saveShipment,
     deleteShipment,
+    saveProcurementRequest,
+    deleteProcurementRequest,
+    addProcurementTimelineNote,
+    saveSupplier,
+    deleteSupplier,
   } = useSupabaseRecords(user, profileLoading ? null : permissions);
-  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines }), [vehicles, orders, customers, shipments, orderTimelines]);
-  const searchData = useMemo(() => ({ vehicles, orders, customers, shipments }), [vehicles, orders, customers, shipments]);
+  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
+  const searchData = useMemo(() => ({ vehicles, orders, customers, shipments, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, procurementRequests, suppliers]);
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
@@ -2685,13 +3288,14 @@ function App() {
         {profileError && <div className="app-message error">{profileError}</div>}
         {permissions.canViewPage(activePage) ? (
           <>
-            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} />}
+            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} />}
+            {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
             {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
             {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
-            {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} />}
+            {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} />}
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
             {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
           </>
