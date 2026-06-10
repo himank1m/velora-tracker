@@ -1587,7 +1587,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
             {!alerts.length && <EmptyState label="No critical alerts right now." icon={Bell} />}
           </div>
         </section>
-        <section className="activity-card">
+        <section className="activity-card audit-feed-card">
           <div className="card-heading">
             <div>
               <p className="eyebrow">Recent activity</p>
