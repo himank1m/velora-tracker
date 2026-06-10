@@ -1548,7 +1548,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
             </AreaChart>
           </ResponsiveContainer>
         </section>
-        <section className="chart-card">
+        <section className="chart-card dashboard-half-card shipment-breakdown-card">
           <div className="card-heading">
             <div>
               <p className="eyebrow">Shipments</p>
@@ -1566,7 +1566,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
             </PieChart>
           </ResponsiveContainer>
         </section>
-        <section className="chart-card">
+        <section className="chart-card dashboard-half-card alert-watchlist-card">
           <div className="card-heading alert-heading">
             <div>
               <p className="eyebrow">Critical alerts</p>
@@ -1607,7 +1607,7 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
             {!recentActivity.length && <EmptyState label="No recent activity yet." icon={Activity} />}
           </div>
         </section>
-        <section className="activity-card">
+        <section className="activity-card audit-feed-card">
           <div className="card-heading">
             <div>
               <p className="eyebrow">Recent audit logs</p>

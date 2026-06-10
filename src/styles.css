@@ -773,6 +773,15 @@ kbd {
   grid-column: span 2;
 }
 
+.dashboard-half-card {
+  grid-column: span 2;
+}
+
+.shipment-breakdown-card .recharts-responsive-container {
+  margin: 0 auto;
+  max-width: 420px;
+}
+
 .card-heading,
 .section-heading {
   align-items: end;
@@ -863,6 +872,10 @@ kbd {
 .alert-grid {
   display: grid;
   gap: 12px;
+}
+
+.alert-watchlist-card .alert-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .alert-grid {
@@ -1567,7 +1580,8 @@ tbody tr:hover {
   }
 
   .chart-card.wide,
-  .activity-card {
+  .activity-card,
+  .dashboard-half-card {
     grid-column: span 2;
   }
 
@@ -1702,6 +1716,10 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .alert-watchlist-card .alert-list {
+    grid-template-columns: 1fr;
+  }
+
   .audit-feed-card .activity-list {
     grid-template-columns: 1fr;
   }
@@ -1731,7 +1749,8 @@ tbody tr:hover {
   }
 
   .chart-card.wide,
-  .activity-card {
+  .activity-card,
+  .dashboard-half-card {
     grid-column: span 1;
   }
 
