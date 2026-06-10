@@ -218,9 +218,10 @@ nav button span {
   border: 1px solid var(--line);
   border-radius: 20px;
   display: grid;
-  gap: 6px;
-  overflow: hidden;
-  padding: 14px;
+  gap: 10px;
+  min-width: 0;
+  overflow: visible;
+  padding: 16px;
 }
 
 .avatar {
@@ -234,6 +235,17 @@ nav button span {
   height: 36px;
   place-items: center;
   width: 36px;
+}
+
+.user-profile strong {
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.user-profile small {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .user-profile button,
@@ -259,7 +271,8 @@ nav button span {
   background: var(--blue-soft);
   border: 1px solid rgba(59, 130, 246, .28);
   color: var(--ink);
-  margin-top: 8px;
+  margin-top: 4px;
+  width: 100%;
 }
 
 .role-badge,
@@ -274,7 +287,13 @@ nav button span {
   font-weight: 900;
   min-height: 26px;
   padding: 5px 9px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   width: fit-content;
+}
+
+.role-badge {
+  margin-top: 2px;
 }
 
 .locked-label {
