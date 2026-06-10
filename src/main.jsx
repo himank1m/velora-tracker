@@ -479,6 +479,19 @@ function nextOrderNumber(orders) {
   return String(max + 1).padStart(4, '0');
 }
 
+function nextDisplayId(items, key) {
+  const best = items.reduce((currentBest, item) => {
+    const text = String(item[key] || '');
+    const match = text.match(/^(.*?)(\d+)$/);
+    if (!match) return currentBest;
+    const value = Number.parseInt(match[2], 10);
+    if (Number.isNaN(value) || value < currentBest.value) return currentBest;
+    return { prefix: match[1], width: match[2].length, value };
+  }, { prefix: '', width: 4, value: 0 });
+
+  return `${best.prefix}${String(best.value + 1).padStart(Math.max(best.width, 4), '0')}`;
+}
+
 function inDateRange(value, startDate, endDate) {
   if (!value) return true;
   const date = new Date(value);
@@ -1904,7 +1917,9 @@ function Dashboard({ vehicles, orders, customers, shipments, orderTimelines, set
 function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
-  const [form, setForm] = useState(blankVehicle);
+  const nextVehicleId = useMemo(() => nextDisplayId(vehicles, 'id'), [vehicles]);
+  const newVehicleForm = useMemo(() => ({ ...blankVehicle, id: nextVehicleId }), [nextVehicleId]);
+  const [form, setForm] = useState(newVehicleForm);
   const [editingId, setEditingId] = useState('');
   const filtered = vehicles.filter((vehicle) => {
     const locationMatches = locationFilter === 'All' || vehicle.locationName === locationFilter;
@@ -1920,9 +1935,13 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
       sellingPrice: numberValue(form.sellingPrice),
     };
     await saveVehicle(saved, editingId);
-    setForm(blankVehicle);
+    setForm(newVehicleForm);
     setEditingId('');
   }
+
+  useEffect(() => {
+    if (!editingId) setForm(newVehicleForm);
+  }, [newVehicleForm, editingId]);
 
   function editVehicle(vehicle) {
     setForm(vehicle);
@@ -1940,7 +1959,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
           </select>
         </div>
       </PageHeader>
-      {canEdit && <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(blankVehicle); setEditingId(''); }} />}
+      {canEdit && <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(newVehicleForm); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -1990,7 +2009,9 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
 function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, customers, orderTimelines, addOrderTimelineNote, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
-  const [form, setForm] = useState(blankOrder);
+  const nextNumber = useMemo(() => nextOrderNumber(orders), [orders]);
+  const newOrderForm = useMemo(() => ({ ...blankOrder, orderNumber: nextNumber }), [nextNumber]);
+  const [form, setForm] = useState(newOrderForm);
   const [editingId, setEditingId] = useState('');
   const [expandedOrderId, setExpandedOrderId] = useState('');
   const filtered = orders.filter((order) => {
@@ -2007,9 +2028,13 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
       sellingPrice: numberValue(form.sellingPrice),
     };
     await saveOrder(saved, editingId);
-    setForm(blankOrder);
+    setForm(newOrderForm);
     setEditingId('');
   }
+
+  useEffect(() => {
+    if (!editingId) setForm(newOrderForm);
+  }, [newOrderForm, editingId]);
 
   return (
     <section className="page-stack">
@@ -2022,7 +2047,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
           </select>
         </div>
       </PageHeader>
-      {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(blankOrder); setEditingId(''); }} />}
+      {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(newOrderForm); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
