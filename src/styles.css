@@ -1327,6 +1327,12 @@ button:active {
   padding: 8px 12px;
 }
 
+.mini.invoice-action {
+  background: linear-gradient(135deg, rgba(59, 130, 246, .24), rgba(14, 165, 233, .14));
+  border-color: rgba(96, 165, 250, .4);
+  color: #bfdbfe;
+}
+
 .mini.danger {
   background: rgba(239, 68, 68, .14);
   border-color: rgba(239, 68, 68, .28);

@@ -644,6 +644,96 @@ function exportPdf(report, totals) {
   doc.save(`${report.slug}.pdf`);
 }
 
+function cleanFilePart(value) {
+  return String(value || 'invoice').replace(/[^a-z0-9-]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+function invoiceNumber(order) {
+  return `INV-${order.orderNumber || order.id}`;
+}
+
+function generateOrderInvoice(order, customer) {
+  const doc = new jsPDF({ orientation: 'portrait' });
+  const generatedAt = new Date().toLocaleString();
+  const invoiceNo = invoiceNumber(order);
+  const quantity = numberValue(order.quantity);
+  const unitPrice = numberValue(order.sellingPrice);
+  const total = orderRevenue(order);
+
+  doc.setFillColor(10, 17, 31);
+  doc.rect(0, 0, 210, 34, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text('Velora Motors', 14, 15);
+  doc.setFontSize(9);
+  doc.text('Automotive dealership, exports and logistics operations', 14, 23);
+  doc.text('Invoice', 176, 15, { align: 'right' });
+  doc.text(invoiceNo, 176, 23, { align: 'right' });
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
+  doc.text('Bill To', 14, 48);
+  doc.setFontSize(16);
+  doc.text(order.customerName || 'Customer', 14, 57);
+  doc.setFontSize(9);
+  const buyerLines = [
+    customer?.email,
+    customer?.phone,
+    customer?.location,
+  ].filter(Boolean);
+  buyerLines.forEach((line, index) => doc.text(line, 14, 65 + index * 6));
+
+  doc.setFontSize(10);
+  const meta = [
+    ['Invoice Date', generatedAt],
+    ['Order Number', order.orderNumber || order.id],
+    ['Order Date', order.orderDate || '-'],
+    ['Order Status', order.status || '-'],
+  ];
+  meta.forEach(([label, value], index) => {
+    const y = 48 + index * 8;
+    doc.setTextColor(100, 116, 139);
+    doc.text(label, 128, y);
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(value), 176, y, { align: 'right' });
+  });
+
+  autoTable(doc, {
+    startY: 92,
+    head: [['Vehicle', 'Quantity', 'Unit Price', 'Line Total']],
+    body: [[
+      order.vehicle || '-',
+      formatIndianNumber(quantity),
+      money.format(unitPrice),
+      money.format(total),
+    ]],
+    styles: { fontSize: 10, cellPadding: 4 },
+    headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+    columnStyles: {
+      1: { halign: 'right' },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+    },
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 14;
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(120, finalY, 76, 30, 3, 3, 'F');
+  doc.setTextColor(71, 85, 105);
+  doc.setFontSize(10);
+  doc.text('Total Payable', 128, finalY + 11);
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(18);
+  doc.text(money.format(total), 188, finalY + 22, { align: 'right' });
+
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text('This invoice was generated automatically from Velora Tracker order records.', 14, 270);
+  doc.text('Velora Motors Ltd.', 14, 278);
+
+  doc.save(`${cleanFilePart(invoiceNo)}-${cleanFilePart(order.customerName)}.pdf`);
+}
+
 function fromVehicleRow(row) {
   return {
     id: row.id,
@@ -2601,6 +2691,11 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
     setEditingId('');
   }
 
+  function generateInvoice(order) {
+    const customer = customers.find((item) => item.name.trim().toLowerCase() === order.customerName.trim().toLowerCase());
+    generateOrderInvoice(order, customer);
+  }
+
   useEffect(() => {
     if (!editingId) setForm(newOrderForm);
   }, [newOrderForm, editingId]);
@@ -2657,6 +2752,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
                     ) : <StatusBadge status={order.status} />}
                   </td>
                   <td className="row-actions">
+                    <button className="mini invoice-action" onClick={() => generateInvoice(order)}>Invoice</button>
                     <button className="mini" onClick={() => setExpandedOrderId(expandedOrderId === order.id ? '' : order.id)}>
                       {expandedOrderId === order.id ? 'Hide timeline' : 'Timeline'}
                     </button>
