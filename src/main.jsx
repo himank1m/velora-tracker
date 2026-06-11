@@ -288,11 +288,11 @@ function profitMargin(record) {
 }
 
 function orderRevenue(order) {
-  return numberValue(order.sellingPrice) * numberValue(order.quantity);
+  return numberValue(order.sellingPrice);
 }
 
 function orderProfit(order) {
-  return profitAmount(order) * numberValue(order.quantity);
+  return numberValue(order.sellingPrice) - numberValue(order.purchaseCost);
 }
 
 function procurementValue(request) {
@@ -657,8 +657,8 @@ function generateOrderInvoice(order, customer) {
   const generatedAt = new Date().toLocaleString();
   const invoiceNo = invoiceNumber(order);
   const quantity = numberValue(order.quantity);
-  const unitPrice = numberValue(order.sellingPrice);
   const total = orderRevenue(order);
+  const unitPrice = quantity ? total / quantity : total;
 
   doc.setFillColor(10, 17, 31);
   doc.rect(0, 0, 210, 34, 'F');
@@ -1725,6 +1725,33 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
 }
 
 function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOptions, customerOptions }) {
+  function vehicleLabel(vehicle) {
+    return `${vehicle.brand} ${vehicle.model}`;
+  }
+
+  function findVehicle(vehicleName) {
+    return vehicleOptions.find((vehicle) => vehicleLabel(vehicle).trim().toLowerCase() === String(vehicleName).trim().toLowerCase());
+  }
+
+  function withInventoryPricing(nextValue) {
+    const selectedVehicle = findVehicle(nextValue.vehicle);
+    if (!selectedVehicle) return nextValue;
+    const quantity = Math.max(numberValue(nextValue.quantity), 1);
+    return {
+      ...nextValue,
+      purchaseCost: selectedVehicle.purchasePrice * quantity,
+      sellingPrice: selectedVehicle.sellingPrice * quantity,
+    };
+  }
+
+  function updateVehicle(vehicleName) {
+    onChange(withInventoryPricing({ ...value, vehicle: vehicleName }));
+  }
+
+  function updateQuantity(quantity) {
+    onChange(withInventoryPricing({ ...value, quantity }));
+  }
+
   return (
     <form className="entry-form" onSubmit={onSubmit}>
       <Field label="Order Number">
@@ -1739,15 +1766,15 @@ function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOpti
         </datalist>
       </Field>
       <Field label="Vehicle">
-        <input list="vehicle-list" value={value.vehicle} onChange={(e) => onChange({ ...value, vehicle: e.target.value })} required />
+        <input list="vehicle-list" value={value.vehicle} onChange={(e) => updateVehicle(e.target.value)} required />
         <datalist id="vehicle-list">
           {vehicleOptions.map((vehicle) => (
-            <option key={vehicle.id} value={`${vehicle.brand} ${vehicle.model}`} />
+            <option key={vehicle.id} value={vehicleLabel(vehicle)} />
           ))}
         </datalist>
       </Field>
       <Field label="Quantity">
-        <FormattedNumberInput min={1} value={value.quantity} onChange={(nextValue) => onChange({ ...value, quantity: nextValue })} />
+        <FormattedNumberInput min={1} value={value.quantity} onChange={updateQuantity} />
       </Field>
       <Field label="Order Date">
         <input type="date" value={value.orderDate} onChange={(e) => onChange({ ...value, orderDate: e.target.value })} />
