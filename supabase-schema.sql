@@ -326,6 +326,47 @@ begin
   end if;
 end $$;
 
+-- Quotes module additions.
+-- Safe and non-destructive: creates a new table only if missing and adds role policies only if missing.
+
+create table if not exists quotes (
+  quote_id text primary key,
+  customer_name text not null,
+  vehicle text not null,
+  quantity integer not null default 1,
+  valid_until date,
+  purchase_cost numeric(14, 2) not null default 0,
+  selling_price numeric(14, 2) not null default 0,
+  status text not null default 'Draft',
+  notes text,
+  location_name text default 'Seoul HQ',
+  department text default 'Finance',
+  created_by uuid default auth.uid() references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+alter table quotes add column if not exists location_name text default 'Seoul HQ';
+alter table quotes add column if not exists department text default 'Finance';
+alter table quotes add column if not exists created_by uuid default auth.uid() references auth.users(id) on delete cascade;
+alter table quotes enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'quotes' and policyname = 'Role read quotes') then
+    create policy "Role read quotes" on quotes for select to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Finance Manager'))
+    );
+  end if;
+
+  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'quotes' and policyname = 'Role manage quotes') then
+    create policy "Role manage quotes" on quotes for all to authenticated using (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Finance Manager'))
+    ) with check (
+      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Finance Manager'))
+    );
+  end if;
+end $$;
+
 -- Role-based access control additions.
 -- Safe and non-destructive: creates profiles and additive policies only.
 

@@ -192,6 +192,20 @@ const blankOrder = {
   department: 'Sales',
 };
 
+const blankQuote = {
+  quoteId: '',
+  customerName: '',
+  vehicle: '',
+  quantity: 1,
+  validUntil: today,
+  purchaseCost: 0,
+  sellingPrice: 0,
+  status: 'Draft',
+  notes: '',
+  locationName: 'Seoul HQ',
+  department: 'Finance',
+};
+
 const blankCustomer = {
   id: '',
   name: '',
@@ -245,16 +259,17 @@ const blankSupplier = {
 
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
+const quoteStatuses = ['Draft', 'Sent', 'Accepted', 'Rejected', 'Expired'];
 const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
 const procurementStatuses = ['Requested', 'Supplier Identified', 'Negotiation', 'Approved', 'Purchased', 'In Transit', 'Arrived', 'Added To Inventory'];
 const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
 const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
 const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
 const exclusiveRoles = ['CEO', 'Company Manager'];
-const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center'] },
-  { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Customers'] },
+  { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Reports', 'Alerts Center'] },
   { label: 'System', pages: ['Audit Logs'] },
@@ -264,6 +279,7 @@ const navIcons = {
   Procurement: ClipboardList,
   Inventory: Boxes,
   Orders: ClipboardList,
+  Quotes: FileText,
   Customers: Users,
   Shipments: Truck,
   Timeline: TimelineIcon,
@@ -522,13 +538,14 @@ function createAlerts({ vehicles, orders, customers, shipments, orderTimelines, 
   });
 }
 
-function buildGlobalResults({ vehicles, orders, customers, shipments, procurementRequests = [], suppliers = [] }, query) {
+function buildGlobalResults({ vehicles, orders, quotes = [], customers, shipments, procurementRequests = [], suppliers = [] }, query) {
   if (!query.trim()) return [];
   const q = query.toLowerCase();
   const toResult = (module, title, subtitle, page) => ({ module, title, subtitle, page });
   return [
     ...vehicles.map((item) => toResult('Vehicle', `${item.brand} ${item.model}`, `${item.id} - ${item.status}`, 'Inventory')),
     ...orders.map((item) => toResult('Order', `Order ${item.orderNumber}`, `${item.customerName} - ${item.status}`, 'Orders')),
+    ...quotes.map((item) => toResult('Quote', item.quoteId, `${item.customerName} - ${item.status}`, 'Quotes')),
     ...customers.map((item) => toResult('Customer', item.name, `${item.email || 'No email'} - ${item.location || 'No city'}`, 'Customers')),
     ...shipments.map((item) => toResult('Shipment', item.shipmentId, `${item.destinationCountry} - ${item.status}`, 'Shipments')),
     ...procurementRequests.map((item) => toResult('Procurement', item.procurementId, `${item.vehicleBrand} ${item.vehicleModel} - ${item.status}`, 'Procurement')),
@@ -553,6 +570,10 @@ function nextOrderNumber(orders) {
     return Number.isNaN(value) ? highest : Math.max(highest, value);
   }, 0);
   return String(max + 1).padStart(4, '0');
+}
+
+function nextQuoteId(quotes) {
+  return nextDisplayId(quotes, 'quoteId') || 'QT-0001';
 }
 
 function nextDisplayId(items, key) {
@@ -652,6 +673,14 @@ function invoiceNumber(order) {
   return `INV-${order.orderNumber || order.id}`;
 }
 
+function quoteTotal(quote) {
+  return numberValue(quote.sellingPrice);
+}
+
+function quoteProfit(quote) {
+  return numberValue(quote.sellingPrice) - numberValue(quote.purchaseCost);
+}
+
 function generateOrderInvoice(order, customer) {
   const doc = new jsPDF({ orientation: 'portrait' });
   const generatedAt = new Date().toLocaleString();
@@ -734,6 +763,92 @@ function generateOrderInvoice(order, customer) {
   doc.save(`${cleanFilePart(invoiceNo)}-${cleanFilePart(order.customerName)}.pdf`);
 }
 
+function generateQuotePdf(quote, customer) {
+  const doc = new jsPDF({ orientation: 'portrait' });
+  const generatedAt = new Date().toLocaleString();
+  const quantity = numberValue(quote.quantity);
+  const total = quoteTotal(quote);
+  const unitPrice = quantity ? total / quantity : total;
+
+  doc.setFillColor(10, 17, 31);
+  doc.rect(0, 0, 210, 34, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(20);
+  doc.text('Velora Motors', 14, 15);
+  doc.setFontSize(9);
+  doc.text('Automotive dealership, exports and logistics operations', 14, 23);
+  doc.text('Quotation', 176, 15, { align: 'right' });
+  doc.text(quote.quoteId || 'Draft Quote', 176, 23, { align: 'right' });
+
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(11);
+  doc.text('Prepared For', 14, 48);
+  doc.setFontSize(16);
+  doc.text(quote.customerName || 'Customer', 14, 57);
+  doc.setFontSize(9);
+  [customer?.email, customer?.phone, customer?.location].filter(Boolean).forEach((line, index) => {
+    doc.text(line, 14, 65 + index * 6);
+  });
+
+  const meta = [
+    ['Quote Date', generatedAt],
+    ['Valid Until', quote.validUntil || '-'],
+    ['Quote Status', quote.status || '-'],
+    ['Location', quote.locationName || '-'],
+  ];
+  meta.forEach(([label, value], index) => {
+    const y = 48 + index * 8;
+    doc.setFontSize(10);
+    doc.setTextColor(100, 116, 139);
+    doc.text(label, 128, y);
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(value), 176, y, { align: 'right' });
+  });
+
+  autoTable(doc, {
+    startY: 92,
+    head: [['Vehicle', 'Quantity', 'Unit Price', 'Quoted Total']],
+    body: [[
+      quote.vehicle || '-',
+      formatIndianNumber(quantity),
+      money.format(unitPrice),
+      money.format(total),
+    ]],
+    styles: { fontSize: 10, cellPadding: 4 },
+    headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+    columnStyles: {
+      1: { halign: 'right' },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+    },
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 14;
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(120, finalY, 76, 30, 3, 3, 'F');
+  doc.setTextColor(71, 85, 105);
+  doc.setFontSize(10);
+  doc.text('Quoted Amount', 128, finalY + 11);
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(18);
+  doc.text(money.format(total), 188, finalY + 22, { align: 'right' });
+
+  if (quote.notes) {
+    doc.setFontSize(10);
+    doc.setTextColor(71, 85, 105);
+    doc.text('Notes', 14, finalY + 11);
+    doc.setFontSize(9);
+    doc.text(doc.splitTextToSize(quote.notes, 90), 14, finalY + 19);
+  }
+
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text('This quotation is valid until the date mentioned above and is subject to vehicle availability.', 14, 270);
+  doc.text('Velora Motors Ltd.', 14, 278);
+
+  doc.save(`${cleanFilePart(quote.quoteId || 'quote')}-${cleanFilePart(quote.customerName)}.pdf`);
+}
+
 function fromVehicleRow(row) {
   return {
     id: row.id,
@@ -799,6 +914,40 @@ function toOrderRow(order, userId) {
   };
   delete row.id;
   return row;
+}
+
+function fromQuoteRow(row) {
+  return {
+    quoteId: row.quote_id,
+    customerName: row.customer_name,
+    vehicle: row.vehicle,
+    quantity: row.quantity,
+    validUntil: row.valid_until,
+    purchaseCost: Number(row.purchase_cost),
+    sellingPrice: Number(row.selling_price),
+    status: row.status || 'Draft',
+    notes: row.notes || '',
+    locationName: row.location_name || 'Seoul HQ',
+    department: row.department || 'Finance',
+    createdAt: row.created_at,
+  };
+}
+
+function toQuoteRow(quote, userId) {
+  return {
+    quote_id: quote.quoteId,
+    customer_name: quote.customerName,
+    vehicle: quote.vehicle,
+    quantity: numberValue(quote.quantity),
+    valid_until: quote.validUntil,
+    purchase_cost: numberValue(quote.purchaseCost),
+    selling_price: numberValue(quote.sellingPrice),
+    status: quote.status,
+    notes: quote.notes,
+    location_name: quote.locationName,
+    department: quote.department,
+    ...(userId ? { created_by: userId } : {}),
+  };
 }
 
 function fromTimelineRow(row) {
@@ -982,7 +1131,7 @@ function createPermissions(role) {
     'Company Manager': pages,
     'Logistics Manager': ['Shipments', 'Timeline', 'Alerts Center'],
     'Inventory Manager': ['Procurement', 'Inventory', 'Alerts Center'],
-    'Finance Manager': ['Procurement', 'Reports', 'Alerts Center'],
+    'Finance Manager': ['Procurement', 'Quotes', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -1005,6 +1154,9 @@ function createPermissions(role) {
     canManageOrders() {
       return isExecutive;
     },
+    canManageQuotes() {
+      return isExecutive || normalizedRole === 'Finance Manager';
+    },
     canManageCustomers() {
       return isExecutive;
     },
@@ -1021,6 +1173,7 @@ function createPermissions(role) {
       if (isExecutive) return true;
       return moduleName === 'Procurement' && normalizedRole === 'Inventory Manager'
         || moduleName === 'Inventory' && normalizedRole === 'Inventory Manager'
+        || moduleName === 'Quotes' && normalizedRole === 'Finance Manager'
         || moduleName === 'Shipments' && normalizedRole === 'Logistics Manager';
     },
   };
@@ -1152,6 +1305,7 @@ function useUserProfile(user) {
 function useSupabaseRecords(user, permissions) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [quotes, setQuotes] = useState([]);
   const [orderTimelines, setOrderTimelines] = useState({});
   const [procurementTimelines, setProcurementTimelines] = useState({});
   const [customers, setCustomers] = useState([]);
@@ -1192,6 +1346,7 @@ function useSupabaseRecords(user, permissions) {
     if (!user || !permissions) {
       setVehicles([]);
       setOrders([]);
+      setQuotes([]);
       setOrderTimelines({});
       setProcurementTimelines({});
       setCustomers([]);
@@ -1213,6 +1368,9 @@ function useSupabaseRecords(user, permissions) {
       const orderQuery = readAll || permissions.role === 'Logistics Manager'
         ? supabase.from('orders').select('*').order('created_at', { ascending: false })
         : supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const quoteQuery = readAll
+        ? supabase.from('quotes').select('*').order('created_at', { ascending: false })
+        : supabase.from('quotes').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
       const customerQuery = readAll
         ? supabase.from('customers').select('*').order('created_at', { ascending: false })
         : supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
@@ -1232,9 +1390,10 @@ function useSupabaseRecords(user, permissions) {
         ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
         : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
 
-      const [vehicleRows, orderRows, customerRows, shipmentRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
+      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
         runRequest(vehicleQuery),
         runRequest(orderQuery),
+        runOptionalRequest(quoteQuery),
         runRequest(customerQuery),
         runRequest(shipmentQuery),
         runRequest(timelineQuery),
@@ -1245,6 +1404,7 @@ function useSupabaseRecords(user, permissions) {
 
       setVehicles(vehicleRows.map(fromVehicleRow));
       setOrders(orderRows.map(fromOrderRow));
+      setQuotes(quoteRows.map(fromQuoteRow));
       setCustomers(customerRows.map(fromCustomerRow));
       setShipments(shipmentRows.map(fromShipmentRow));
       setOrderTimelines(groupTimelineRows(timelineRows.map(fromTimelineRow)));
@@ -1296,6 +1456,25 @@ function useSupabaseRecords(user, permissions) {
     if (!permissions?.canDeleteRecords('Orders')) throw new Error('Your role cannot delete orders.');
     await runRequest(supabase.from('orders').delete().eq('id', id));
     setOrders((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveQuote(quote, editingId) {
+    if (!permissions?.canManageQuotes()) throw new Error('Your role cannot manage quotes.');
+    const quoteToSave = {
+      ...quote,
+      quoteId: quote.quoteId || nextQuoteId(quotes),
+    };
+    const query = editingId
+      ? supabase.from('quotes').update(toQuoteRow(quoteToSave)).eq('quote_id', editingId).select().single()
+      : supabase.from('quotes').insert(toQuoteRow(quoteToSave, user.id)).select().single();
+    const saved = fromQuoteRow(await runRequest(query));
+    setQuotes((current) => editingId ? current.map((item) => item.quoteId === editingId ? saved : item) : [saved, ...current]);
+  }
+
+  async function deleteQuote(id) {
+    if (!permissions?.canDeleteRecords('Quotes')) throw new Error('Your role cannot delete quotes.');
+    await runRequest(supabase.from('quotes').delete().eq('quote_id', id));
+    setQuotes((current) => current.filter((item) => item.quoteId !== id));
   }
 
   async function updateOrderStatus(id, status) {
@@ -1452,6 +1631,7 @@ function useSupabaseRecords(user, permissions) {
   return {
     vehicles,
     orders,
+    quotes,
     orderTimelines,
     procurementTimelines,
     customers,
@@ -1464,6 +1644,8 @@ function useSupabaseRecords(user, permissions) {
     deleteVehicle,
     saveOrder,
     deleteOrder,
+    saveQuote,
+    deleteQuote,
     updateOrderStatus,
     addOrderTimelineNote,
     saveCustomer,
@@ -1625,7 +1807,7 @@ function GlobalSearch({ data, setActivePage, allowedPages }) {
   return (
     <div className="global-search">
       <Search size={16} />
-      <input placeholder="Search vehicles, orders, customers, shipments..." value={query} onChange={(event) => setQuery(event.target.value)} />
+      <input placeholder="Search vehicles, orders, quotes, customers, shipments..." value={query} onChange={(event) => setQuery(event.target.value)} />
       <kbd>Ctrl K</kbd>
       {results.length > 0 && (
         <div className="search-popover">
@@ -1648,6 +1830,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
     { label: 'Create Order', page: 'Orders', icon: ClipboardList },
+    { label: 'Create Quote', page: 'Quotes', icon: FileText },
     { label: 'Create Shipment', page: 'Shipments', icon: Truck },
     { label: 'Open Reports', page: 'Reports', icon: FileText },
     { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
@@ -1799,6 +1982,90 @@ function OrderForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOpti
       </Field>
       <div className="form-actions">
         <button type="submit">{editingId ? 'Save order' : 'Add order'}</button>
+        {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  );
+}
+
+function QuoteForm({ value, onChange, onSubmit, editingId, onCancel, vehicleOptions, customerOptions }) {
+  function vehicleLabel(vehicle) {
+    return `${vehicle.brand} ${vehicle.model}`;
+  }
+
+  function findVehicle(vehicleName) {
+    return vehicleOptions.find((vehicle) => vehicleLabel(vehicle).trim().toLowerCase() === String(vehicleName).trim().toLowerCase());
+  }
+
+  function withInventoryPricing(nextValue) {
+    const selectedVehicle = findVehicle(nextValue.vehicle);
+    if (!selectedVehicle) return nextValue;
+    const quantity = Math.max(numberValue(nextValue.quantity), 1);
+    return {
+      ...nextValue,
+      purchaseCost: selectedVehicle.purchasePrice * quantity,
+      sellingPrice: selectedVehicle.sellingPrice * quantity,
+    };
+  }
+
+  function updateVehicle(vehicleName) {
+    onChange(withInventoryPricing({ ...value, vehicle: vehicleName }));
+  }
+
+  function updateQuantity(quantity) {
+    onChange(withInventoryPricing({ ...value, quantity }));
+  }
+
+  return (
+    <form className="entry-form" onSubmit={onSubmit}>
+      <Field label="Quote ID">
+        <input value={value.quoteId} onChange={(e) => onChange({ ...value, quoteId: e.target.value })} placeholder="Auto, e.g. QT-0001" />
+      </Field>
+      <Field label="Customer Name">
+        <input list="quote-customer-list" value={value.customerName} onChange={(e) => onChange({ ...value, customerName: e.target.value })} placeholder="Select existing or type new" required />
+        <datalist id="quote-customer-list">
+          {customerOptions.map((customer) => (
+            <option key={customer.id} value={customer.name} />
+          ))}
+        </datalist>
+      </Field>
+      <Field label="Vehicle">
+        <input list="quote-vehicle-list" value={value.vehicle} onChange={(e) => updateVehicle(e.target.value)} required />
+        <datalist id="quote-vehicle-list">
+          {vehicleOptions.map((vehicle) => (
+            <option key={vehicle.id} value={vehicleLabel(vehicle)} />
+          ))}
+        </datalist>
+      </Field>
+      <Field label="Quantity">
+        <FormattedNumberInput min={1} value={value.quantity} onChange={updateQuantity} />
+      </Field>
+      <Field label="Valid Until">
+        <input type="date" value={value.validUntil} onChange={(e) => onChange({ ...value, validUntil: e.target.value })} />
+      </Field>
+      <Field label="Purchase Cost">
+        <FormattedNumberInput value={value.purchaseCost} onChange={(nextValue) => onChange({ ...value, purchaseCost: nextValue })} />
+      </Field>
+      <Field label="Selling Price">
+        <FormattedNumberInput value={value.sellingPrice} onChange={(nextValue) => onChange({ ...value, sellingPrice: nextValue })} />
+      </Field>
+      <Field label="Status">
+        <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
+          {quoteStatuses.map((status) => (
+            <option key={status}>{status}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Location">
+        <select value={value.locationName} onChange={(e) => onChange({ ...value, locationName: e.target.value })}>
+          {locationOptions.map((location) => <option key={location}>{location}</option>)}
+        </select>
+      </Field>
+      <Field label="Notes">
+        <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} placeholder="Payment terms, validity notes, delivery assumptions..." />
+      </Field>
+      <div className="form-actions">
+        <button type="submit">{editingId ? 'Save quote' : 'Add quote'}</button>
         {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
       </div>
     </form>
@@ -2805,6 +3072,106 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
   );
 }
 
+function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, canDelete }) {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [locationFilter, setLocationFilter] = useState('All');
+  const nextId = useMemo(() => nextQuoteId(quotes), [quotes]);
+  const newQuoteForm = useMemo(() => ({ ...blankQuote, quoteId: nextId }), [nextId]);
+  const [form, setForm] = useState(newQuoteForm);
+  const [editingId, setEditingId] = useState('');
+  const filtered = quotes.filter((quote) => {
+    const statusMatches = statusFilter === 'All' || quote.status === statusFilter;
+    const locationMatches = locationFilter === 'All' || quote.locationName === locationFilter;
+    return statusMatches && locationMatches && matchesSearch(quote, query);
+  });
+
+  async function submitQuote(event) {
+    event.preventDefault();
+    const saved = {
+      ...form,
+      quantity: numberValue(form.quantity),
+      purchaseCost: numberValue(form.purchaseCost),
+      sellingPrice: numberValue(form.sellingPrice),
+    };
+    await saveQuote(saved, editingId);
+    setForm(newQuoteForm);
+    setEditingId('');
+  }
+
+  function quoteCustomer(quote) {
+    return customers.find((item) => item.name.trim().toLowerCase() === quote.customerName.trim().toLowerCase());
+  }
+
+  useEffect(() => {
+    if (!editingId) setForm(newQuoteForm);
+  }, [newQuoteForm, editingId]);
+
+  return (
+    <section className="page-stack">
+      <PageHeader eyebrow="Quotes" title="Customer quotations" description="Prepare proforma quotes before converting customer interest into confirmed orders.">
+        <div className="toolbar">
+          <input className="search" placeholder="Search quotes" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <select className="status-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option>All</option>
+            {quoteStatuses.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+          <select value={locationFilter} onChange={(e) => setLocationFilter(e.target.value)}>
+            <option>All</option>
+            {locationOptions.map((location) => <option key={location}>{location}</option>)}
+          </select>
+        </div>
+      </PageHeader>
+      {canEdit && <QuoteForm value={form} onChange={setForm} onSubmit={submitQuote} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(newQuoteForm); setEditingId(''); }} />}
+      <div className="table-shell">
+        <table>
+          <thead>
+            <tr>
+              <th>Quote ID</th>
+              <th>Customer</th>
+              <th>Vehicle</th>
+              <th>Qty</th>
+              <th>Valid Until</th>
+              <th>Purchase Cost</th>
+              <th>Quoted Price</th>
+              <th>Profit</th>
+              <th>Status</th>
+              <th>Notes</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((quote) => (
+              <tr key={quote.quoteId}>
+                <td>{quote.quoteId}</td>
+                <td>{quote.customerName}</td>
+                <td>{quote.vehicle}</td>
+                <td>{quote.quantity}</td>
+                <td>{quote.validUntil}</td>
+                <td>{money.format(quote.purchaseCost)}</td>
+                <td>{money.format(quoteTotal(quote))}</td>
+                <td>{money.format(quoteProfit(quote))}</td>
+                <td><StatusBadge status={quote.status} /></td>
+                <td>{quote.notes}</td>
+                <td className="row-actions">
+                  <button className="mini invoice-action" onClick={() => generateQuotePdf(quote, quoteCustomer(quote))}>Quote PDF</button>
+                  {canEdit && <button className="mini" onClick={() => { setForm(quote); setEditingId(quote.quoteId); }}>Edit</button>}
+                  {canDelete && <button className="mini danger" onClick={() => deleteQuote(quote.quoteId)}>Delete</button>}
+                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!filtered.length && <EmptyState label="No quotes found." icon={FileText} />}
+        <TableFooter count={filtered.length} />
+      </div>
+    </section>
+  );
+}
+
 function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete }) {
   const [form, setForm] = useState(blankCustomer);
   const [editingId, setEditingId] = useState('');
@@ -3274,6 +3641,7 @@ function App() {
   const {
     vehicles,
     orders,
+    quotes,
     orderTimelines,
     procurementTimelines,
     customers,
@@ -3286,6 +3654,8 @@ function App() {
     deleteVehicle,
     saveOrder,
     deleteOrder,
+    saveQuote,
+    deleteQuote,
     updateOrderStatus,
     addOrderTimelineNote,
     saveCustomer,
@@ -3299,7 +3669,7 @@ function App() {
     deleteSupplier,
   } = useSupabaseRecords(user, profileLoading ? null : permissions);
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
-  const searchData = useMemo(() => ({ vehicles, orders, customers, shipments, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, procurementRequests, suppliers]);
+  const searchData = useMemo(() => ({ vehicles, orders, quotes, customers, shipments, procurementRequests, suppliers }), [vehicles, orders, quotes, customers, shipments, procurementRequests, suppliers]);
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
@@ -3415,6 +3785,7 @@ function App() {
             {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
+            {activePage === 'Quotes' && <Quotes quotes={quotes} saveQuote={saveQuote} deleteQuote={deleteQuote} vehicles={vehicles} customers={customers} canEdit={permissions.canManageQuotes()} canDelete={permissions.canDeleteRecords('Quotes')} />}
             {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
             {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}

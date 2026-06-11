@@ -1471,6 +1471,7 @@ tbody tr:hover {
 .status-available,
 .status-completed,
 .status-ready,
+.status-accepted,
 .status-delivered {
   background: rgba(34, 197, 94, .14);
   border-color: rgba(34, 197, 94, .28);
@@ -1481,10 +1482,19 @@ tbody tr:hover {
 .status-confirmed,
 .status-procurement,
 .status-preparing,
+.status-draft,
+.status-sent,
 .status-at-port {
   background: rgba(245, 158, 11, .14);
   border-color: rgba(245, 158, 11, .28);
   color: #fcd34d;
+}
+
+.status-rejected,
+.status-expired {
+  background: rgba(239, 68, 68, .14);
+  border-color: rgba(239, 68, 68, .28);
+  color: #fca5a5;
 }
 
 .status-sold,
