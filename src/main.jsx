@@ -1699,7 +1699,6 @@ function useSupabaseRecords(user, permissions) {
     logisticsPartners,
     procurementRequests,
     suppliers,
-    logisticsPartners,
     loading,
     error,
     saveVehicle,
