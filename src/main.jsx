@@ -257,16 +257,6 @@ const blankSupplier = {
   notes: '',
 };
 
-const blankLogisticsPartner = {
-  partnerName: '',
-  country: '',
-  contactPerson: '',
-  phone: '',
-  email: '',
-  serviceType: '',
-  notes: '',
-};
-
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const quoteStatuses = ['Draft', 'Sent', 'Accepted', 'Rejected', 'Expired'];
@@ -548,7 +538,7 @@ function createAlerts({ vehicles, orders, customers, shipments, orderTimelines, 
   });
 }
 
-function buildGlobalResults({ vehicles, orders, quotes = [], customers, shipments, logisticsPartners = [], procurementRequests = [], suppliers = [] }, query) {
+function buildGlobalResults({ vehicles, orders, quotes = [], customers, shipments, procurementRequests = [], suppliers = [] }, query) {
   if (!query.trim()) return [];
   const q = query.toLowerCase();
   const toResult = (module, title, subtitle, page) => ({ module, title, subtitle, page });
@@ -558,7 +548,6 @@ function buildGlobalResults({ vehicles, orders, quotes = [], customers, shipment
     ...quotes.map((item) => toResult('Quote', item.quoteId, `${item.customerName} - ${item.status}`, 'Quotes')),
     ...customers.map((item) => toResult('Customer', item.name, `${item.email || 'No email'} - ${item.location || 'No city'}`, 'Customers')),
     ...shipments.map((item) => toResult('Shipment', item.shipmentId, `${item.destinationCountry} - ${item.status}`, 'Shipments')),
-    ...logisticsPartners.map((item) => toResult('Logistics Partner', item.partnerName, `${item.country || 'No country'} - ${item.serviceType || 'Logistics'}`, 'Shipments')),
     ...procurementRequests.map((item) => toResult('Procurement', item.procurementId, `${item.vehicleBrand} ${item.vehicleModel} - ${item.status}`, 'Procurement')),
     ...suppliers.map((item) => toResult('Supplier', item.supplierName, `${item.country || 'No country'} - ${item.email || 'No email'}`, 'Procurement')),
     toResult('Report', 'Business reports', 'Exports, profit, freight, inventory value', 'Reports'),
@@ -1107,33 +1096,6 @@ function toSupplierRow(supplier, userId) {
   };
 }
 
-function fromLogisticsPartnerRow(row) {
-  return {
-    id: row.id,
-    partnerName: row.partner_name,
-    country: row.country || '',
-    contactPerson: row.contact_person || '',
-    phone: row.phone || '',
-    email: row.email || '',
-    serviceType: row.service_type || '',
-    notes: row.notes || '',
-    createdAt: row.created_at,
-  };
-}
-
-function toLogisticsPartnerRow(partner, userId) {
-  return {
-    partner_name: partner.partnerName,
-    country: partner.country,
-    contact_person: partner.contactPerson,
-    phone: partner.phone,
-    email: partner.email,
-    service_type: partner.serviceType,
-    notes: partner.notes,
-    ...(userId ? { created_by: userId } : {}),
-  };
-}
-
 function fromProcurementTimelineRow(row) {
   return {
     id: row.id,
@@ -1350,7 +1312,6 @@ function useSupabaseRecords(user, permissions) {
   const [shipments, setShipments] = useState([]);
   const [procurementRequests, setProcurementRequests] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
-  const [logisticsPartners, setLogisticsPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -1392,7 +1353,6 @@ function useSupabaseRecords(user, permissions) {
       setShipments([]);
       setProcurementRequests([]);
       setSuppliers([]);
-      setLogisticsPartners([]);
       setLoading(false);
       return;
     }
@@ -1417,9 +1377,6 @@ function useSupabaseRecords(user, permissions) {
       const shipmentQuery = permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
         ? supabase.from('shipments').select('*').order('created_at', { ascending: false })
         : supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const logisticsPartnerQuery = permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('logistics_partners').select('*').order('created_at', { ascending: false })
-        : supabase.from('logistics_partners').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
       const timelineQuery = permissions.isExecutive || permissions.role === 'Logistics Manager'
         ? supabase.from('order_timeline_events').select('*').order('created_at', { ascending: true })
         : supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
@@ -1433,13 +1390,12 @@ function useSupabaseRecords(user, permissions) {
         ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
         : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
 
-      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
+      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
         runRequest(vehicleQuery),
         runRequest(orderQuery),
         runOptionalRequest(quoteQuery),
         runRequest(customerQuery),
         runRequest(shipmentQuery),
-        runOptionalRequest(logisticsPartnerQuery),
         runRequest(timelineQuery),
         runOptionalRequest(procurementQuery),
         runOptionalRequest(supplierQuery),
@@ -1451,7 +1407,6 @@ function useSupabaseRecords(user, permissions) {
       setQuotes(quoteRows.map(fromQuoteRow));
       setCustomers(customerRows.map(fromCustomerRow));
       setShipments(shipmentRows.map(fromShipmentRow));
-      setLogisticsPartners(logisticsPartnerRows.map(fromLogisticsPartnerRow));
       setOrderTimelines(groupTimelineRows(timelineRows.map(fromTimelineRow)));
       setProcurementRequests(procurementRows.map(fromProcurementRow));
       setSuppliers(supplierRows.map(fromSupplierRow));
@@ -1580,21 +1535,6 @@ function useSupabaseRecords(user, permissions) {
     setShipments((current) => current.filter((item) => item.shipmentId !== id));
   }
 
-  async function saveLogisticsPartner(partner, editingId) {
-    if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage logistics partners.');
-    const query = editingId
-      ? supabase.from('logistics_partners').update(toLogisticsPartnerRow(partner)).eq('id', editingId).select().single()
-      : supabase.from('logistics_partners').insert(toLogisticsPartnerRow(partner, user.id)).select().single();
-    const saved = fromLogisticsPartnerRow(await runRequest(query));
-    setLogisticsPartners((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
-  }
-
-  async function deleteLogisticsPartner(id) {
-    if (!permissions?.canDeleteRecords('Shipments')) throw new Error('Your role cannot delete logistics partners.');
-    await runRequest(supabase.from('logistics_partners').delete().eq('id', id));
-    setLogisticsPartners((current) => current.filter((item) => item.id !== id));
-  }
-
   async function syncProcurementToInventory(request) {
     const vehicleName = `${request.vehicleBrand} ${request.vehicleModel}`.trim().toLowerCase();
     const existing = vehicles.find((vehicle) => `${vehicle.brand} ${vehicle.model}`.trim().toLowerCase() === vehicleName);
@@ -1696,7 +1636,6 @@ function useSupabaseRecords(user, permissions) {
     procurementTimelines,
     customers,
     shipments,
-    logisticsPartners,
     procurementRequests,
     suppliers,
     loading,
@@ -1713,8 +1652,6 @@ function useSupabaseRecords(user, permissions) {
     deleteCustomer,
     saveShipment,
     deleteShipment,
-    saveLogisticsPartner,
-    deleteLogisticsPartner,
     saveProcurementRequest,
     deleteProcurementRequest,
     addProcurementTimelineNote,
@@ -2166,7 +2103,7 @@ function CustomerForm({ value, onChange, onSubmit, editingId, onCancel }) {
   );
 }
 
-function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOptions, logisticsPartners = [] }) {
+function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOptions }) {
   function applyLinkedOrder(orderId) {
     const linkedOrder = orderOptions.find((order) => order.id === orderId);
     onChange({
@@ -2212,10 +2149,7 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
         <input value={value.portOfArrival} onChange={(e) => onChange({ ...value, portOfArrival: e.target.value })} />
       </Field>
       <Field label="Shipping Company">
-        <input list="logistics-partner-list" value={value.shippingCompany} onChange={(e) => onChange({ ...value, shippingCompany: e.target.value })} />
-        <datalist id="logistics-partner-list">
-          {logisticsPartners.map((partner) => <option key={partner.id} value={partner.partnerName} />)}
-        </datalist>
+        <input value={value.shippingCompany} onChange={(e) => onChange({ ...value, shippingCompany: e.target.value })} />
       </Field>
       <Field label="Freight Cost">
         <FormattedNumberInput value={value.freightCost} onChange={(nextValue) => onChange({ ...value, freightCost: nextValue })} />
@@ -2534,38 +2468,6 @@ function AuthView({ authError }) {
         </div>
       </section>
     </main>
-  );
-}
-
-function LogisticsPartnerForm({ value, onChange, onSubmit, editingId, onCancel }) {
-  return (
-    <form className="entry-form supplier-form" onSubmit={onSubmit}>
-      <Field label="Partner Name">
-        <input value={value.partnerName} onChange={(e) => onChange({ ...value, partnerName: e.target.value })} required />
-      </Field>
-      <Field label="Country">
-        <input value={value.country} onChange={(e) => onChange({ ...value, country: e.target.value })} />
-      </Field>
-      <Field label="Contact Person">
-        <input value={value.contactPerson} onChange={(e) => onChange({ ...value, contactPerson: e.target.value })} />
-      </Field>
-      <Field label="Phone">
-        <input value={value.phone} onChange={(e) => onChange({ ...value, phone: e.target.value })} />
-      </Field>
-      <Field label="Email">
-        <input type="email" value={value.email} onChange={(e) => onChange({ ...value, email: e.target.value })} />
-      </Field>
-      <Field label="Service Type">
-        <input value={value.serviceType} onChange={(e) => onChange({ ...value, serviceType: e.target.value })} placeholder="Freight, customs, port handling..." />
-      </Field>
-      <Field label="Notes">
-        <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
-      </Field>
-      <div className="form-actions">
-        <button type="submit">{editingId ? 'Save partner' : 'Add partner'}</button>
-        {editingId && <button type="button" className="secondary" onClick={onCancel}>Cancel</button>}
-      </div>
-    </form>
   );
 }
 
@@ -3321,14 +3223,12 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
   );
 }
 
-function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsPartners, saveLogisticsPartner, deleteLogisticsPartner, canEdit, canDelete }) {
+function Shipments({ shipments, saveShipment, deleteShipment, orders, canEdit, canDelete }) {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [locationFilter, setLocationFilter] = useState('All');
   const [form, setForm] = useState(blankShipment);
   const [editingId, setEditingId] = useState('');
-  const [partnerForm, setPartnerForm] = useState(blankLogisticsPartner);
-  const [editingPartnerId, setEditingPartnerId] = useState('');
   const filtered = shipments.filter((shipment) => {
     const statusMatches = statusFilter === 'All' || shipment.status === statusFilter;
     const locationMatches = locationFilter === 'All' || shipment.locationName === locationFilter;
@@ -3355,13 +3255,6 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
     setEditingId(shipment.shipmentId);
   }
 
-  async function submitPartner(event) {
-    event.preventDefault();
-    await saveLogisticsPartner(partnerForm, editingPartnerId);
-    setPartnerForm(blankLogisticsPartner);
-    setEditingPartnerId('');
-  }
-
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Shipments" title="Shipment tracking" description="Monitor freight movement, ports, carriers, ETA, and delivery progress.">
@@ -3379,7 +3272,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
           </select>
         </div>
       </PageHeader>
-      {canEdit && <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} logisticsPartners={logisticsPartners} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />}
+      {canEdit && <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -3427,44 +3320,6 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
         </table>
         {!filtered.length && <EmptyState label="No shipments found." />}
         <TableFooter count={filtered.length} />
-      </div>
-      <PageHeader eyebrow="Logistics partners" title="Partner management" description="Maintain freight forwarders, shipping agents, customs brokers, and port handling contacts." />
-      {canEdit && <LogisticsPartnerForm value={partnerForm} onChange={setPartnerForm} onSubmit={submitPartner} editingId={editingPartnerId} onCancel={() => { setPartnerForm(blankLogisticsPartner); setEditingPartnerId(''); }} />}
-      <div className="table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>Partner</th>
-              <th>Country</th>
-              <th>Contact</th>
-              <th>Phone</th>
-              <th>Email</th>
-              <th>Service Type</th>
-              <th>Notes</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logisticsPartners.map((partner) => (
-              <tr key={partner.id}>
-                <td>{partner.partnerName}</td>
-                <td>{partner.country}</td>
-                <td>{partner.contactPerson}</td>
-                <td>{partner.phone}</td>
-                <td>{partner.email}</td>
-                <td>{partner.serviceType}</td>
-                <td>{partner.notes}</td>
-                <td className="row-actions">
-                  {canEdit && <button className="mini" onClick={() => { setPartnerForm(partner); setEditingPartnerId(partner.id); }}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteLogisticsPartner(partner.id)}>Delete</button>}
-                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!logisticsPartners.length && <EmptyState label="No logistics partners saved yet." icon={Truck} />}
-        <TableFooter count={logisticsPartners.length} />
       </div>
     </section>
   );
@@ -3807,8 +3662,6 @@ function App() {
     deleteCustomer,
     saveShipment,
     deleteShipment,
-    saveLogisticsPartner,
-    deleteLogisticsPartner,
     saveProcurementRequest,
     deleteProcurementRequest,
     addProcurementTimelineNote,
@@ -3816,7 +3669,7 @@ function App() {
     deleteSupplier,
   } = useSupabaseRecords(user, profileLoading ? null : permissions);
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
-  const searchData = useMemo(() => ({ vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers }), [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers]);
+  const searchData = useMemo(() => ({ vehicles, orders, quotes, customers, shipments, procurementRequests, suppliers }), [vehicles, orders, quotes, customers, shipments, procurementRequests, suppliers]);
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
@@ -3934,7 +3787,7 @@ function App() {
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
             {activePage === 'Quotes' && <Quotes quotes={quotes} saveQuote={saveQuote} deleteQuote={deleteQuote} vehicles={vehicles} customers={customers} canEdit={permissions.canManageQuotes()} canDelete={permissions.canDeleteRecords('Quotes')} />}
             {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
-            {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
+            {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
             {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} />}
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}

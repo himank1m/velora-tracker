@@ -326,43 +326,6 @@ begin
   end if;
 end $$;
 
--- Logistics partner additions for the Shipments module.
--- Safe and non-destructive: creates a new table only if missing and adds role policies only if missing.
-
-create table if not exists logistics_partners (
-  id uuid primary key default gen_random_uuid(),
-  partner_name text not null,
-  country text,
-  contact_person text,
-  phone text,
-  email text,
-  service_type text,
-  notes text,
-  created_by uuid default auth.uid() references auth.users(id) on delete cascade,
-  created_at timestamptz not null default now()
-);
-
-alter table logistics_partners add column if not exists service_type text;
-alter table logistics_partners add column if not exists created_by uuid default auth.uid() references auth.users(id) on delete cascade;
-alter table logistics_partners enable row level security;
-
-do $$
-begin
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'logistics_partners' and policyname = 'Role read logistics partners') then
-    create policy "Role read logistics partners" on logistics_partners for select to authenticated using (
-      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager', 'Finance Manager'))
-    );
-  end if;
-
-  if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'logistics_partners' and policyname = 'Role manage logistics partners') then
-    create policy "Role manage logistics partners" on logistics_partners for all to authenticated using (
-      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
-    ) with check (
-      exists (select 1 from profiles p where p.id = auth.uid() and p.role in ('CEO', 'Company Manager', 'Logistics Manager'))
-    );
-  end if;
-end $$;
-
 -- Quotes module additions.
 -- Safe and non-destructive: creates a new table only if missing and adds role policies only if missing.
 
