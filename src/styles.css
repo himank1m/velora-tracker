@@ -1304,6 +1304,72 @@ textarea {
   gap: 10px;
 }
 
+.csv-import-card {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(31, 41, 55, .86), rgba(15, 23, 42, .92));
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.csv-import-card h3 {
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+
+.csv-import-card span,
+.csv-import-card small {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+}
+
+.csv-import-card code {
+  background: rgba(15, 23, 42, .65);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: #bfdbfe;
+  display: inline-block;
+  font-size: 12px;
+  margin-top: 10px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 8px 10px;
+}
+
+.csv-upload {
+  align-items: center;
+  background: var(--blue);
+  border: 1px solid rgba(96, 165, 250, .45);
+  border-radius: 14px;
+  color: white;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 8px;
+  justify-content: center;
+  min-width: 136px;
+  padding: 11px 14px;
+}
+
+.csv-upload input {
+  display: none;
+}
+
+.csv-upload.disabled {
+  cursor: wait;
+  opacity: .68;
+}
+
+:root[data-theme="light"] .csv-import-card {
+  background: rgba(255, 255, 255, .92);
+}
+
 .form-actions .secondary,
 .mini,
 .report-actions button:first-child {
@@ -1779,6 +1845,15 @@ tbody tr:hover {
   .shipment-form,
   .report-grid {
     grid-template-columns: 1fr;
+  }
+
+  .csv-import-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .csv-upload {
+    width: 100%;
   }
 
   .alert-grid,

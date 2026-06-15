@@ -415,6 +415,10 @@ create table if not exists profiles (
   created_at timestamptz not null default now()
 );
 
+alter table profiles drop constraint if exists profiles_role_check;
+alter table profiles add constraint profiles_role_check
+check (role in ('CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'));
+
 create unique index if not exists profiles_one_ceo
 on profiles (role)
 where role = 'CEO';

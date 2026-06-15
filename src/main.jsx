@@ -23,6 +23,7 @@ import {
   Sun,
   Timeline as TimelineIcon,
   Truck,
+  Upload,
   Users,
   Warehouse,
   X,
@@ -621,6 +622,63 @@ function csvEscape(value) {
   const text = String(value ?? '');
   if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
   return text;
+}
+
+function parseCsvLine(line) {
+  const cells = [];
+  let cell = '';
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const next = line[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === ',' && !quoted) {
+      cells.push(cell.trim());
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+
+  cells.push(cell.trim());
+  return cells;
+}
+
+function normalizeCsvKey(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function parseCsv(text) {
+  const lines = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim());
+  if (lines.length < 2) return [];
+  const headers = parseCsvLine(lines[0]).map(normalizeCsvKey);
+  return lines.slice(1).map((line) => {
+    const cells = parseCsvLine(line);
+    return headers.reduce((row, header, index) => ({ ...row, [header]: cells[index] ?? '' }), {});
+  });
+}
+
+function csvValue(row, keys, fallback = '') {
+  const variants = Array.isArray(keys) ? keys : [keys];
+  for (const key of variants) {
+    const normalized = normalizeCsvKey(key);
+    if (row[normalized] !== undefined && row[normalized] !== '') return row[normalized];
+  }
+  return fallback;
+}
+
+function normalizeCsvStatus(value, allowed, fallback) {
+  const text = String(value || '').trim().toLowerCase();
+  return allowed.find((status) => status.toLowerCase() === text) || fallback;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
 function downloadFile(filename, content, type) {
@@ -1495,6 +1553,8 @@ function useSupabaseRecords(user, permissions) {
     if (!editingId) {
       await addOrderTimelineEvent(saved.id, saved.status, 'Order created.');
     }
+
+    return saved;
   }
 
   async function deleteOrder(id) {
@@ -1572,6 +1632,7 @@ function useSupabaseRecords(user, permissions) {
       : supabase.from('shipments').insert(toShipmentRow(shipment, user.id)).select().single();
     const saved = fromShipmentRow(await runRequest(query));
     setShipments((current) => editingId ? current.map((item) => item.shipmentId === editingId ? saved : item) : [saved, ...current]);
+    return saved;
   }
 
   async function deleteShipment(id) {
@@ -1788,6 +1849,51 @@ function TableFooter({ count }) {
         <button disabled>Next</button>
       </div>
     </div>
+  );
+}
+
+function CsvImportPanel({ title, description, sampleHeaders, onImport }) {
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setBusy(true);
+    setMessage('Reading CSV...');
+
+    try {
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (!rows.length) {
+        setMessage('No rows found. Make sure the first row contains column headers.');
+        return;
+      }
+      const count = await onImport(rows);
+      setMessage(`Imported ${formatIndianNumber(count)} record${count === 1 ? '' : 's'} from ${file.name}.`);
+    } catch (error) {
+      setMessage(error.message || 'CSV import failed.');
+    } finally {
+      setBusy(false);
+      event.target.value = '';
+    }
+  }
+
+  return (
+    <section className="csv-import-card">
+      <div>
+        <p className="eyebrow">CSV import</p>
+        <h3>{title}</h3>
+        <span>{description}</span>
+        <code>{sampleHeaders}</code>
+        {message && <small>{message}</small>}
+      </div>
+      <label className={`csv-upload ${busy ? 'disabled' : ''}`}>
+        <Upload size={17} />
+        <span>{busy ? 'Importing...' : 'Upload CSV'}</span>
+        <input type="file" accept=".csv,text/csv" disabled={busy} onChange={handleFile} />
+      </label>
+    </section>
   );
 }
 
@@ -3088,6 +3194,37 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
     generateOrderInvoice(order, customer);
   }
 
+  async function importOrders(rows) {
+    let imported = 0;
+    const workingOrders = [...orders];
+    for (const row of rows) {
+      const vehicleName = csvValue(row, 'vehicle');
+      const quantity = Math.max(numberValue(csvValue(row, 'quantity', 1)), 1);
+      const inventoryVehicle = vehicles.find((vehicle) => `${vehicle.brand} ${vehicle.model}`.trim().toLowerCase() === vehicleName.trim().toLowerCase());
+      const purchaseCost = csvValue(row, ['purchase_cost', 'purchase_price'])
+        || (inventoryVehicle ? inventoryVehicle.purchasePrice * quantity : 0);
+      const sellingPrice = csvValue(row, ['selling_price', 'sale_price', 'quoted_price'])
+        || (inventoryVehicle ? inventoryVehicle.sellingPrice * quantity : 0);
+      const order = {
+        ...blankOrder,
+        orderNumber: csvValue(row, ['order_number', 'order_id']) || nextOrderNumber(workingOrders),
+        customerName: csvValue(row, ['customer_name', 'customer']),
+        vehicle: vehicleName,
+        quantity,
+        orderDate: csvValue(row, ['order_date', 'date'], today),
+        purchaseCost: numberValue(purchaseCost),
+        sellingPrice: numberValue(sellingPrice),
+        status: normalizeCsvStatus(csvValue(row, 'status'), orderStatuses, 'Inquiry'),
+        locationName: csvValue(row, ['location_name', 'location'], 'Seoul HQ'),
+      };
+      if (!order.customerName || !order.vehicle) continue;
+      const saved = await saveOrder(order, '');
+      workingOrders.push(saved || order);
+      imported += 1;
+    }
+    return imported;
+  }
+
   useEffect(() => {
     if (!editingId) setForm(newOrderForm);
   }, [newOrderForm, editingId]);
@@ -3104,6 +3241,14 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
         </div>
       </PageHeader>
       {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(newOrderForm); setEditingId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import orders"
+          description="Bulk-create order records from a CSV file. Missing prices can be filled from inventory when vehicle names match."
+          sampleHeaders="order_number,customer_name,vehicle,quantity,order_date,purchase_cost,selling_price,status,location_name"
+          onImport={importOrders}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -3363,6 +3508,37 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
     setEditingPartnerId('');
   }
 
+  async function importShipments(rows) {
+    let imported = 0;
+    const workingShipments = [...shipments];
+    for (const row of rows) {
+      const orderReference = csvValue(row, ['linked_order_id', 'order_id', 'order_number']);
+      const linkedOrder = orders.find((order) => order.id === orderReference || order.orderNumber === orderReference);
+      const shipment = {
+        ...blankShipment,
+        shipmentId: csvValue(row, ['shipment_id', 'shipment_number']) || nextDisplayId(workingShipments, 'shipmentId'),
+        linkedOrderId: linkedOrder?.id || (isUuid(orderReference) ? orderReference : ''),
+        customerName: csvValue(row, ['customer_name', 'customer'], linkedOrder?.customerName || ''),
+        vehicle: csvValue(row, 'vehicle', linkedOrder?.vehicle || ''),
+        quantity: Math.max(numberValue(csvValue(row, 'quantity', linkedOrder?.quantity || 1)), 1),
+        destinationCountry: csvValue(row, ['destination_country', 'destination']),
+        portOfDeparture: csvValue(row, ['port_of_departure', 'departure_port']),
+        portOfArrival: csvValue(row, ['port_of_arrival', 'arrival_port']),
+        shippingCompany: csvValue(row, ['shipping_company', 'carrier']),
+        freightCost: numberValue(csvValue(row, ['freight_cost', 'freight'])),
+        eta: csvValue(row, 'eta', today),
+        status: normalizeCsvStatus(csvValue(row, 'status'), shipmentStatuses, 'Preparing'),
+        notes: csvValue(row, 'notes'),
+        locationName: csvValue(row, ['location_name', 'location'], 'Port Operations Office'),
+      };
+      if (!shipment.shipmentId || !shipment.customerName || !shipment.vehicle || !shipment.destinationCountry) continue;
+      const saved = await saveShipment(shipment, '');
+      workingShipments.push(saved || shipment);
+      imported += 1;
+    }
+    return imported;
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Shipments" title="Shipment tracking" description="Monitor freight movement, ports, carriers, ETA, and delivery progress.">
@@ -3381,6 +3557,14 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
         </div>
       </PageHeader>
       {canEdit && <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} logisticsPartners={logisticsPartners} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import shipments"
+          description="Bulk-create shipment records from a CSV file. Use order_number or linked_order_id to connect shipments to orders."
+          sampleHeaders="shipment_id,order_number,customer_name,vehicle,quantity,destination_country,port_of_departure,port_of_arrival,shipping_company,freight_cost,eta,status,notes"
+          onImport={importShipments}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
