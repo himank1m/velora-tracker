@@ -1,0 +1,11 @@
+{
+  "appId": "com.velora.tracker",
+  "appName": "Velora Tracker",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

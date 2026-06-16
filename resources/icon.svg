@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f172a"/>
+      <stop offset="0.55" stop-color="#123c74"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="332" fill="none" stroke="#93c5fd" stroke-width="26" opacity="0.5"/>
+  <path d="M243 372h98l92 280 92-280h94l-142 390h-88L243 372Z" fill="#f8fafc"/>
+  <path d="M606 372h178v76H694v73h78v72h-78v91h96v78H606V372Z" fill="#bfdbfe"/>
+  <text x="512" y="843" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="58" font-weight="800" fill="#dbeafe">VELORA</text>
+</svg>

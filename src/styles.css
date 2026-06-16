@@ -43,6 +43,11 @@
   box-sizing: border-box;
 }
 
+html {
+  min-height: 100%;
+  background: var(--bg);
+}
+
 body {
   margin: 0;
   background:
@@ -53,6 +58,9 @@ body {
   color: var(--ink);
   font-size: 14px;
   line-height: 1.45;
+  min-height: 100%;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 :root[data-theme="light"] body {
@@ -1749,6 +1757,8 @@ tbody tr:hover {
     transition: transform .22s ease;
     width: min(86vw, 320px);
     z-index: 60;
+    padding-bottom: max(18px, env(safe-area-inset-bottom));
+    padding-top: max(18px, env(safe-area-inset-top));
   }
 
   .mobile-nav-open .sidebar {
@@ -1774,7 +1784,7 @@ tbody tr:hover {
     justify-content: center;
     position: absolute;
     right: 16px;
-    top: 22px;
+    top: max(22px, calc(env(safe-area-inset-top) + 12px));
     width: 38px;
   }
 
@@ -1820,7 +1830,7 @@ tbody tr:hover {
   }
 
   main {
-    padding: 18px;
+    padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
   }
 
   .topbar {
@@ -1845,6 +1855,13 @@ tbody tr:hover {
   .shipment-form,
   .report-grid {
     grid-template-columns: 1fr;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 44px;
   }
 
   .csv-import-card {

@@ -3,3 +3,6 @@ dist/
 work/ 
 .env 
 node_modules/ 
+android/.gradle/
+android/app/build/
+android/build/

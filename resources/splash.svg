@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="38%" r="58%">
+      <stop offset="0" stop-color="#1d4ed8"/>
+      <stop offset="0.42" stop-color="#0f172a"/>
+      <stop offset="1" stop-color="#020617"/>
+    </radialGradient>
+  </defs>
+  <rect width="2732" height="2732" fill="url(#glow)"/>
+  <circle cx="1366" cy="1190" r="360" fill="none" stroke="#93c5fd" stroke-width="20" opacity="0.42"/>
+  <text x="1366" y="1195" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="260" font-weight="900" fill="#f8fafc">VM</text>
+  <text x="1366" y="1510" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="112" font-weight="800" fill="#dbeafe">Velora Tracker</text>
+  <text x="1366" y="1648" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="600" fill="#93c5fd">Automotive operations platform</text>
+</svg>
