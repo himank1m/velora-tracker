@@ -40,7 +40,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { isSupabaseConfigured, supabase } from './supabaseClient';
+import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
 import './styles.css';
 
 function formatIndianNumber(value) {
@@ -277,6 +277,8 @@ const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Offic
 const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
 const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
 const exclusiveRoles = ['CEO', 'Company Manager'];
+const pendingOAuthRoleKey = 'velora-pending-oauth-role';
+const pendingAuthErrorKey = 'velora-pending-auth-error';
 const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center'] },
@@ -1212,7 +1214,10 @@ function toProcurementTimelineRow(event, userId) {
 }
 
 function userName(user) {
-  return user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Velora user';
+  return user?.user_metadata?.full_name
+    || user?.user_metadata?.name
+    || user?.email?.split('@')[0]
+    || 'Velora user';
 }
 
 function normalizeRole(role) {
@@ -1283,7 +1288,7 @@ function useAuthSession() {
   useEffect(() => {
     if (!isSupabaseConfigured) {
       setAuthLoading(false);
-      setAuthError('Supabase environment variables are missing.');
+      setAuthError(supabaseConfigError);
       return undefined;
     }
 
@@ -1309,6 +1314,7 @@ function useAuthSession() {
 
   async function signOut() {
     setAuthError('');
+    window.localStorage.removeItem(pendingOAuthRoleKey);
     const { error } = await supabase.auth.signOut();
     if (error) setAuthError(error.message);
   }
@@ -1346,6 +1352,7 @@ function useUserProfile(user) {
       setProfileError('');
 
       try {
+        const pendingOAuthRole = window.localStorage.getItem(pendingOAuthRoleKey);
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
@@ -1358,30 +1365,44 @@ function useUserProfile(user) {
           id: user.id,
           full_name: userName(user),
           email: user.email,
-          role: normalizeRole(user.user_metadata?.role),
+          role: normalizeRole(pendingOAuthRole || user.user_metadata?.role),
         };
 
         if (!data) {
-          const fallbackRole = normalizeRole(user.user_metadata?.role || 'Company Manager');
+          const fallbackRole = normalizeRole(pendingOAuthRole || user.user_metadata?.role || 'Inventory Manager');
           fallbackProfile.role = fallbackRole;
           const { data: createdProfile, error: createError } = await supabase
             .from('profiles')
             .insert(fallbackProfile)
             .select()
             .maybeSingle();
-          if (createError) throw createError;
+          if (createError) {
+            window.localStorage.removeItem(pendingOAuthRoleKey);
+            if (createError.code === '23505' && exclusiveRoles.includes(fallbackRole)) {
+              window.sessionStorage.setItem(
+                pendingAuthErrorKey,
+                `${fallbackRole} is already assigned. Sign in with its existing account or choose another role.`,
+              );
+              await supabase.auth.signOut();
+            }
+            throw createError;
+          }
+          window.localStorage.removeItem(pendingOAuthRoleKey);
           if (mounted) setProfile(createdProfile || fallbackProfile);
         } else if (mounted) {
+          window.localStorage.removeItem(pendingOAuthRoleKey);
           setProfile({ ...data, role: normalizeRole(data.role) });
         }
       } catch (requestError) {
         if (mounted) {
-          setProfile({
-            id: user.id,
-            full_name: userName(user),
-            email: user.email,
-            role: normalizeRole(user.user_metadata?.role),
-          });
+          setProfile(requestError.code === '23505'
+            ? null
+            : {
+              id: user.id,
+              full_name: userName(user),
+              email: user.email,
+              role: normalizeRole(user.user_metadata?.role),
+            });
           setProfileError(requestError.message || 'Could not load profile role.');
         }
       } finally {
@@ -1436,7 +1457,7 @@ function useSupabaseRecords(user, permissions) {
   async function loadRecords() {
     if (!isSupabaseConfigured) {
       setLoading(false);
-      setError('Supabase environment variables are missing.');
+      setError(supabaseConfigError);
       return;
     }
 
@@ -2453,11 +2474,16 @@ function AuthView({ authError }) {
     role: 'Inventory Manager',
   });
   const [message, setMessage] = useState('');
-  const [error, setError] = useState(authError);
+  const [error, setError] = useState(() => {
+    const pendingError = window.sessionStorage.getItem(pendingAuthErrorKey);
+    if (pendingError) window.sessionStorage.removeItem(pendingAuthErrorKey);
+    return pendingError || authError;
+  });
   const [submitting, setSubmitting] = useState(false);
+  const [submittingProvider, setSubmittingProvider] = useState('');
 
   useEffect(() => {
-    setError(authError);
+    if (authError) setError(authError);
   }, [authError]);
 
   function updateField(field, value) {
@@ -2474,13 +2500,43 @@ function AuthView({ authError }) {
     return true;
   }
 
+  async function continueWithProvider(provider) {
+    setError('');
+    setMessage('');
+
+    if (!isSupabaseConfigured) {
+      setError(supabaseConfigError);
+      return;
+    }
+
+    setSubmittingProvider(provider);
+    window.localStorage.setItem(pendingOAuthRoleKey, form.role);
+
+    try {
+      const { error: providerError } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: window.location.origin,
+          ...(provider === 'google'
+            ? { queryParams: { prompt: 'select_account' } }
+            : {}),
+        },
+      });
+      if (providerError) throw providerError;
+    } catch (requestError) {
+      window.localStorage.removeItem(pendingOAuthRoleKey);
+      setError(requestError.message || `Could not continue with ${provider === 'google' ? 'Google' : 'Apple'}.`);
+      setSubmittingProvider('');
+    }
+  }
+
   async function submitAuth(event) {
     event.preventDefault();
     setError('');
     setMessage('');
 
     if (!isSupabaseConfigured) {
-      setError('Supabase environment variables are missing.');
+      setError(supabaseConfigError);
       return;
     }
 
@@ -2633,6 +2689,41 @@ function AuthView({ authError }) {
             {submitting ? 'Please wait...' : title}
           </button>
         </form>
+        {mode !== 'forgot' && (
+          <>
+            <div className="auth-divider"><span>or continue with</span></div>
+            <div className="oauth-actions">
+              <button
+                type="button"
+                className="oauth-button"
+                onClick={() => continueWithProvider('google')}
+                disabled={Boolean(submittingProvider)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.06H12v3.9h5.38a4.6 4.6 0 0 1-2 3.02v2.53h3.24c1.9-1.75 2.98-4.33 2.98-7.39Z" />
+                  <path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.38l-3.24-2.53c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.61A10 10 0 0 0 12 22Z" />
+                  <path fill="#FBBC05" d="M6.39 13.92A6.02 6.02 0 0 1 6.08 12c0-.67.11-1.32.31-1.92V7.47H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.53l3.35-2.61Z" />
+                  <path fill="#EA4335" d="M12 5.95c1.47 0 2.79.5 3.83 1.5l2.87-2.88A9.63 9.63 0 0 0 12 2a10 10 0 0 0-8.96 5.47l3.35 2.61C7.18 7.71 9.39 5.95 12 5.95Z" />
+                </svg>
+                {submittingProvider === 'google' ? 'Opening Google...' : 'Google'}
+              </button>
+              <button
+                type="button"
+                className="oauth-button"
+                onClick={() => continueWithProvider('apple')}
+                disabled={Boolean(submittingProvider)}
+              >
+                <svg className="apple-mark" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor" d="M17.05 12.54c.03 3.02 2.65 4.02 2.68 4.04-.02.08-.42 1.46-1.38 2.89-.83 1.23-1.7 2.45-3.06 2.48-1.33.03-1.76-.8-3.29-.8-1.52 0-2 .77-3.26.83-1.31.05-2.31-1.32-3.15-2.55-1.71-2.47-3.02-6.98-1.27-10.03A4.9 4.9 0 0 1 8.48 6.9c1.3-.03 2.53.88 3.29.88.76 0 2.19-1.09 3.69-.93.63.03 2.4.25 3.53 1.92-.09.06-2.11 1.24-2.09 3.77h.15ZM14.48 5.27c.7-.85 1.18-2.04 1.05-3.22-1.02.04-2.25.68-2.98 1.53-.65.75-1.22 1.96-1.07 3.11 1.13.09 2.29-.57 3-1.42Z" />
+                </svg>
+                {submittingProvider === 'apple' ? 'Opening Apple...' : 'Apple'}
+              </button>
+            </div>
+            <p className="oauth-role-note">
+              New social accounts will be created as <strong>{form.role}</strong>. Existing accounts keep their saved role.
+            </p>
+          </>
+        )}
         <div className="auth-links">
           {mode !== 'signin' && <button onClick={() => setMode('signin')}>Back to sign in</button>}
           {mode !== 'signup' && <button onClick={() => setMode('signup')}>Create account</button>}

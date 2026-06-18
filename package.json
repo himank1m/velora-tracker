@@ -5,7 +5,10 @@
     "preview": "vite preview --host 127.0.0.1",
     "cap:sync": "npm run build && cap sync",
     "cap:add:android": "npm run build && cap add android",
-    "android": "npm run build && cap sync android && cap open android"
+    "android": "npm run build && cap sync android && cap open android",
+    "tauri": "npx --yes @tauri-apps/cli@2",
+    "tauri:dev": "npx --yes @tauri-apps/cli@2 dev",
+    "tauri:build": "npx --yes @tauri-apps/cli@2 build"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",

@@ -1,6 +1,6 @@
 # Velora Tracker
 
-Velora Tracker is a Vite React application for Velora Motors operations. The same React codebase supports the production website and a Capacitor Android app.
+Velora Tracker is a Vite React application for Velora Motors operations. The same React codebase supports the production website, a Capacitor Android app, and a Tauri Windows desktop app.
 
 ## Website Build
 
@@ -114,6 +114,26 @@ VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
 ```
 
+For local Android builds, create a project-root `.env` file before building:
+
+```bash
+copy .env.example .env
+```
+
+Then fill in the real Supabase values:
+
+```text
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+Vite embeds `VITE_` environment variables at build time. If you create or edit `.env`, rebuild and sync Android again:
+
+```bash
+npm run build
+npx cap sync android
+```
+
 For mobile authentication redirects, add the Android WebView origin to Supabase Auth redirect URLs:
 
 ```text
@@ -121,6 +141,107 @@ https://localhost/*
 ```
 
 Also keep your Vercel production URL in the Supabase redirect URL list.
+
+## Google and Apple Sign-In
+
+Velora Tracker supports Google and Apple through Supabase Auth. The selected
+Velora role is used only when a social account signs in for the first time.
+Existing users always keep the role stored in their `profiles` row.
+
+In the Supabase Dashboard:
+
+1. Open **Authentication > Providers**.
+2. Enable Google and enter the Google OAuth client ID and secret.
+3. Enable Apple and enter the Apple Services ID and generated secret.
+4. Copy the Supabase callback URL shown on each provider page into the
+   corresponding Google or Apple developer console.
+5. Add the deployed Velora URL and local development URL under
+   **Authentication > URL Configuration > Redirect URLs**.
+
+Recommended redirect entries:
+
+```text
+https://your-vercel-domain.vercel.app/**
+http://127.0.0.1:5173/**
+https://localhost/**
+http://tauri.localhost/**
+```
+
+The existing unique database indexes continue limiting the `CEO` and
+`Company Manager` roles to one profile each. Google and Apple sign-in do not
+bypass those constraints or any existing row-level security policy.
+
+## Tauri Windows Desktop
+
+The Windows desktop app uses the same Vite source and production `dist/`
+output as the website and Android app.
+
+Desktop configuration:
+
+- App name: `Velora Tracker`
+- App identifier: `com.velora.tracker`
+- Installer formats: Windows MSI and NSIS setup EXE
+- Frontend output: `dist/`
+
+### Windows prerequisites
+
+Install these once on the Windows build machine:
+
+1. Microsoft Visual Studio Build Tools with the **Desktop development with C++** workload.
+2. The stable Rust toolchain from [rustup.rs](https://rustup.rs/).
+3. Microsoft Edge WebView2 Runtime. It is already included on current Windows 10 and Windows 11 installations.
+
+After installing Rust, restart the terminal and verify:
+
+```bash
+rustc --version
+cargo --version
+```
+
+The Tauri npm scripts use the official Tauri v2 CLI through `npx`, keeping
+the existing website dependency lock unchanged.
+
+### Run the desktop app in development
+
+Create the project-root `.env` file as described in the Supabase section,
+then run:
+
+```bash
+npm install
+npm run tauri:dev
+```
+
+Tauri starts Vite automatically and opens Velora Tracker in a native Windows
+window. Supabase authentication and database access use the same build-time
+environment variables as the website and Android app.
+
+### Build Windows installers
+
+Run:
+
+```bash
+npm install
+npm run tauri:build
+```
+
+The build produces both installer types under:
+
+```text
+src-tauri/target/release/bundle/msi/
+src-tauri/target/release/bundle/nsis/
+```
+
+The MSI folder contains the Windows `.msi` installer. The NSIS folder
+contains the Windows setup `.exe`.
+
+The standalone application executable is created at:
+
+```text
+src-tauri/target/release/velora-tracker.exe
+```
+
+For a production release, code-sign the installers with your Windows code
+signing certificate before distribution.
 
 ## Branding Assets
 

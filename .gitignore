@@ -2,7 +2,13 @@ node_modules/
 dist/ 
 work/ 
 .env 
+.env.txt
+.env.local
+.env.*.local
+!.env.example
 node_modules/ 
 android/.gradle/
 android/app/build/
 android/build/
+src-tauri/target/
+.npm-cache/
