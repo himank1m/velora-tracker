@@ -142,9 +142,9 @@ https://localhost/*
 
 Also keep your Vercel production URL in the Supabase redirect URL list.
 
-## Google and Apple Sign-In
+## Google and Microsoft Sign-In
 
-Velora Tracker supports Google and Apple through Supabase Auth. The selected
+Velora Tracker supports Google and Microsoft through Supabase Auth. The selected
 Velora role is used only when a social account signs in for the first time.
 Existing users always keep the role stored in their `profiles` row.
 
@@ -152,9 +152,9 @@ In the Supabase Dashboard:
 
 1. Open **Authentication > Providers**.
 2. Enable Google and enter the Google OAuth client ID and secret.
-3. Enable Apple and enter the Apple Services ID and generated secret.
+3. Enable Azure and enter the Microsoft Entra application client ID and secret.
 4. Copy the Supabase callback URL shown on each provider page into the
-   corresponding Google or Apple developer console.
+   corresponding Google Cloud or Microsoft Entra admin portal.
 5. Add the deployed Velora URL and local development URL under
    **Authentication > URL Configuration > Redirect URLs**.
 
@@ -168,7 +168,7 @@ http://tauri.localhost/**
 ```
 
 The existing unique database indexes continue limiting the `CEO` and
-`Company Manager` roles to one profile each. Google and Apple sign-in do not
+`Company Manager` roles to one profile each. Google and Microsoft sign-in do not
 bypass those constraints or any existing row-level security policy.
 
 ## Tauri Windows Desktop

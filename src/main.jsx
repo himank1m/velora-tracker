@@ -2525,7 +2525,12 @@ function AuthView({ authError }) {
       if (providerError) throw providerError;
     } catch (requestError) {
       window.localStorage.removeItem(pendingOAuthRoleKey);
-      setError(requestError.message || `Could not continue with ${provider === 'google' ? 'Google' : 'Apple'}.`);
+      const providerName = provider === 'google' ? 'Google' : 'Microsoft';
+      const providerDisabled = requestError.code === 'validation_failed'
+        && requestError.message?.toLowerCase().includes('provider is not enabled');
+      setError(providerDisabled
+        ? `${providerName} sign-in is not enabled in Supabase yet. Enable ${providerName} under Authentication > Providers and add its OAuth credentials.`
+        : requestError.message || `Could not continue with ${providerName}.`);
       setSubmittingProvider('');
     }
   }
@@ -2710,13 +2715,16 @@ function AuthView({ authError }) {
               <button
                 type="button"
                 className="oauth-button"
-                onClick={() => continueWithProvider('apple')}
+                onClick={() => continueWithProvider('azure')}
                 disabled={Boolean(submittingProvider)}
               >
-                <svg className="apple-mark" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="currentColor" d="M17.05 12.54c.03 3.02 2.65 4.02 2.68 4.04-.02.08-.42 1.46-1.38 2.89-.83 1.23-1.7 2.45-3.06 2.48-1.33.03-1.76-.8-3.29-.8-1.52 0-2 .77-3.26.83-1.31.05-2.31-1.32-3.15-2.55-1.71-2.47-3.02-6.98-1.27-10.03A4.9 4.9 0 0 1 8.48 6.9c1.3-.03 2.53.88 3.29.88.76 0 2.19-1.09 3.69-.93.63.03 2.4.25 3.53 1.92-.09.06-2.11 1.24-2.09 3.77h.15ZM14.48 5.27c.7-.85 1.18-2.04 1.05-3.22-1.02.04-2.25.68-2.98 1.53-.65.75-1.22 1.96-1.07 3.11 1.13.09 2.29-.57 3-1.42Z" />
+                <svg className="microsoft-mark" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#F25022" d="M2 2h9.5v9.5H2z" />
+                  <path fill="#7FBA00" d="M12.5 2H22v9.5h-9.5z" />
+                  <path fill="#00A4EF" d="M2 12.5h9.5V22H2z" />
+                  <path fill="#FFB900" d="M12.5 12.5H22V22h-9.5z" />
                 </svg>
-                {submittingProvider === 'apple' ? 'Opening Apple...' : 'Apple'}
+                {submittingProvider === 'azure' ? 'Opening Microsoft...' : 'Continue with Microsoft'}
               </button>
             </div>
             <p className="oauth-role-note">
