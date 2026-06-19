@@ -2464,6 +2464,129 @@ function StatusBadge({ status }) {
   return <span className={`status status-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</span>;
 }
 
+function PrivacyPolicy() {
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Privacy Policy | Velora Tracker';
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
+
+  return (
+    <main className="privacy-page">
+      <div className="privacy-shell">
+        <header className="privacy-header">
+          <a className="privacy-brand brand-mark" href="/" aria-label="Return to Velora Tracker">
+            <span>VM</span>
+            <div>
+              <strong>Velora Motors</strong>
+              <small>Tracker</small>
+            </div>
+          </a>
+          <a className="privacy-home-link" href="/">
+            <ChevronLeft size={17} />
+            Back to homepage
+          </a>
+        </header>
+
+        <article className="privacy-document">
+          <div className="privacy-hero">
+            <div className="privacy-icon"><ShieldCheck size={28} /></div>
+            <p className="eyebrow">Velora Tracker</p>
+            <h1>Privacy Policy</h1>
+            <p>
+              This policy explains how Velora Motors collects, uses, and protects
+              information when you use the Velora Tracker operations platform.
+            </p>
+          </div>
+
+          <div className="privacy-content">
+            <section>
+              <h2>Information we collect</h2>
+              <p>
+                Velora Tracker collects account information necessary to authenticate
+                users and operate the platform. This may include your name, email
+                address, assigned role, authentication identifiers, and information
+                you enter while using Velora Tracker.
+              </p>
+            </section>
+
+            <section>
+              <h2>How we use information</h2>
+              <p>
+                We use this information to provide secure account access, apply
+                role-based permissions, maintain business records, support platform
+                functionality, troubleshoot issues, and protect Velora Motors&apos;
+                systems and data.
+              </p>
+            </section>
+
+            <section>
+              <h2>Authentication providers</h2>
+              <p>
+                Users may sign in with email and password, Google OAuth, or Microsoft
+                OAuth. When you use Google or Microsoft sign-in, those providers
+                process authentication information under their own privacy policies
+                and share the account details needed to complete sign-in.
+              </p>
+            </section>
+
+            <section>
+              <h2>Supabase services</h2>
+              <p>
+                Velora Tracker uses Supabase as its authentication and database
+                provider. Account and operational data may be stored and processed
+                through Supabase infrastructure to provide the platform&apos;s core
+                services.
+              </p>
+            </section>
+
+            <section>
+              <h2>Data sharing and sale</h2>
+              <p>
+                Velora Motors does not sell user data to third parties. Information
+                may be shared with service providers only where necessary to operate,
+                secure, or support Velora Tracker, or where disclosure is required by
+                law.
+              </p>
+            </section>
+
+            <section>
+              <h2>Data security and retention</h2>
+              <p>
+                We use reasonable administrative and technical safeguards designed
+                to protect user information. Data is retained for as long as needed
+                to operate Velora Tracker, meet legitimate business requirements,
+                and comply with applicable obligations.
+              </p>
+            </section>
+
+            <section>
+              <h2>Your privacy questions</h2>
+              <p>
+                Users may contact Velora Motors through its official business contact
+                channels to ask questions, raise privacy concerns, or request
+                assistance regarding their personal information.
+              </p>
+            </section>
+
+            <section className="privacy-effective-date">
+              <h2>Effective Date</h2>
+              <p>June 19, 2026</p>
+            </section>
+          </div>
+        </article>
+
+        <footer className="privacy-footer">
+          <span>&copy; 2026 Velora Motors. All rights reserved.</span>
+          <a href="/">Return to Velora Tracker</a>
+        </footer>
+      </div>
+    </main>
+  );
+}
+
 function AuthView({ authError }) {
   const [mode, setMode] = useState('signin');
   const [form, setForm] = useState({
@@ -2737,6 +2860,7 @@ function AuthView({ authError }) {
           {mode !== 'signup' && <button onClick={() => setMode('signup')}>Create account</button>}
           {mode !== 'forgot' && <button onClick={() => setMode('forgot')}>Forgot password?</button>}
         </div>
+        <a className="auth-privacy-link" href="/privacy">Privacy Policy</a>
       </section>
     </main>
   );
@@ -4234,4 +4358,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+const publicPath = window.location.pathname.replace(/\/+$/, '') || '/';
+
+createRoot(document.getElementById('root')).render(
+  publicPath === '/privacy' ? <PrivacyPolicy /> : <App />,
+);
