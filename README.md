@@ -243,6 +243,115 @@ src-tauri/target/release/velora-tracker.exe
 For a production release, code-sign the installers with your Windows code
 signing certificate before distribution.
 
+## Public Application Downloads
+
+Release installers are hosted directly by the Velora website from:
+
+```text
+/downloads/VeloraTracker-1.0.0.msi
+/downloads/VeloraTracker-1.0.0-setup.exe
+/downloads/VeloraTracker-1.0.0.apk
+```
+
+After Vercel deployment, prepend the production domain to obtain direct HTTPS
+URLs. For example:
+
+```text
+https://your-vercel-domain.vercel.app/downloads/VeloraTracker-1.0.0.msi
+```
+
+These are static same-domain responses and do not use GitHub or external
+redirects. The MSI URL can therefore be supplied where Microsoft Store
+submission requires a direct HTTPS installer URL.
+
+### Replacing release files
+
+When publishing version `1.0.0`, replace the files in `public/downloads/`
+with the newly signed artifacts while preserving these filenames:
+
+```powershell
+Copy-Item "src-tauri\target\release\bundle\msi\Velora Tracker_1.0.0_x64_en-US.msi" "public\downloads\VeloraTracker-1.0.0.msi" -Force
+Copy-Item "src-tauri\target\release\bundle\nsis\Velora Tracker_1.0.0_x64-setup.exe" "public\downloads\VeloraTracker-1.0.0-setup.exe" -Force
+Copy-Item "android\app\build\outputs\apk\release\app-release.apk" "public\downloads\VeloraTracker-1.0.0.apk" -Force
+```
+
+For a new version:
+
+1. Add the new versioned files to `public/downloads/`.
+2. Update the three links in `src/main.jsx`.
+3. Update the matching download headers in `vercel.json`.
+4. Run `npm run build`.
+5. Commit the installer binaries and deploy to Vercel.
+
+Always distribute signed production installers. The checked-in APK should be
+replaced with a release-signed APK before public production distribution.
+
+## Velora AI Assistant
+
+Velora Tracker includes a role-aware AI assistant backed by the Supabase Edge
+Function at:
+
+```text
+supabase/functions/ai-assistant
+```
+
+The website, Android app, and Windows app all call this same authenticated
+function through the existing Supabase client. The OpenAI API key is never
+included in Vite, Vercel, Capacitor, Tauri, or frontend source code.
+
+### Configure the secure OpenAI secret
+
+Install and authenticate the Supabase CLI, link this repository to the correct
+Supabase project, then set the secret:
+
+```powershell
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+```
+
+The function uses `gpt-5-mini` by default. To select another supported model
+without changing source code:
+
+```powershell
+supabase secrets set OPENAI_MODEL=gpt-5-mini
+```
+
+Do not create a `VITE_OPENAI_API_KEY` variable and do not add the OpenAI key to
+Vercel frontend environment variables.
+
+### Deploy the Edge Function
+
+```powershell
+supabase functions deploy ai-assistant
+```
+
+Supabase verifies the user JWT, then the function loads the caller's
+`profiles.role`. It independently filters the company context by role and
+removes financial fields for roles without financial permission before calling
+the OpenAI Responses API.
+
+The assistant can return action proposals, but it does not directly create,
+edit, delete, approve, send, or update Supabase records. Suggestions marked as
+destructive require an explicit confirmation before the app opens the relevant
+module for review.
+
+### Local function development
+
+Store local function-only secrets in an ignored environment file such as
+`supabase/.env.local`:
+
+```text
+OPENAI_API_KEY=your-local-openai-key
+OPENAI_MODEL=gpt-5-mini
+```
+
+Then run:
+
+```powershell
+supabase functions serve ai-assistant --env-file supabase/.env.local
+```
+
 ## Branding Assets
 
 Placeholder Velora branding assets are included in:

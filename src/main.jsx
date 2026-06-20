@@ -4,22 +4,29 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   Bell,
+  Bot,
   Boxes,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
   Command,
+  Download,
   FileText,
   Gauge,
+  Laptop,
   LayoutDashboard,
   Menu,
   Moon,
   PackageCheck,
   Plus,
   Search,
+  Send,
   ShieldCheck,
+  Sparkles,
+  Smartphone,
   Sun,
   Timeline as TimelineIcon,
   Truck,
@@ -1278,6 +1285,167 @@ function createPermissions(role) {
         || moduleName === 'Shipments' && normalizedRole === 'Logistics Manager';
     },
   };
+}
+
+const aiQuickPrompts = [
+  'Summarize today',
+  'What needs attention?',
+  'Draft customer update',
+  'Shipment risk check',
+  'Inventory low-stock check',
+];
+
+function buildAiContext({
+  permissions,
+  vehicles,
+  orders,
+  customers,
+  shipments,
+  procurementRequests,
+  alerts,
+}) {
+  const generatedAt = new Date().toISOString();
+  const activeOrders = orders.filter((order) => order.status !== 'Completed');
+  const activeShipments = shipments.filter((shipment) => shipment.status !== 'Delivered');
+  const overdueShipments = activeShipments.filter((shipment) => shipment.eta && shipment.eta < today);
+  const lowStockVehicles = vehicles.filter((vehicle) => numberValue(vehicle.quantity) <= 2);
+  const totalRevenue = orders.reduce((sum, order) => sum + numberValue(order.totalRevenue), 0);
+  const totalProfit = orders.reduce((sum, order) => sum + numberValue(order.totalProfit), 0);
+  const inventoryValue = vehicles.reduce(
+    (sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity),
+    0,
+  );
+  const freightCost = shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0);
+
+  const context = {
+    dashboard: {
+      generatedAt,
+      role: permissions.role,
+      inventoryUnits: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.quantity), 0),
+      activeOrders: activeOrders.length,
+      completedOrders: orders.length - activeOrders.length,
+      activeShipments: activeShipments.length,
+      overdueShipments: overdueShipments.length,
+      lowStockVehicles: lowStockVehicles.length,
+      openAlerts: alerts.filter((alert) => !alert.resolved).length,
+      ...(permissions.canViewFinancials()
+        ? { totalRevenue, totalProfit, inventoryValue, freightCost }
+        : {}),
+    },
+  };
+
+  if (permissions.isExecutive || permissions.role === 'Logistics Manager') {
+    context.orders = activeOrders.slice(0, 25).map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      vehicle: order.vehicle,
+      quantity: numberValue(order.quantity),
+      orderDate: order.orderDate,
+      status: order.status,
+      location: order.location,
+      ...(permissions.canViewFinancials()
+        ? {
+          purchaseCost: numberValue(order.purchaseCost),
+          sellingPrice: numberValue(order.sellingPrice),
+          totalRevenue: numberValue(order.totalRevenue),
+          totalProfit: numberValue(order.totalProfit),
+        }
+        : {}),
+    }));
+  }
+
+  if (permissions.isExecutive
+    || permissions.role === 'Inventory Manager'
+    || permissions.role === 'Finance Manager') {
+    context.inventory = {
+      lowStock: lowStockVehicles.slice(0, 25).map((vehicle) => ({
+        id: vehicle.id,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        category: vehicle.category,
+        quantity: numberValue(vehicle.quantity),
+        status: vehicle.status,
+        location: vehicle.location,
+        ...(permissions.canViewFinancials()
+          ? {
+            purchasePrice: numberValue(vehicle.purchasePrice),
+            sellingPrice: numberValue(vehicle.sellingPrice),
+            profitAmount: profitAmount(vehicle),
+            profitMargin: profitMargin(vehicle),
+          }
+          : {}),
+      })),
+      activeProcurements: procurementRequests
+        .filter((request) => request.status !== 'Added To Inventory')
+        .slice(0, 20)
+        .map((request) => ({
+          id: request.id,
+          procurementId: request.procurementId,
+          vehicle: `${request.vehicleBrand} ${request.vehicleModel}`.trim(),
+          quantity: numberValue(request.quantity),
+          supplierName: request.supplierName,
+          status: request.status,
+          createdAt: request.createdAt,
+          ...(permissions.canViewFinancials()
+            ? {
+              estimatedPurchaseCost: numberValue(request.estimatedPurchaseCost),
+              estimatedFreightCost: numberValue(request.estimatedFreightCost),
+            }
+            : {}),
+        })),
+    };
+  }
+
+  if (permissions.isExecutive
+    || permissions.role === 'Logistics Manager'
+    || permissions.role === 'Finance Manager') {
+    context.shipments = activeShipments.slice(0, 25).map((shipment) => ({
+      id: shipment.id,
+      shipmentId: shipment.shipmentId,
+      linkedOrderId: shipment.linkedOrderId,
+      customerName: shipment.customerName,
+      vehicle: shipment.vehicle,
+      quantity: numberValue(shipment.quantity),
+      destinationCountry: shipment.destinationCountry,
+      portOfDeparture: shipment.portOfDeparture,
+      portOfArrival: shipment.portOfArrival,
+      shippingCompany: shipment.shippingCompany,
+      eta: shipment.eta,
+      status: shipment.status,
+      overdue: Boolean(shipment.eta && shipment.eta < today),
+      ...(permissions.canViewFinancials()
+        ? { freightCost: numberValue(shipment.freightCost) }
+        : {}),
+    }));
+  }
+
+  if (permissions.isExecutive) {
+    context.customers = customers.slice(0, 25).map((customer) => ({
+      id: customer.id,
+      name: customer.name,
+      location: customer.countryCity,
+      createdAt: customer.createdAt,
+      hasPhone: Boolean(customer.phone),
+      hasEmail: Boolean(customer.email),
+    }));
+  }
+
+  if (permissions.canViewReports()) {
+    context.reports = {
+      generatedAt,
+      totalRevenue,
+      totalProfit,
+      inventoryValue,
+      freightCost,
+      orderCount: orders.length,
+      shipmentCount: shipments.length,
+      customerCount: customers.length,
+      procurementCount: procurementRequests.length,
+    };
+  }
+
+  return context;
 }
 
 function useAuthSession() {
@@ -2860,6 +3028,41 @@ function AuthView({ authError }) {
           {mode !== 'signup' && <button onClick={() => setMode('signup')}>Create account</button>}
           {mode !== 'forgot' && <button onClick={() => setMode('forgot')}>Forgot password?</button>}
         </div>
+        <section className="auth-downloads" aria-labelledby="downloads-title">
+          <div className="auth-downloads-heading">
+            <div>
+              <p className="eyebrow">Desktop and mobile</p>
+              <h2 id="downloads-title">Downloads</h2>
+            </div>
+            <Download size={19} />
+          </div>
+          <div className="download-list">
+            <a href="/downloads/VeloraTracker-1.0.0.msi" download>
+              <span className="download-platform-icon"><Laptop size={18} /></span>
+              <span>
+                <strong>Download for Windows</strong>
+                <small>MSI installer</small>
+              </span>
+              <Download className="download-action-icon" size={17} />
+            </a>
+            <a href="/downloads/VeloraTracker-1.0.0-setup.exe" download>
+              <span className="download-platform-icon"><Laptop size={18} /></span>
+              <span>
+                <strong>Download for Windows</strong>
+                <small>Setup EXE</small>
+              </span>
+              <Download className="download-action-icon" size={17} />
+            </a>
+            <a href="/downloads/VeloraTracker-1.0.0.apk" download>
+              <span className="download-platform-icon"><Smartphone size={18} /></span>
+              <span>
+                <strong>Download for Android</strong>
+                <small>APK package</small>
+              </span>
+              <Download className="download-action-icon" size={17} />
+            </a>
+          </div>
+        </section>
         <a className="auth-privacy-link" href="/privacy">Privacy Policy</a>
       </section>
     </main>
@@ -4182,11 +4385,203 @@ function AuditLogs({ orders, shipments, customers, vehicles }) {
   );
 }
 
+function AiAssistant({
+  open,
+  onClose,
+  onNavigate,
+  permissions,
+  vehicles,
+  orders,
+  customers,
+  shipments,
+  procurementRequests,
+  alerts,
+}) {
+  const [question, setQuestion] = useState('');
+  const [messages, setMessages] = useState([
+    {
+      role: 'assistant',
+      text: 'Ask about current operations, risks, customers, inventory, shipments, or reports. I only use data available to your role.',
+    },
+  ]);
+  const [suggestedActions, setSuggestedActions] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const context = useMemo(() => buildAiContext({
+    permissions,
+    vehicles,
+    orders,
+    customers,
+    shipments,
+    procurementRequests,
+    alerts,
+  }), [
+    permissions,
+    vehicles,
+    orders,
+    customers,
+    shipments,
+    procurementRequests,
+    alerts,
+  ]);
+
+  async function askAssistant(prompt) {
+    const nextQuestion = String(prompt || question).trim();
+    if (!nextQuestion || loading) return;
+
+    setQuestion('');
+    setLoading(true);
+    setSuggestedActions([]);
+    setMessages((current) => [...current, { role: 'user', text: nextQuestion }]);
+
+    try {
+      if (!supabase) throw new Error(supabaseConfigError);
+      const { data, error: invokeError } = await supabase.functions.invoke('ai-assistant', {
+        body: {
+          question: nextQuestion,
+          context,
+        },
+      });
+
+      if (invokeError) {
+        let detail = invokeError.message;
+        try {
+          const errorBody = await invokeError.context?.json();
+          if (errorBody?.error) detail = errorBody.error;
+        } catch {
+          // Keep the Supabase function error when no JSON body is available.
+        }
+        throw new Error(detail || 'The AI assistant request failed.');
+      }
+
+      setMessages((current) => [
+        ...current,
+        { role: 'assistant', text: data?.answer || 'No assistant response was returned.' },
+      ]);
+      setSuggestedActions(Array.isArray(data?.actions) ? data.actions : []);
+    } catch (requestError) {
+      setMessages((current) => [
+        ...current,
+        {
+          role: 'assistant',
+          error: true,
+          text: requestError.message || 'The AI assistant could not complete this request.',
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault();
+    askAssistant(question);
+  }
+
+  function reviewAction(action) {
+    if (action.requiresConfirmation) {
+      const confirmed = window.confirm(
+        'This suggestion could change or remove company data. Confirm that you want to review it. No record will be changed automatically.',
+      );
+      if (!confirmed) return;
+    }
+    onNavigate(action.module);
+    onClose();
+  }
+
+  if (!open) return null;
+
+  return (
+    <>
+      <button className="ai-backdrop" onClick={onClose} aria-label="Close Velora AI Assistant" />
+      <aside className="ai-panel" aria-label="Velora AI Assistant">
+        <header className="ai-panel-header">
+          <div className="ai-title">
+            <span><Sparkles size={19} /></span>
+            <div>
+              <p className="eyebrow">Secure operations copilot</p>
+              <h2>Velora AI Assistant</h2>
+            </div>
+          </div>
+          <button className="ai-close" onClick={onClose} aria-label="Close assistant">
+            <X size={19} />
+          </button>
+        </header>
+
+        <div className="ai-role-notice">
+          <ShieldCheck size={16} />
+          <span>Using authorized context for <strong>{permissions.role}</strong></span>
+        </div>
+
+        <div className="ai-quick-actions">
+          {aiQuickPrompts.map((prompt) => (
+            <button key={prompt} onClick={() => askAssistant(prompt)} disabled={loading}>
+              {prompt}
+            </button>
+          ))}
+        </div>
+
+        <div className="ai-conversation" aria-live="polite">
+          {messages.map((message, index) => (
+            <div className={`ai-message ${message.role} ${message.error ? 'error' : ''}`} key={`${message.role}-${index}`}>
+              <span className="ai-message-icon">
+                {message.role === 'assistant' ? <Bot size={16} /> : 'Y'}
+              </span>
+              <p>{message.text}</p>
+            </div>
+          ))}
+          {loading && (
+            <div className="ai-message assistant loading">
+              <span className="ai-message-icon"><Bot size={16} /></span>
+              <p>Reviewing authorized company data...</p>
+            </div>
+          )}
+        </div>
+
+        {suggestedActions.length > 0 && (
+          <div className="ai-suggestions">
+            <p className="eyebrow">Suggested actions</p>
+            {suggestedActions.map((action, index) => (
+              <article key={`${action.title}-${index}`}>
+                <div>
+                  <strong>{action.title}</strong>
+                  <p>{action.description}</p>
+                </div>
+                <button onClick={() => reviewAction(action)}>
+                  {action.requiresConfirmation && <AlertTriangle size={15} />}
+                  {action.requiresConfirmation ? 'Review and confirm' : `Open ${action.module}`}
+                </button>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <form className="ai-composer" onSubmit={handleSubmit}>
+          <textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            placeholder="Ask Velora AI about company operations..."
+            maxLength={1500}
+            rows={3}
+          />
+          <button type="submit" disabled={loading || !question.trim()} aria-label="Send question">
+            <Send size={18} />
+          </button>
+        </form>
+        <small className="ai-disclaimer">
+          Suggestions can be incomplete. Review operational and financial decisions before acting.
+        </small>
+      </aside>
+    </>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Command Center');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [theme, setTheme] = useTheme();
   const { user, authLoading, authError, signOut } = useAuthSession();
   const { profile, profileLoading, profileError } = useUserProfile(user);
@@ -4243,6 +4638,7 @@ function App() {
         setCommandOpen(true);
       }
       if (event.key === 'Escape') setCommandOpen(false);
+      if (event.key === 'Escape') setAiOpen(false);
     }
 
     window.addEventListener('keydown', onKeyDown);
@@ -4322,6 +4718,10 @@ function App() {
           </div>
           <div className="topbar-actions">
             <GlobalSearch data={searchData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
+            <button className="theme-toggle ai-button" onClick={() => setAiOpen(true)}>
+              <Sparkles size={17} />
+              <span>AI Assistant</span>
+            </button>
             <button className="theme-toggle command-button" onClick={() => setCommandOpen(true)}>
               <Command size={17} />
               <span>Commands</span>
@@ -4354,6 +4754,18 @@ function App() {
         )}
         <CommandPalette open={commandOpen} onClose={() => setCommandOpen(false)} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
       </main>
+      <AiAssistant
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        onNavigate={goToPage}
+        permissions={permissions}
+        vehicles={vehicles}
+        orders={orders}
+        customers={customers}
+        shipments={shipments}
+        procurementRequests={procurementRequests}
+        alerts={alerts}
+      />
     </div>
   );
 }

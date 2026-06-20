@@ -8,5 +8,58 @@
       "source": "/privacy/",
       "destination": "/index.html"
     }
+  ],
+  "headers": [
+    {
+      "source": "/downloads/VeloraTracker-1.0.0.msi",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/x-msi"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"VeloraTracker-1.0.0.msi\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/downloads/VeloraTracker-1.0.0-setup.exe",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.microsoft.portable-executable"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"VeloraTracker-1.0.0-setup.exe\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/downloads/VeloraTracker-1.0.0.apk",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        },
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"VeloraTracker-1.0.0.apk\""
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, immutable"
+        }
+      ]
+    }
   ]
 }

@@ -12,3 +12,5 @@ android/app/build/
 android/build/
 src-tauri/target/
 .npm-cache/
+.gradle-local/
+.android-sdk-local/
