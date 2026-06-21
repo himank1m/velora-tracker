@@ -614,6 +614,14 @@ function nextProcurementId(requests) {
   return nextDisplayId(requests, 'procurementId') || 'PR-0001';
 }
 
+function nextCustomerId(customers) {
+  const highest = customers.reduce((current, customer) => {
+    const match = String(customer.id || '').match(/^CUS-(\d+)$/i);
+    return match ? Math.max(current, Number.parseInt(match[1], 10) || 0) : current;
+  }, 0);
+  return `CUS-${String(highest + 1).padStart(4, '0')}`;
+}
+
 function inDateRange(value, startDate, endDate) {
   if (!value) return true;
   const date = new Date(value);
@@ -3914,10 +3922,49 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
     setEditingId('');
   }
 
+  async function importCustomers(rows) {
+    let imported = 0;
+    const workingCustomers = [...customers];
+
+    for (const row of rows) {
+      const requestedId = csvValue(row, ['customer_id', 'id']);
+      const generatedId = nextCustomerId(workingCustomers);
+      const customerId = requestedId
+        && !workingCustomers.some((customer) => customer.id === requestedId)
+        ? requestedId
+        : generatedId;
+      const customer = {
+        ...blankCustomer,
+        id: customerId,
+        name: csvValue(row, ['customer_name', 'name', 'customer']),
+        phone: csvValue(row, ['phone', 'phone_number', 'mobile']),
+        email: csvValue(row, ['email', 'email_address']),
+        location: csvValue(row, ['country_city', 'country', 'city', 'location']),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+        department: csvValue(row, 'department', 'Sales'),
+      };
+
+      if (!customer.name) continue;
+      const saved = await saveCustomer(customer, '');
+      workingCustomers.push(saved || customer);
+      imported += 1;
+    }
+
+    return imported;
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Customers" title="Customer records" description="Maintain clean buyer contact details, notes, and commercial context." />
       {canEdit && <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import customers"
+          description="Bulk-create customer records from a CSV file. Customer IDs are generated automatically when omitted or already in use."
+          sampleHeaders="customer_id,customer_name,phone,email,country_city,notes,department"
+          onImport={importCustomers}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
