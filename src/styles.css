@@ -496,7 +496,8 @@ kbd {
 }
 
 .search-popover button:hover,
-.command-list button:hover {
+.command-list button:hover,
+.command-list button.selected {
   background: var(--blue-soft);
 }
 
@@ -533,6 +534,18 @@ kbd {
   width: min(520px, calc(100vw - 28px));
 }
 
+.command-dialog:focus {
+  outline: none;
+}
+
+.command-key-hints {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .command-list {
   display: grid;
   gap: 8px;
@@ -541,6 +554,11 @@ kbd {
 .command-list button {
   align-items: center;
   grid-template-columns: 24px 1fr;
+}
+
+.command-list button.selected {
+  box-shadow: inset 3px 0 0 var(--blue);
+  color: #fff;
 }
 
 .ai-backdrop {

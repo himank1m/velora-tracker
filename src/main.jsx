@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -2183,7 +2183,9 @@ function GlobalSearch({ data, setActivePage, allowedPages }) {
 }
 
 function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
-  const actions = [
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const dialogRef = useRef(null);
+  const actions = useMemo(() => [
     { label: 'Open Procurement', page: 'Procurement', icon: ClipboardList },
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
@@ -2193,28 +2195,87 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Open Reports', page: 'Reports', icon: FileText },
     { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
     { label: 'Open Command Center', page: 'Command Center', icon: LayoutDashboard },
-  ];
+  ].filter((action) => allowedPages.includes(action.page)), [allowedPages]);
+
+  useEffect(() => {
+    if (!open) return;
+    setSelectedIndex(0);
+    window.requestAnimationFrame(() => dialogRef.current?.focus());
+  }, [open]);
 
   if (!open) return null;
-  const visibleActions = actions.filter((action) => allowedPages.includes(action.page));
+
+  function runAction(action) {
+    if (!action) return;
+    setActivePage(action.page);
+    onClose();
+  }
+
+  function handleKeyDown(event) {
+    if (!actions.length) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedIndex((current) => (current + 1) % actions.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedIndex((current) => (current - 1 + actions.length) % actions.length);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      setSelectedIndex(0);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      setSelectedIndex(actions.length - 1);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      runAction(actions[selectedIndex]);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+    }
+  }
 
   return (
     <div className="command-backdrop" onClick={onClose}>
-      <section className="command-dialog" onClick={(event) => event.stopPropagation()}>
+      <section
+        className="command-dialog"
+        ref={dialogRef}
+        tabIndex="-1"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Velora command palette"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={handleKeyDown}
+      >
         <div className="card-heading">
           <div>
             <p className="eyebrow">Command palette</p>
             <h2>Quick actions</h2>
           </div>
-          <kbd>Esc</kbd>
+          <div className="command-key-hints">
+            <kbd>↑↓</kbd>
+            <kbd>Enter</kbd>
+            <kbd>Esc</kbd>
+          </div>
         </div>
-        <div className="command-list">
-          {visibleActions.map(({ label, page, icon: Icon }) => (
-            <button key={label} onClick={() => { setActivePage(page); onClose(); }}>
+        <div className="command-list" role="listbox" aria-label="Quick actions">
+          {actions.map((action, index) => {
+            const { label, icon: Icon } = action;
+            return (
+            <button
+              key={label}
+              className={selectedIndex === index ? 'selected' : ''}
+              role="option"
+              aria-selected={selectedIndex === index}
+              tabIndex="-1"
+              onMouseEnter={() => setSelectedIndex(index)}
+              onClick={() => runAction(action)}
+            >
               <Icon size={18} />
               <span>{label}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </section>
     </div>
