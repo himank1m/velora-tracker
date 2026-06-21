@@ -1237,9 +1237,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages,
-    'Logistics Manager': ['Shipments', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Procurement', 'Inventory', 'Alerts Center'],
-    'Finance Manager': ['Procurement', 'Quotes', 'Reports', 'Alerts Center'],
+    'Logistics Manager': ['Command Center', 'Shipments', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Command Center', 'Procurement', 'Inventory', 'Alerts Center'],
+    'Finance Manager': ['Command Center', 'Procurement', 'Quotes', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
