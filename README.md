@@ -296,28 +296,30 @@ supabase/functions/ai-assistant
 ```
 
 The website, Android app, and Windows app all call this same authenticated
-function through the existing Supabase client. The OpenAI API key is never
+function through the existing Supabase client. The Gemini API key is never
 included in Vite, Vercel, Capacitor, Tauri, or frontend source code.
 
-### Configure the secure OpenAI secret
+### Configure the secure Gemini secret
 
 Install and authenticate the Supabase CLI, link this repository to the correct
-Supabase project, then set the secret:
+Supabase project, create a Gemini API key in Google AI Studio, then set the
+secret:
 
 ```powershell
 supabase login
 supabase link --project-ref YOUR_PROJECT_REF
-supabase secrets set OPENAI_API_KEY=YOUR_OPENAI_API_KEY
+supabase secrets set GEMINI_API_KEY=YOUR_GEMINI_API_KEY
 ```
 
-The function uses `gpt-5-mini` by default. To select another supported model
-without changing source code:
+The function uses the stable, free-tier compatible `gemini-2.5-flash-lite`
+model by default. To select another supported Gemini model without changing
+source code:
 
 ```powershell
-supabase secrets set OPENAI_MODEL=gpt-5-mini
+supabase secrets set GEMINI_MODEL=gemini-2.5-flash-lite
 ```
 
-Do not create a `VITE_OPENAI_API_KEY` variable and do not add the OpenAI key to
+Do not create a `VITE_GEMINI_API_KEY` variable and do not add the Gemini key to
 Vercel frontend environment variables.
 
 ### Deploy the Edge Function
@@ -329,7 +331,7 @@ supabase functions deploy ai-assistant
 Supabase verifies the user JWT, then the function loads the caller's
 `profiles.role`. It independently filters the company context by role and
 removes financial fields for roles without financial permission before calling
-the OpenAI Responses API.
+the Google Gemini `generateContent` API.
 
 The assistant can return action proposals, but it does not directly create,
 edit, delete, approve, send, or update Supabase records. Suggestions marked as
@@ -342,8 +344,8 @@ Store local function-only secrets in an ignored environment file such as
 `supabase/.env.local`:
 
 ```text
-OPENAI_API_KEY=your-local-openai-key
-OPENAI_MODEL=gpt-5-mini
+GEMINI_API_KEY=your-local-gemini-key
+GEMINI_MODEL=gemini-2.5-flash-lite
 ```
 
 Then run:

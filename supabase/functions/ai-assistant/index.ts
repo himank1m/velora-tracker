@@ -82,23 +82,23 @@ function filterContext(context: unknown, role: Role) {
   );
 }
 
-function extractResponseText(response: Record<string, unknown>) {
-  if (typeof response.output_text === 'string' && response.output_text.trim()) {
-    return response.output_text.trim();
-  }
+function responseParts(response: Record<string, unknown>) {
+  const candidates = Array.isArray(response.candidates) ? response.candidates : [];
+  return candidates.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const content = (candidate as Record<string, unknown>).content;
+    if (!content || typeof content !== 'object') return [];
+    const parts = (content as Record<string, unknown>).parts;
+    return Array.isArray(parts) ? parts : [];
+  });
+}
 
-  const output = Array.isArray(response.output) ? response.output : [];
-  return output
-    .flatMap((item) => {
-      if (!item || typeof item !== 'object' || !Array.isArray((item as Record<string, unknown>).content)) {
-        return [];
-      }
-      return ((item as Record<string, unknown>).content as unknown[])
-        .map((content) => {
-          if (!content || typeof content !== 'object') return '';
-          const text = (content as Record<string, unknown>).text;
-          return typeof text === 'string' ? text : '';
-        });
+function extractResponseText(response: Record<string, unknown>) {
+  return responseParts(response)
+    .map((part) => {
+      if (!part || typeof part !== 'object') return '';
+      const text = (part as Record<string, unknown>).text;
+      return typeof text === 'string' ? text : '';
     })
     .filter(Boolean)
     .join('\n')
@@ -106,18 +106,24 @@ function extractResponseText(response: Record<string, unknown>) {
 }
 
 function extractActions(response: Record<string, unknown>, role: Role) {
-  const output = Array.isArray(response.output) ? response.output : [];
-  return output
-    .filter((item) => item && typeof item === 'object'
-      && (item as Record<string, unknown>).type === 'function_call'
-      && (item as Record<string, unknown>).name === 'propose_app_action')
-    .map((item) => {
+  return responseParts(response)
+    .filter((part) => {
+      if (!part || typeof part !== 'object') return false;
+      const functionCall = (part as Record<string, unknown>).functionCall;
+      return functionCall
+        && typeof functionCall === 'object'
+        && (functionCall as Record<string, unknown>).name === 'propose_app_action';
+    })
+    .map((part) => {
       try {
-        const rawArguments = (item as Record<string, unknown>).arguments;
-        const parsed = JSON.parse(typeof rawArguments === 'string' ? rawArguments : '{}');
+        const functionCall = (part as Record<string, unknown>).functionCall as Record<string, unknown>;
+        const parsed = functionCall.args && typeof functionCall.args === 'object'
+          ? functionCall.args as Record<string, unknown>
+          : {};
         const actionType = String(parsed.action_type || 'review_record').slice(0, 60);
-        const module = allowedActionModules[role].includes(parsed.module)
-          ? parsed.module
+        const requestedModule = String(parsed.module || '');
+        const module = allowedActionModules[role].includes(requestedModule)
+          ? requestedModule
           : allowedActionModules[role][0];
         return {
           actionType,
@@ -153,14 +159,14 @@ Deno.serve(async (request) => {
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY');
-  const openAiKey = Deno.env.get('OPENAI_API_KEY');
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return jsonResponse({ error: 'Supabase function environment is incomplete.' }, 500);
   }
 
-  if (!openAiKey) {
-    return jsonResponse({ error: 'The AI assistant is not configured. Add OPENAI_API_KEY to Supabase Edge Function secrets.' }, 503);
+  if (!geminiApiKey) {
+    return jsonResponse({ error: 'The AI assistant is not configured. Add GEMINI_API_KEY to Supabase Edge Function secrets.' }, 503);
   }
 
   try {
@@ -184,7 +190,7 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Could not verify your Velora role.' }, 403);
     }
 
-    const role = normalizeRole(profile?.role || userData.user.user_metadata?.role);
+    const role = normalizeRole(profile?.role || 'Inventory Manager');
     const body = await request.json();
     const question = typeof body?.question === 'string' ? body.question.trim().slice(0, 1500) : '';
 
@@ -210,60 +216,74 @@ Deno.serve(async (request) => {
       'Always provide a useful text response even when proposing actions.',
     ].join(' ');
 
-    const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${openAiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: Deno.env.get('OPENAI_MODEL') || 'gpt-5-mini',
-        instructions,
-        input: [
-          `User question: ${question}`,
-          `Authorized Velora context: ${serializedContext}`,
-        ].join('\n\n'),
-        tools: [
-          {
-            type: 'function',
-            name: 'propose_app_action',
-            description: 'Propose a Velora app action for the user to review. This tool never executes the action.',
-            strict: true,
-            parameters: {
-              type: 'object',
-              additionalProperties: false,
-              properties: {
-                action_type: {
-                  type: 'string',
-                  enum: ['open_module', 'review_record', 'draft_customer_update', 'prepare_report', 'update_status', 'delete_record'],
-                },
-                module: {
-                  type: 'string',
-                  enum: ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center'],
-                },
-                title: { type: 'string' },
-                description: { type: 'string' },
-                record_id: { type: 'string' },
-                destructive: { type: 'boolean' },
-              },
-              required: ['action_type', 'module', 'title', 'description', 'record_id', 'destructive'],
-            },
+    const geminiModel = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash-lite';
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel)}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': geminiApiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: instructions }],
           },
-        ],
-        tool_choice: 'auto',
-        max_output_tokens: 900,
-        store: false,
-      }),
-    });
+          contents: [
+            {
+              role: 'user',
+              parts: [{
+                text: [
+                  `User question: ${question}`,
+                  `Authorized Velora context: ${serializedContext}`,
+                ].join('\n\n'),
+              }],
+            },
+          ],
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'propose_app_action',
+                  description: 'Propose a Velora app action for the user to review. This function never executes the action.',
+                  parameters: {
+                    type: 'object',
+                    properties: {
+                      action_type: {
+                        type: 'string',
+                        enum: ['open_module', 'review_record', 'draft_customer_update', 'prepare_report', 'update_status', 'delete_record'],
+                      },
+                      module: {
+                        type: 'string',
+                        enum: ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center'],
+                      },
+                      title: { type: 'string' },
+                      description: { type: 'string' },
+                      record_id: { type: 'string' },
+                      destructive: { type: 'boolean' },
+                    },
+                    required: ['action_type', 'module', 'title', 'description', 'record_id', 'destructive'],
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            maxOutputTokens: 900,
+            temperature: 0.3,
+          },
+        }),
+      },
+    );
 
-    const openAiData = await openAiResponse.json();
-    if (!openAiResponse.ok) {
-      console.error('OpenAI Responses API error', openAiResponse.status, openAiData?.error?.code);
-      return jsonResponse({ error: openAiData?.error?.message || 'The AI service could not complete this request.' }, 502);
+    const geminiData = await geminiResponse.json();
+    if (!geminiResponse.ok) {
+      console.error('Gemini API error', geminiResponse.status, geminiData?.error?.status);
+      return jsonResponse({ error: geminiData?.error?.message || 'The AI service could not complete this request.' }, 502);
     }
 
-    const actions = extractActions(openAiData, role);
-    const answer = extractResponseText(openAiData)
+    const actions = extractActions(geminiData, role);
+    const answer = extractResponseText(geminiData)
       || (actions.length
         ? 'I prepared the suggested actions below for your review.'
         : 'I could not produce a summary from the available authorized context.');
