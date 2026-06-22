@@ -21,6 +21,8 @@ export function buildSearchIndex({
   logisticsPartners = [],
   procurementRequests = [],
   suppliers = [],
+  financeRecords = [],
+  documents = [],
 }) {
   return [
     ...vehicles.map((item) => searchDocument(
@@ -78,6 +80,20 @@ export function buildSearchIndex({
       item.supplierName,
       `${item.country || 'No country'} - ${item.email || 'No email'}`,
       [item.contactPerson, item.phone],
+    )),
+    ...financeRecords.map((item) => searchDocument(
+      'Finance',
+      'Finance',
+      `Finance record ${item.id}`,
+      `${item.paymentStatus} - ${item.invoiceStatus}`,
+      [item.orderId, item.customerId, item.notes],
+    )),
+    ...documents.map((item) => searchDocument(
+      'Document',
+      'Documents',
+      item.fileName,
+      `${item.category} - ${item.linkedModule || 'General'}`,
+      [item.linkedRecordId, item.notes],
     )),
     searchDocument('Report', 'Reports', 'Business reports', 'Revenue, profit, freight, and inventory exports'),
     searchDocument('Audit', 'Audit Logs', 'Audit logs', 'Operational record activity'),

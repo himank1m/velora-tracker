@@ -1,5 +1,23 @@
 # Velora Tracker
 
+## Velora OS Phase 2 setup
+
+Phase 2 adds the Finance & Profit Center, Document Vault, CRM profile fields,
+shipment events, and vehicle lifecycle history without removing or renaming any
+existing records.
+
+1. Open the Supabase SQL editor for the project.
+2. Run [`supabase/phase2-enterprise-core.sql`](supabase/phase2-enterprise-core.sql).
+3. Reload Velora Tracker and confirm the compatibility-mode notice disappears.
+
+The migration is additive: it uses `create table if not exists`, `add column if
+not exists`, safe indexes, RLS policies, and triggers. It does not drop or
+truncate existing tables.
+
+The Document Vault uses the private `velora-documents` Supabase Storage bucket
+created by the same migration. Accepted files are PDF, PNG, JPG, CSV, and DOCX,
+with a 10 MB limit.
+
 Velora Tracker is a Vite React application for Velora Motors operations. The same React codebase supports the production website, a Capacitor Android app, and a Tauri Windows desktop app.
 
 ## Website Build

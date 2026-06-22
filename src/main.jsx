@@ -18,8 +18,12 @@ import {
   ChevronRight,
   ClipboardList,
   Command,
+  Contact,
+  CircleDollarSign,
   Download,
+  ExternalLink,
   FileText,
+  FolderLock,
   Gauge,
   Laptop,
   LayoutDashboard,
@@ -61,6 +65,11 @@ import {
   subscribeToHealthEvents,
 } from './lib/appHealth';
 import { buildSearchIndex, searchIndex } from './services/searchService';
+import {
+  buildEnterpriseSummary,
+  calculateFinanceRecord,
+  projectOrderFinance,
+} from './services/enterpriseService';
 import './styles.css';
 
 installGlobalHealthListeners();
@@ -197,6 +206,19 @@ const blankVehicle = {
   purchasePrice: 0,
   sellingPrice: 0,
   status: 'Available',
+  lifecycleStatus: 'In Inventory',
+  variant: '',
+  vin: '',
+  engineNumber: '',
+  color: '',
+  modelYear: '',
+  supplierId: '',
+  linkedProcurementId: '',
+  linkedOrderId: '',
+  linkedShipmentId: '',
+  arrivalDate: '',
+  deliveryDate: '',
+  notes: '',
   locationName: 'Seoul HQ',
   department: 'Inventory',
 };
@@ -235,6 +257,16 @@ const blankCustomer = {
   phone: '',
   email: '',
   location: '',
+  customerType: 'Company',
+  country: '',
+  city: '',
+  contactPerson: '',
+  address: '',
+  preferredVehicleTypes: '',
+  preferredShippingMethod: '',
+  customerRating: 'B',
+  paymentReliabilityScore: 75,
+  active: true,
   notes: '',
   department: 'Sales',
 };
@@ -246,12 +278,21 @@ const blankShipment = {
   vehicle: '',
   quantity: 1,
   destinationCountry: '',
+  destinationCity: '',
+  originCountry: '',
+  originCity: '',
   portOfDeparture: '',
   portOfArrival: '',
   shippingCompany: '',
+  carrierId: '',
+  shippingMode: 'Sea',
   freightCost: 0,
   eta: today,
-  status: 'Preparing',
+  actualDeliveryDate: '',
+  customsStatus: 'Not Started',
+  delayReason: '',
+  trackingReference: '',
+  status: 'Planning',
   notes: '',
   locationName: 'Port Operations Office',
   department: 'Logistics',
@@ -263,11 +304,21 @@ const blankProcurementRequest = {
   vehicleModel: '',
   quantity: 1,
   supplierName: '',
+  supplierId: '',
   supplierCountry: '',
   estimatedPurchaseCost: 0,
   estimatedFreightCost: 0,
+  itemType: 'Vehicle',
+  unitBuyPrice: 0,
+  approvedPurchaseAmount: 0,
+  currency: 'INR',
+  linkedOrderId: '',
+  expectedDeliveryDate: '',
+  actualDeliveryDate: '',
+  paymentStatus: 'Unpaid',
+  priority: 'Medium',
   requestedBy: '',
-  status: 'Requested',
+  status: 'Draft',
   notes: '',
 };
 
@@ -277,6 +328,10 @@ const blankSupplier = {
   contactPerson: '',
   phone: '',
   email: '',
+  rating: '',
+  onTimeDeliveryRate: '',
+  totalOrders: 0,
+  lastActivityAt: '',
   notes: '',
 };
 
@@ -290,23 +345,58 @@ const blankLogisticsPartner = {
   notes: '',
 };
 
+const blankFinanceRecord = {
+  id: '',
+  orderId: '',
+  customerId: '',
+  totalSaleAmount: 0,
+  vehicleCost: 0,
+  procurementCost: 0,
+  freightCost: 0,
+  taxDutyCost: 0,
+  otherCost: 0,
+  amountPaid: 0,
+  paymentStatus: 'Unpaid',
+  invoiceStatus: 'Not Generated',
+  dueDate: '',
+  notes: '',
+};
+
+const blankDocument = {
+  file: null,
+  category: 'Other',
+  linkedModule: '',
+  linkedRecordId: '',
+  notes: '',
+};
+
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
+const vehicleLifecycleStatuses = ['Planned', 'Procured', 'In Transit to Velora', 'In Inventory', 'Reserved', 'Sold', 'Assigned to Shipment', 'Shipped', 'Delivered', 'Archived'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
 const quoteStatuses = ['Draft', 'Sent', 'Accepted', 'Rejected', 'Expired'];
-const shipmentStatuses = ['Preparing', 'At Port', 'Loaded', 'In Transit', 'Customs Clearance', 'Delivered'];
-const procurementStatuses = ['Requested', 'Supplier Identified', 'Negotiation', 'Approved', 'Purchased', 'In Transit', 'Arrived', 'Added To Inventory'];
+const shipmentStatuses = ['Planning', 'Booked', 'Awaiting Pickup', 'In Transit', 'At Port', 'Customs Clearance', 'Out for Delivery', 'Delivered', 'Delayed', 'Cancelled', 'Preparing', 'Loaded'];
+const procurementStatuses = ['Draft', 'Pending Approval', 'Approved', 'Ordered', 'In Transit', 'Received', 'Delayed', 'Cancelled', 'Requested', 'Supplier Identified', 'Negotiation', 'Purchased', 'Arrived', 'Added To Inventory'];
+const procurementPriorities = ['Low', 'Medium', 'High', 'Critical'];
+const paymentStatuses = ['Unpaid', 'Partially Paid', 'Paid', 'Overdue', 'Refunded', 'Cancelled'];
+const invoiceStatuses = ['Not Generated', 'Draft', 'Sent', 'Paid', 'Cancelled'];
+const customerTypes = ['Individual', 'Company', 'Government', 'Dealer', 'Logistics Partner'];
+const customerRatings = ['A+', 'A', 'B', 'C', 'Risk'];
+const shippingModes = ['Road', 'Sea', 'Air', 'Rail', 'Internal Velora Logistics'];
+const customsStatuses = ['Not Started', 'Documents Pending', 'Submitted', 'Under Review', 'Cleared', 'Held'];
+const documentCategories = ['Invoice', 'Supplier Bill', 'Shipping Document', 'Customs Document', 'Insurance', 'Contract', 'Delivery Proof', 'Vehicle Certificate', 'Payment Receipt', 'Other'];
 const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
 const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
 const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
-  { label: 'Intelligence', pages: ['Reports', 'Alerts Center'] },
+  { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center'] },
+  { label: 'Knowledge', pages: ['Documents'] },
   { label: 'System', pages: ['Audit Logs'] },
 ];
 const navIcons = {
@@ -317,6 +407,8 @@ const navIcons = {
   Quotes: FileText,
   Customers: Users,
   Shipments: Truck,
+  Finance: CircleDollarSign,
+  Documents: FolderLock,
   Timeline: TimelineIcon,
   Reports: FileText,
   'Alerts Center': Bell,
@@ -347,7 +439,11 @@ function orderProfit(order) {
 }
 
 function procurementValue(request) {
-  return (numberValue(request.estimatedPurchaseCost) + numberValue(request.estimatedFreightCost)) * numberValue(request.quantity);
+  const quantity = Math.max(numberValue(request.quantity), 1);
+  const approved = numberValue(request.approvedPurchaseAmount);
+  const unitCost = numberValue(request.unitBuyPrice || request.estimatedPurchaseCost);
+  const purchaseTotal = approved || unitCost * quantity;
+  return purchaseTotal + numberValue(request.estimatedFreightCost);
 }
 
 function matchesSearch(record, query) {
@@ -457,7 +553,7 @@ function useConfirm() {
 
 function groupTimelineRows(events) {
   return events.reduce((groups, event) => {
-    const key = event.orderId || event.procurementId;
+    const key = event.orderId || event.procurementId || event.recordId;
     return {
       ...groups,
       [key]: [...(groups[key] || []), event],
@@ -1060,14 +1156,27 @@ function fromVehicleRow(row) {
     purchasePrice: Number(row.purchase_price),
     sellingPrice: Number(row.selling_price),
     status: row.status,
+    lifecycleStatus: row.lifecycle_status || (row.status === 'Sold' ? 'Sold' : 'In Inventory'),
+    variant: row.variant || '',
+    vin: row.vin || '',
+    engineNumber: row.engine_number || '',
+    color: row.color || '',
+    modelYear: row.model_year || '',
+    supplierId: row.supplier_id || '',
+    linkedProcurementId: row.linked_procurement_id || '',
+    linkedOrderId: row.linked_order_id || '',
+    linkedShipmentId: row.linked_shipment_id || '',
+    arrivalDate: row.arrival_date || '',
+    deliveryDate: row.delivery_date || '',
+    notes: row.notes || '',
     locationName: row.location_name || 'Seoul HQ',
     department: row.department || 'Inventory',
     createdAt: row.created_at,
   };
 }
 
-function toVehicleRow(vehicle, userId) {
-  return {
+function toVehicleRow(vehicle, userId, includeEnterprise = true) {
+  const row = {
     id: vehicle.id,
     brand: vehicle.brand,
     model: vehicle.model,
@@ -1080,6 +1189,22 @@ function toVehicleRow(vehicle, userId) {
     department: vehicle.department,
     ...(userId ? { created_by: userId } : {}),
   };
+  if (includeEnterprise) Object.assign(row, {
+    lifecycle_status: vehicle.lifecycleStatus,
+    variant: vehicle.variant,
+    vin: vehicle.vin,
+    engine_number: vehicle.engineNumber,
+    color: vehicle.color,
+    model_year: vehicle.modelYear ? numberValue(vehicle.modelYear) : null,
+    supplier_id: vehicle.supplierId || null,
+    linked_procurement_id: vehicle.linkedProcurementId || null,
+    linked_order_id: vehicle.linkedOrderId || null,
+    linked_shipment_id: vehicle.linkedShipmentId || null,
+    arrival_date: vehicle.arrivalDate || null,
+    delivery_date: vehicle.deliveryDate || null,
+    notes: vehicle.notes,
+  });
+  return row;
 }
 
 function fromOrderRow(row) {
@@ -1177,14 +1302,24 @@ function fromCustomerRow(row) {
     phone: row.phone || '',
     email: row.email || '',
     location: row.location || '',
+    customerType: row.customer_type || 'Company',
+    country: row.country || '',
+    city: row.city || '',
+    contactPerson: row.contact_person || '',
+    address: row.address || '',
+    preferredVehicleTypes: row.preferred_vehicle_types || '',
+    preferredShippingMethod: row.preferred_shipping_method || '',
+    customerRating: row.customer_rating || 'B',
+    paymentReliabilityScore: Number(row.payment_reliability_score ?? 75),
+    active: row.active !== false,
     notes: row.notes || '',
     department: row.department || 'Sales',
     createdAt: row.created_at,
   };
 }
 
-function toCustomerRow(customer, userId) {
-  return {
+function toCustomerRow(customer, userId, includeEnterprise = true) {
+  const row = {
     id: customer.id,
     name: customer.name,
     phone: customer.phone,
@@ -1194,6 +1329,19 @@ function toCustomerRow(customer, userId) {
     department: customer.department,
     ...(userId ? { created_by: userId } : {}),
   };
+  if (includeEnterprise) Object.assign(row, {
+    customer_type: customer.customerType,
+    country: customer.country,
+    city: customer.city,
+    contact_person: customer.contactPerson,
+    address: customer.address,
+    preferred_vehicle_types: customer.preferredVehicleTypes,
+    preferred_shipping_method: customer.preferredShippingMethod,
+    customer_rating: customer.customerRating,
+    payment_reliability_score: numberValue(customer.paymentReliabilityScore),
+    active: customer.active !== false,
+  });
+  return row;
 }
 
 function fromShipmentRow(row) {
@@ -1203,12 +1351,23 @@ function fromShipmentRow(row) {
     customerName: row.customer_name,
     vehicle: row.vehicle,
     quantity: row.quantity,
+    customerId: row.customer_id || '',
     destinationCountry: row.destination_country,
+    destinationCity: row.destination_city || '',
+    originCountry: row.origin_country || '',
+    originCity: row.origin_city || '',
     portOfDeparture: row.port_of_departure,
     portOfArrival: row.port_of_arrival,
     shippingCompany: row.shipping_company,
+    carrierId: row.carrier_id || '',
+    shippingMode: row.shipping_mode || 'Sea',
     freightCost: Number(row.freight_cost),
     eta: row.eta,
+    actualDeliveryDate: row.actual_delivery_date || '',
+    customsStatus: row.customs_status || 'Not Started',
+    delayReason: row.delay_reason || '',
+    trackingReference: row.tracking_reference || '',
+    deliveryProofPath: row.delivery_proof_path || '',
     status: row.status,
     notes: row.notes || '',
     locationName: row.location_name || 'Port Operations Office',
@@ -1217,10 +1376,10 @@ function fromShipmentRow(row) {
   };
 }
 
-function toShipmentRow(shipment, userId) {
-  return {
+function toShipmentRow(shipment, userId, includeEnterprise = true) {
+  const row = {
     shipment_id: shipment.shipmentId,
-    linked_order_id: shipment.linkedOrderId,
+    linked_order_id: shipment.linkedOrderId || null,
     customer_name: shipment.customerName,
     vehicle: shipment.vehicle,
     quantity: numberValue(shipment.quantity),
@@ -1236,27 +1395,52 @@ function toShipmentRow(shipment, userId) {
     department: shipment.department,
     ...(userId ? { created_by: userId } : {}),
   };
+  if (includeEnterprise) Object.assign(row, {
+    customer_id: shipment.customerId || null,
+    destination_city: shipment.destinationCity,
+    origin_country: shipment.originCountry,
+    origin_city: shipment.originCity,
+    carrier_id: shipment.carrierId || null,
+    shipping_mode: shipment.shippingMode,
+    actual_delivery_date: shipment.actualDeliveryDate || null,
+    customs_status: shipment.customsStatus,
+    delay_reason: shipment.delayReason,
+    tracking_reference: shipment.trackingReference,
+    delivery_proof_path: shipment.deliveryProofPath || null,
+  });
+  return row;
 }
 
 function fromProcurementRow(row) {
-  return {
+  const request = {
     procurementId: row.procurement_id,
     vehicleBrand: row.vehicle_brand,
     vehicleModel: row.vehicle_model,
     quantity: row.quantity,
     supplierName: row.supplier_name || '',
+    supplierId: row.supplier_id || '',
     supplierCountry: row.supplier_country || '',
     estimatedPurchaseCost: Number(row.estimated_purchase_cost),
     estimatedFreightCost: Number(row.estimated_freight_cost),
+    itemType: row.item_type || 'Vehicle',
+    unitBuyPrice: Number(row.unit_buy_price ?? row.estimated_purchase_cost),
+    approvedPurchaseAmount: Number(row.approved_purchase_amount || 0),
+    currency: row.currency || 'INR',
+    linkedOrderId: row.linked_order_id || '',
+    expectedDeliveryDate: row.expected_delivery_date || '',
+    actualDeliveryDate: row.actual_delivery_date || '',
+    paymentStatus: row.payment_status || 'Unpaid',
+    priority: row.priority || 'Medium',
     requestedBy: row.requested_by || '',
     status: row.status || 'Requested',
     notes: row.notes || '',
     createdAt: row.created_at,
   };
+  return { ...request, totalBuyPrice: procurementValue(request) };
 }
 
-function toProcurementRow(request, userId) {
-  return {
+function toProcurementRow(request, userId, includeEnterprise = true) {
+  const row = {
     procurement_id: request.procurementId,
     vehicle_brand: request.vehicleBrand,
     vehicle_model: request.vehicleModel,
@@ -1270,6 +1454,19 @@ function toProcurementRow(request, userId) {
     notes: request.notes,
     ...(userId ? { created_by: userId } : {}),
   };
+  if (includeEnterprise) Object.assign(row, {
+    supplier_id: request.supplierId || null,
+    item_type: request.itemType,
+    unit_buy_price: numberValue(request.unitBuyPrice || request.estimatedPurchaseCost),
+    approved_purchase_amount: numberValue(request.approvedPurchaseAmount),
+    currency: request.currency || 'INR',
+    linked_order_id: request.linkedOrderId || null,
+    expected_delivery_date: request.expectedDeliveryDate || null,
+    actual_delivery_date: request.actualDeliveryDate || null,
+    payment_status: request.paymentStatus,
+    priority: request.priority,
+  });
+  return row;
 }
 
 function fromSupplierRow(row) {
@@ -1280,13 +1477,17 @@ function fromSupplierRow(row) {
     contactPerson: row.contact_person || '',
     phone: row.phone || '',
     email: row.email || '',
+    rating: row.rating ?? '',
+    onTimeDeliveryRate: row.on_time_delivery_rate ?? '',
+    totalOrders: Number(row.total_orders || 0),
+    lastActivityAt: row.last_activity_at || '',
     notes: row.notes || '',
     createdAt: row.created_at,
   };
 }
 
-function toSupplierRow(supplier, userId) {
-  return {
+function toSupplierRow(supplier, userId, includeEnterprise = true) {
+  const row = {
     supplier_name: supplier.supplierName,
     country: supplier.country,
     contact_person: supplier.contactPerson,
@@ -1295,6 +1496,13 @@ function toSupplierRow(supplier, userId) {
     notes: supplier.notes,
     ...(userId ? { created_by: userId } : {}),
   };
+  if (includeEnterprise) Object.assign(row, {
+    rating: supplier.rating === '' ? null : numberValue(supplier.rating),
+    on_time_delivery_rate: supplier.onTimeDeliveryRate === '' ? null : numberValue(supplier.onTimeDeliveryRate),
+    total_orders: numberValue(supplier.totalOrders),
+    last_activity_at: supplier.lastActivityAt || null,
+  });
+  return row;
 }
 
 function fromLogisticsPartnerRow(row) {
@@ -1343,6 +1551,94 @@ function toProcurementTimelineRow(event, userId) {
   };
 }
 
+function fromFinanceRow(row) {
+  return calculateFinanceRecord({
+    id: row.id,
+    orderId: row.order_id || '',
+    customerId: row.customer_id || '',
+    totalSaleAmount: Number(row.total_sale_amount),
+    vehicleCost: Number(row.vehicle_cost),
+    procurementCost: Number(row.procurement_cost),
+    freightCost: Number(row.freight_cost),
+    taxDutyCost: Number(row.tax_duty_cost),
+    otherCost: Number(row.other_cost),
+    amountPaid: Number(row.amount_paid),
+    paymentStatus: row.payment_status || 'Unpaid',
+    invoiceStatus: row.invoice_status || 'Not Generated',
+    dueDate: row.due_date || '',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
+}
+
+function toFinanceRow(record, userId) {
+  return {
+    order_id: record.orderId || null,
+    customer_id: record.customerId || null,
+    total_sale_amount: numberValue(record.totalSaleAmount),
+    vehicle_cost: numberValue(record.vehicleCost),
+    procurement_cost: numberValue(record.procurementCost),
+    freight_cost: numberValue(record.freightCost),
+    tax_duty_cost: numberValue(record.taxDutyCost),
+    other_cost: numberValue(record.otherCost),
+    amount_paid: numberValue(record.amountPaid),
+    payment_status: record.paymentStatus,
+    invoice_status: record.invoiceStatus,
+    due_date: record.dueDate || null,
+    notes: record.notes,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromDocumentRow(row) {
+  return {
+    id: row.id,
+    fileName: row.file_name,
+    fileType: row.file_type || '',
+    fileSize: Number(row.file_size || 0),
+    category: row.category || 'Other',
+    linkedModule: row.linked_module || '',
+    linkedRecordId: row.linked_record_id || '',
+    storagePath: row.storage_path,
+    notes: row.notes || '',
+    uploadedBy: row.uploaded_by,
+    uploadedAt: row.uploaded_at,
+  };
+}
+
+function fromCustomerContactRow(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    fullName: row.full_name,
+    jobTitle: row.job_title || '',
+    email: row.email || '',
+    phone: row.phone || '',
+    isPrimary: Boolean(row.is_primary),
+    createdAt: row.created_at,
+  };
+}
+
+function fromCustomerNoteRow(row) {
+  return {
+    id: row.id,
+    customerId: row.customer_id,
+    note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+function fromOperationalEvent(row, key) {
+  return {
+    id: row.id,
+    recordId: row[key],
+    status: row.status,
+    note: row.note || '',
+    createdAt: row.created_at,
+  };
+}
+
 function userName(user) {
   return user?.user_metadata?.full_name
     || user?.user_metadata?.name
@@ -1360,9 +1656,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages,
-    'Logistics Manager': ['Command Center', 'Shipments', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Command Center', 'Procurement', 'Inventory', 'Alerts Center'],
-    'Finance Manager': ['Command Center', 'Procurement', 'Quotes', 'Reports', 'Alerts Center'],
+    'Logistics Manager': ['Command Center', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Command Center', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+    'Finance Manager': ['Command Center', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -1397,6 +1693,12 @@ function createPermissions(role) {
     canViewReports() {
       return isExecutive || normalizedRole === 'Finance Manager';
     },
+    canManageFinance() {
+      return isExecutive || normalizedRole === 'Finance Manager';
+    },
+    canManageDocuments() {
+      return roleOptions.includes(normalizedRole);
+    },
     canViewFinancials() {
       return isExecutive || normalizedRole === 'Finance Manager';
     },
@@ -1426,6 +1728,7 @@ function buildAiContext({
   shipments,
   procurementRequests,
   alerts,
+  enterpriseSummary,
 }) {
   const generatedAt = new Date().toISOString();
   const activeOrders = orders.filter((order) => order.status !== 'Completed');
@@ -1731,6 +2034,13 @@ function useSupabaseRecords(user, permissions) {
   const [logisticsPartners, setLogisticsPartners] = useState([]);
   const [procurementRequests, setProcurementRequests] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [financeRecords, setFinanceRecords] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [vehicleEvents, setVehicleEvents] = useState({});
+  const [shipmentEvents, setShipmentEvents] = useState({});
+  const [customerContacts, setCustomerContacts] = useState([]);
+  const [customerNotes, setCustomerNotes] = useState([]);
+  const [phase2Ready, setPhase2Ready] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -1767,6 +2077,25 @@ function useSupabaseRecords(user, permissions) {
     return data || [];
   }
 
+  async function runEnterpriseRequest(request, operation) {
+    const { data, error: requestError } = await request;
+    if (requestError) {
+      const message = requestError.message || '';
+      if (requestError.code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) {
+        return { rows: [], available: false };
+      }
+      const friendlyMessage = friendlyError(requestError);
+      setError(friendlyMessage);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message: friendlyMessage,
+        context: { operation, code: requestError.code },
+      });
+      throw requestError;
+    }
+    return { rows: data || [], available: true };
+  }
+
   async function loadRecords() {
     if (!isSupabaseConfigured) {
       setLoading(false);
@@ -1785,6 +2114,13 @@ function useSupabaseRecords(user, permissions) {
       setLogisticsPartners([]);
       setProcurementRequests([]);
       setSuppliers([]);
+      setFinanceRecords([]);
+      setDocuments([]);
+      setVehicleEvents({});
+      setShipmentEvents({});
+      setCustomerContacts([]);
+      setCustomerNotes([]);
+      setPhase2Ready(false);
       setLoading(false);
       setLastUpdated(null);
       return;
@@ -1797,12 +2133,14 @@ function useSupabaseRecords(user, permissions) {
       const readAll = permissions.isExecutive || permissions.role === 'Finance Manager';
       const emptyQuery = Promise.resolve({ data: [], error: null });
       const needsVehicles = permissions.canViewPage('Inventory') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes');
-      const needsOrders = permissions.canViewPage('Orders') || permissions.canViewPage('Timeline') || permissions.canViewPage('Shipments');
+      const needsOrders = permissions.canViewPage('Orders') || permissions.canViewPage('Timeline') || permissions.canViewPage('Shipments') || permissions.canViewPage('Finance');
       const needsQuotes = permissions.canViewPage('Quotes');
-      const needsCustomers = permissions.canViewPage('Customers') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes');
-      const needsShipments = permissions.canViewPage('Shipments');
+      const needsCustomers = permissions.canViewPage('Customers') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes') || permissions.canViewPage('Finance');
+      const needsShipments = permissions.canViewPage('Shipments') || permissions.canViewPage('Finance');
       const needsTimeline = permissions.canViewPage('Timeline') || permissions.canViewPage('Orders');
-      const needsProcurement = permissions.canViewPage('Procurement');
+      const needsProcurement = permissions.canViewPage('Procurement') || permissions.canViewPage('Finance');
+      const needsFinance = permissions.canViewPage('Finance');
+      const needsDocuments = permissions.canViewPage('Documents');
 
       const vehicleQuery = !needsVehicles ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
@@ -1844,8 +2182,21 @@ function useSupabaseRecords(user, permissions) {
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
           ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
           : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+      const financeQuery = needsFinance
+        ? supabase.from('finance_records').select('*').order('created_at', { ascending: false })
+        : supabase.from('finance_records').select('id').limit(1);
+      const documentQuery = !needsDocuments ? emptyQuery
+        : supabase.from('documents').select('*').order('uploaded_at', { ascending: false });
+      const vehicleEventQuery = !needsVehicles ? emptyQuery
+        : supabase.from('vehicle_lifecycle_events').select('*').order('created_at', { ascending: true });
+      const shipmentEventQuery = !needsShipments ? emptyQuery
+        : supabase.from('shipment_events').select('*').order('created_at', { ascending: true });
+      const customerContactQuery = !needsCustomers ? emptyQuery
+        : supabase.from('customer_contacts').select('*').order('created_at', { ascending: true });
+      const customerNoteQuery = !needsCustomers ? emptyQuery
+        : supabase.from('customer_notes').select('*').order('created_at', { ascending: false });
 
-      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
+      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows, financeResult, documentResult, vehicleEventResult, shipmentEventResult, customerContactResult, customerNoteResult] = await Promise.all([
         runRequest(vehicleQuery, 'load vehicles'),
         runRequest(orderQuery, 'load orders'),
         runOptionalRequest(quoteQuery, 'load quotes'),
@@ -1856,6 +2207,12 @@ function useSupabaseRecords(user, permissions) {
         runOptionalRequest(procurementQuery, 'load procurement requests'),
         runOptionalRequest(supplierQuery, 'load suppliers'),
         runOptionalRequest(procurementTimelineQuery, 'load procurement timeline'),
+        runEnterpriseRequest(financeQuery, 'load finance records'),
+        runEnterpriseRequest(documentQuery, 'load documents'),
+        runEnterpriseRequest(vehicleEventQuery, 'load vehicle lifecycle'),
+        runEnterpriseRequest(shipmentEventQuery, 'load shipment timeline'),
+        runEnterpriseRequest(customerContactQuery, 'load customer contacts'),
+        runEnterpriseRequest(customerNoteQuery, 'load customer notes'),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -1868,6 +2225,13 @@ function useSupabaseRecords(user, permissions) {
       setProcurementRequests(procurementRows.map(fromProcurementRow));
       setSuppliers(supplierRows.map(fromSupplierRow));
       setProcurementTimelines(groupTimelineRows(procurementTimelineRows.map(fromProcurementTimelineRow)));
+      setFinanceRecords(needsFinance ? financeResult.rows.map(fromFinanceRow) : []);
+      setDocuments(documentResult.rows.map(fromDocumentRow));
+      setVehicleEvents(groupTimelineRows(vehicleEventResult.rows.map((row) => fromOperationalEvent(row, 'vehicle_id'))));
+      setShipmentEvents(groupTimelineRows(shipmentEventResult.rows.map((row) => fromOperationalEvent(row, 'shipment_id'))));
+      setCustomerContacts(customerContactResult.rows.map(fromCustomerContactRow));
+      setCustomerNotes(customerNoteResult.rows.map(fromCustomerNoteRow));
+      setPhase2Ready(financeResult.available);
       setLastUpdated(new Date());
     } catch (requestError) {
       setError((current) => current || friendlyError(requestError, 'Velora could not load company records.'));
@@ -1882,11 +2246,16 @@ function useSupabaseRecords(user, permissions) {
 
   async function saveVehicle(vehicle, editingId) {
     if (!permissions?.canManageInventory()) throw new Error('Your role cannot manage inventory.');
+    const previous = vehicles.find((item) => item.id === editingId);
     const query = editingId
-      ? supabase.from('vehicles').update(toVehicleRow(vehicle)).eq('id', editingId).select().single()
-      : supabase.from('vehicles').insert(toVehicleRow(vehicle, user.id)).select().single();
+      ? supabase.from('vehicles').update(toVehicleRow(vehicle, null, phase2Ready)).eq('id', editingId).select().single()
+      : supabase.from('vehicles').insert(toVehicleRow(vehicle, user.id, phase2Ready)).select().single();
     const saved = fromVehicleRow(await runRequest(query));
     setVehicles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    if (phase2Ready && (!editingId || previous?.lifecycleStatus !== saved.lifecycleStatus)) {
+      await addVehicleLifecycleEvent(saved.id, saved.lifecycleStatus, editingId ? `Lifecycle moved to ${saved.lifecycleStatus}.` : 'Vehicle record created.');
+    }
+    return saved;
   }
 
   async function deleteVehicle(id) {
@@ -1970,8 +2339,8 @@ function useSupabaseRecords(user, permissions) {
   async function saveCustomer(customer, editingId) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customers.');
     const query = editingId
-      ? supabase.from('customers').update(toCustomerRow(customer)).eq('id', editingId).select().single()
-      : supabase.from('customers').insert(toCustomerRow(customer, user.id)).select().single();
+      ? supabase.from('customers').update(toCustomerRow(customer, null, phase2Ready)).eq('id', editingId).select().single()
+      : supabase.from('customers').insert(toCustomerRow(customer, user.id, phase2Ready)).select().single();
     const saved = fromCustomerRow(await runRequest(query));
     setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
@@ -1984,11 +2353,17 @@ function useSupabaseRecords(user, permissions) {
 
   async function saveShipment(shipment, editingId) {
     if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage shipments.');
+    const linkedCustomer = customers.find((customer) => customer.name.trim().toLowerCase() === shipment.customerName.trim().toLowerCase());
+    const shipmentToSave = { ...shipment, customerId: shipment.customerId || linkedCustomer?.id || '' };
     const query = editingId
-      ? supabase.from('shipments').update(toShipmentRow(shipment)).eq('shipment_id', editingId).select().single()
-      : supabase.from('shipments').insert(toShipmentRow(shipment, user.id)).select().single();
+      ? supabase.from('shipments').update(toShipmentRow(shipmentToSave, null, phase2Ready)).eq('shipment_id', editingId).select().single()
+      : supabase.from('shipments').insert(toShipmentRow(shipmentToSave, user.id, phase2Ready)).select().single();
     const saved = fromShipmentRow(await runRequest(query));
+    const previous = shipments.find((item) => item.shipmentId === editingId);
     setShipments((current) => editingId ? current.map((item) => item.shipmentId === editingId ? saved : item) : [saved, ...current]);
+    if (phase2Ready && (!editingId || previous?.status !== saved.status)) {
+      await addShipmentEvent(saved.shipmentId, saved.status, editingId ? `Status changed to ${saved.status}.` : 'Shipment created.');
+    }
     return saved;
   }
 
@@ -2022,6 +2397,9 @@ function useSupabaseRecords(user, permissions) {
         quantity: numberValue(existing.quantity) + numberValue(request.quantity),
         purchasePrice: request.estimatedPurchaseCost || existing.purchasePrice,
         status: 'Available',
+        lifecycleStatus: 'In Inventory',
+        linkedProcurementId: request.procurementId,
+        arrivalDate: request.actualDeliveryDate || existing.arrivalDate || today,
       };
       await saveVehicle(updated, existing.id);
       return;
@@ -2037,6 +2415,10 @@ function useSupabaseRecords(user, permissions) {
       purchasePrice: numberValue(request.estimatedPurchaseCost),
       sellingPrice: numberValue(request.estimatedPurchaseCost),
       status: 'Available',
+      lifecycleStatus: 'In Inventory',
+      linkedProcurementId: request.procurementId,
+      arrivalDate: request.actualDeliveryDate || today,
+      supplierId: request.supplierId || '',
     };
     await saveVehicle(newVehicle, '');
   }
@@ -2064,8 +2446,8 @@ function useSupabaseRecords(user, permissions) {
     };
     const previous = procurementRequests.find((item) => item.procurementId === editingId);
     const query = editingId
-      ? supabase.from('procurement_requests').update(toProcurementRow(requestToSave)).eq('procurement_id', editingId).select().single()
-      : supabase.from('procurement_requests').insert(toProcurementRow(requestToSave, user.id)).select().single();
+      ? supabase.from('procurement_requests').update(toProcurementRow(requestToSave, null, phase2Ready)).eq('procurement_id', editingId).select().single()
+      : supabase.from('procurement_requests').insert(toProcurementRow(requestToSave, user.id, phase2Ready)).select().single();
     const saved = fromProcurementRow(await runRequest(query));
     setProcurementRequests((current) => editingId ? current.map((item) => item.procurementId === editingId ? saved : item) : [saved, ...current]);
 
@@ -2075,7 +2457,8 @@ function useSupabaseRecords(user, permissions) {
       await addProcurementTimelineEvent(saved.procurementId, saved.status, `Status changed to ${saved.status}.`);
     }
 
-    if (saved.status === 'Added To Inventory' && previous?.status !== 'Added To Inventory') {
+    const inventoryStatuses = ['Received', 'Added To Inventory'];
+    if (inventoryStatuses.includes(saved.status) && !inventoryStatuses.includes(previous?.status)) {
       await syncProcurementToInventory(saved);
     }
   }
@@ -2094,8 +2477,8 @@ function useSupabaseRecords(user, permissions) {
   async function saveSupplier(supplier, editingId) {
     if (!permissions?.canManageProcurement()) throw new Error('Your role cannot manage suppliers.');
     const query = editingId
-      ? supabase.from('suppliers').update(toSupplierRow(supplier)).eq('id', editingId).select().single()
-      : supabase.from('suppliers').insert(toSupplierRow(supplier, user.id)).select().single();
+      ? supabase.from('suppliers').update(toSupplierRow(supplier, null, phase2Ready)).eq('id', editingId).select().single()
+      : supabase.from('suppliers').insert(toSupplierRow(supplier, user.id, phase2Ready)).select().single();
     const saved = fromSupplierRow(await runRequest(query));
     setSuppliers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
@@ -2104,6 +2487,157 @@ function useSupabaseRecords(user, permissions) {
     if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete suppliers.');
     await runRequest(supabase.from('suppliers').delete().eq('id', id));
     setSuppliers((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function addVehicleLifecycleEvent(vehicleId, status, note) {
+    if (!phase2Ready) return;
+    const saved = fromOperationalEvent(await runRequest(
+      supabase
+        .from('vehicle_lifecycle_events')
+        .insert({ vehicle_id: vehicleId, status, note, created_by: user.id })
+        .select()
+        .single(),
+      'add vehicle lifecycle event',
+    ), 'vehicle_id');
+    setVehicleEvents((current) => ({
+      ...current,
+      [vehicleId]: [...(current[vehicleId] || []), saved],
+    }));
+  }
+
+  async function addShipmentEvent(shipmentId, status, note) {
+    if (!phase2Ready) return;
+    const saved = fromOperationalEvent(await runRequest(
+      supabase
+        .from('shipment_events')
+        .insert({ shipment_id: shipmentId, status, note, created_by: user.id })
+        .select()
+        .single(),
+      'add shipment event',
+    ), 'shipment_id');
+    setShipmentEvents((current) => ({
+      ...current,
+      [shipmentId]: [...(current[shipmentId] || []), saved],
+    }));
+  }
+
+  async function saveFinanceRecord(record, editingId) {
+    if (!permissions?.canManageFinance()) throw new Error('Your role cannot manage finance records.');
+    if (!phase2Ready) throw new Error('Install the Phase 2 Supabase migration before creating finance records.');
+    const query = editingId
+      ? supabase.from('finance_records').update(toFinanceRow(record)).eq('id', editingId).select().single()
+      : supabase.from('finance_records').insert(toFinanceRow(record, user.id)).select().single();
+    const saved = fromFinanceRow(await runRequest(query, 'save finance record'));
+    setFinanceRecords((current) => editingId
+      ? current.map((item) => item.id === editingId ? saved : item)
+      : [saved, ...current]);
+    return saved;
+  }
+
+  async function deleteFinanceRecord(id) {
+    if (!permissions?.canManageFinance()) throw new Error('Your role cannot delete finance records.');
+    await runRequest(supabase.from('finance_records').delete().eq('id', id), 'delete finance record');
+    setFinanceRecords((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function uploadDocument(documentInput) {
+    if (!permissions?.canManageDocuments()) throw new Error('Your role cannot upload documents.');
+    if (!phase2Ready) throw new Error('Install the Phase 2 Supabase migration before uploading documents.');
+    const file = documentInput.file;
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'text/csv', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (!file) throw new Error('Choose a document to upload.');
+    if (!allowedTypes.includes(file.type)) throw new Error('Use PDF, PNG, JPG, CSV, or DOCX files.');
+    if (file.size > 10 * 1024 * 1024) throw new Error('Documents must be 10 MB or smaller.');
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const storagePath = `${user.id}/${Date.now()}-${safeName}`;
+    await runRequest(
+      supabase.storage.from('velora-documents').upload(storagePath, file, { upsert: false }),
+      'upload document file',
+    );
+    try {
+      const saved = fromDocumentRow(await runRequest(
+        supabase.from('documents').insert({
+          file_name: file.name,
+          file_type: file.type,
+          file_size: file.size,
+          category: documentInput.category,
+          linked_module: documentInput.linkedModule || null,
+          linked_record_id: documentInput.linkedRecordId || null,
+          storage_path: storagePath,
+          notes: documentInput.notes,
+          uploaded_by: user.id,
+        }).select().single(),
+        'save document metadata',
+      ));
+      setDocuments((current) => [saved, ...current]);
+      return saved;
+    } catch (metadataError) {
+      await supabase.storage.from('velora-documents').remove([storagePath]);
+      throw metadataError;
+    }
+  }
+
+  async function openDocument(documentRecord) {
+    const { data, error: signedUrlError } = await supabase.storage
+      .from('velora-documents')
+      .createSignedUrl(documentRecord.storagePath, 60);
+    if (signedUrlError) {
+      const message = friendlyError(signedUrlError, 'Velora could not open this document.');
+      setError(message);
+      recordHealthEvent({ type: 'document-storage', message });
+      throw signedUrlError;
+    }
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+  }
+
+  async function deleteDocument(id) {
+    if (!permissions?.canManageDocuments()) throw new Error('Your role cannot delete documents.');
+    const documentRecord = documents.find((item) => item.id === id);
+    if (!documentRecord) return;
+    await runRequest(supabase.storage.from('velora-documents').remove([documentRecord.storagePath]), 'delete document file');
+    await runRequest(supabase.from('documents').delete().eq('id', id), 'delete document metadata');
+    setDocuments((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveCustomerContact(contact) {
+    if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customer contacts.');
+    const saved = fromCustomerContactRow(await runRequest(
+      supabase.from('customer_contacts').insert({
+        customer_id: contact.customerId,
+        full_name: contact.fullName,
+        job_title: contact.jobTitle,
+        email: contact.email,
+        phone: contact.phone,
+        is_primary: Boolean(contact.isPrimary),
+        created_by: user.id,
+      }).select().single(),
+      'save customer contact',
+    ));
+    setCustomerContacts((current) => [...current, saved]);
+    return saved;
+  }
+
+  async function deleteCustomerContact(id) {
+    if (!permissions?.canManageCustomers()) throw new Error('Your role cannot delete customer contacts.');
+    await runRequest(supabase.from('customer_contacts').delete().eq('id', id), 'delete customer contact');
+    setCustomerContacts((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function addCustomerNote(customerId, note) {
+    if (!permissions?.canManageCustomers()) throw new Error('Your role cannot add customer notes.');
+    const saved = fromCustomerNoteRow(await runRequest(
+      supabase.from('customer_notes').insert({ customer_id: customerId, note, created_by: user.id }).select().single(),
+      'add customer note',
+    ));
+    setCustomerNotes((current) => [saved, ...current]);
+    return saved;
+  }
+
+  async function deleteCustomerNote(id) {
+    if (!permissions?.canManageCustomers()) throw new Error('Your role cannot delete customer notes.');
+    await runRequest(supabase.from('customer_notes').delete().eq('id', id), 'delete customer note');
+    setCustomerNotes((current) => current.filter((item) => item.id !== id));
   }
 
   return {
@@ -2117,6 +2651,13 @@ function useSupabaseRecords(user, permissions) {
     logisticsPartners,
     procurementRequests,
     suppliers,
+    financeRecords,
+    documents,
+    vehicleEvents,
+    shipmentEvents,
+    customerContacts,
+    customerNotes,
+    phase2Ready,
     loading,
     error,
     lastUpdated,
@@ -2140,6 +2681,15 @@ function useSupabaseRecords(user, permissions) {
     addProcurementTimelineNote,
     saveSupplier,
     deleteSupplier,
+    saveFinanceRecord,
+    deleteFinanceRecord,
+    uploadDocument,
+    openDocument,
+    deleteDocument,
+    saveCustomerContact,
+    deleteCustomerContact,
+    addCustomerNote,
+    deleteCustomerNote,
   };
 }
 
@@ -2182,6 +2732,18 @@ function EmptyState({ label, icon: Icon = Search }) {
       <strong>{label}</strong>
       <span>Try adjusting filters or add a new record to keep operations moving.</span>
     </div>
+  );
+}
+
+function Phase2SetupState({ moduleName }) {
+  return (
+    <section className="setup-state">
+      <span><FolderLock size={26} /></span>
+      <p className="eyebrow">Database setup required</p>
+      <h2>{moduleName} is ready to activate</h2>
+      <p>Run the safe Phase 2 migration in the Supabase SQL editor. Existing records are preserved and no tables are dropped.</p>
+      <code>supabase/phase2-enterprise-core.sql</code>
+    </section>
   );
 }
 
@@ -2385,7 +2947,7 @@ function DepartmentShortcuts({ setActivePage, alerts, totals }) {
     { name: 'Sales', page: 'Orders', icon: ClipboardList, text: 'Orders and customer movement', stat: totals.activeOrders, statLabel: 'active orders' },
     { name: 'Inventory', page: 'Inventory', icon: Warehouse, text: 'Vehicle stock and value', stat: formatIndianNumber(totals.inventory), statLabel: 'units in stock' },
     { name: 'Logistics', page: 'Shipments', icon: Truck, text: 'Freight and delivery workflow', stat: totals.activeShipments, statLabel: 'active shipments' },
-    { name: 'Finance', page: 'Reports', icon: BarChart3, text: 'Revenue, profit, and exports', stat: money.format(totals.profit), statLabel: 'total profit' },
+    { name: 'Finance', page: 'Finance', icon: BarChart3, text: 'Revenue, profit, and payments', stat: money.format(totals.profit), statLabel: 'order profit' },
     { name: 'Management', page: 'Audit Logs', icon: ShieldCheck, text: 'Activity and control view', stat: alerts.length, statLabel: 'open alerts' },
   ];
 
@@ -2506,6 +3068,8 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Create Order', page: 'Orders', icon: ClipboardList },
     { label: 'Create Quote', page: 'Quotes', icon: FileText },
     { label: 'Create Shipment', page: 'Shipments', icon: Truck },
+    { label: 'Open Finance', page: 'Finance', icon: CircleDollarSign },
+    { label: 'Open Document Vault', page: 'Documents', icon: FolderLock },
     { label: 'Open Reports', page: 'Reports', icon: FileText },
     { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
     { label: 'Open Command Center', page: 'Command Center', icon: LayoutDashboard },
@@ -2608,6 +3172,9 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
       <Field label="Model">
         <input value={value.model} onChange={(e) => onChange({ ...value, model: e.target.value })} required />
       </Field>
+      <Field label="Variant">
+        <input value={value.variant} onChange={(e) => onChange({ ...value, variant: e.target.value })} />
+      </Field>
       <Field label="Category">
         <input value={value.category} onChange={(e) => onChange({ ...value, category: e.target.value })} required />
       </Field>
@@ -2627,10 +3194,36 @@ function VehicleForm({ value, onChange, onSubmit, editingId, onCancel }) {
           ))}
         </select>
       </Field>
+      <Field label="Lifecycle Stage">
+        <select value={value.lifecycleStatus} onChange={(e) => onChange({ ...value, lifecycleStatus: e.target.value })}>
+          {vehicleLifecycleStatuses.map((status) => <option key={status}>{status}</option>)}
+        </select>
+      </Field>
+      <Field label="VIN / Chassis Number">
+        <input value={value.vin} onChange={(e) => onChange({ ...value, vin: e.target.value })} />
+      </Field>
+      <Field label="Engine Number">
+        <input value={value.engineNumber} onChange={(e) => onChange({ ...value, engineNumber: e.target.value })} />
+      </Field>
+      <Field label="Color">
+        <input value={value.color} onChange={(e) => onChange({ ...value, color: e.target.value })} />
+      </Field>
+      <Field label="Model Year">
+        <input type="number" min="1900" max="2100" value={value.modelYear} onChange={(e) => onChange({ ...value, modelYear: e.target.value })} />
+      </Field>
+      <Field label="Arrival Date">
+        <input type="date" value={value.arrivalDate} onChange={(e) => onChange({ ...value, arrivalDate: e.target.value })} />
+      </Field>
+      <Field label="Delivery Date">
+        <input type="date" value={value.deliveryDate} onChange={(e) => onChange({ ...value, deliveryDate: e.target.value })} />
+      </Field>
       <Field label="Location">
         <select value={value.locationName} onChange={(e) => onChange({ ...value, locationName: e.target.value })}>
           {locationOptions.map((location) => <option key={location}>{location}</option>)}
         </select>
+      </Field>
+      <Field label="Lifecycle Notes">
+        <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
       </Field>
       <div className="form-actions">
         <button type="submit">{editingId ? 'Save vehicle' : 'Add vehicle'}</button>
@@ -2814,11 +3407,54 @@ function CustomerForm({ value, onChange, onSubmit, editingId, onCancel }) {
       <Field label="Phone">
         <input value={value.phone} onChange={(e) => onChange({ ...value, phone: e.target.value })} />
       </Field>
+      <Field label="Customer Type">
+        <select value={value.customerType} onChange={(e) => onChange({ ...value, customerType: e.target.value })}>
+          {customerTypes.map((type) => <option key={type}>{type}</option>)}
+        </select>
+      </Field>
+      <Field label="Contact Person">
+        <input value={value.contactPerson} onChange={(e) => onChange({ ...value, contactPerson: e.target.value })} />
+      </Field>
       <Field label="Email">
         <input type="email" value={value.email} onChange={(e) => onChange({ ...value, email: e.target.value })} />
       </Field>
+      <Field label="Supplier Rating (0-5)">
+        <input type="number" min="0" max="5" step="0.1" value={value.rating} onChange={(e) => onChange({ ...value, rating: e.target.value })} />
+      </Field>
+      <Field label="On-time Delivery %">
+        <input type="number" min="0" max="100" value={value.onTimeDeliveryRate} onChange={(e) => onChange({ ...value, onTimeDeliveryRate: e.target.value })} />
+      </Field>
       <Field label="Country / City">
         <input value={value.location} onChange={(e) => onChange({ ...value, location: e.target.value })} />
+      </Field>
+      <Field label="Country">
+        <input value={value.country} onChange={(e) => onChange({ ...value, country: e.target.value })} />
+      </Field>
+      <Field label="City">
+        <input value={value.city} onChange={(e) => onChange({ ...value, city: e.target.value })} />
+      </Field>
+      <Field label="Address">
+        <input value={value.address} onChange={(e) => onChange({ ...value, address: e.target.value })} />
+      </Field>
+      <Field label="Preferred Vehicles">
+        <input value={value.preferredVehicleTypes} onChange={(e) => onChange({ ...value, preferredVehicleTypes: e.target.value })} />
+      </Field>
+      <Field label="Preferred Shipping">
+        <input value={value.preferredShippingMethod} onChange={(e) => onChange({ ...value, preferredShippingMethod: e.target.value })} />
+      </Field>
+      <Field label="Customer Rating">
+        <select value={value.customerRating} onChange={(e) => onChange({ ...value, customerRating: e.target.value })}>
+          {customerRatings.map((rating) => <option key={rating}>{rating}</option>)}
+        </select>
+      </Field>
+      <Field label="Payment Reliability">
+        <input type="number" min="0" max="100" value={value.paymentReliabilityScore} onChange={(e) => onChange({ ...value, paymentReliabilityScore: e.target.value })} />
+      </Field>
+      <Field label="Account Status">
+        <select value={value.active ? 'Active' : 'Inactive'} onChange={(e) => onChange({ ...value, active: e.target.value === 'Active' })}>
+          <option>Active</option>
+          <option>Inactive</option>
+        </select>
       </Field>
       <Field label="Notes">
         <textarea value={value.notes} onChange={(e) => onChange({ ...value, notes: e.target.value })} />
@@ -2850,6 +3486,11 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
     });
   }
 
+  function applyCarrier(name) {
+    const carrier = logisticsPartners.find((item) => item.partnerName === name);
+    onChange({ ...value, shippingCompany: name, carrierId: carrier?.id || '' });
+  }
+
   return (
     <form className="entry-form shipment-form" onSubmit={onSubmit}>
       <Field label="Shipment ID">
@@ -2875,6 +3516,15 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
       <Field label="Destination Country">
         <input value={value.destinationCountry} onChange={(e) => onChange({ ...value, destinationCountry: e.target.value })} required />
       </Field>
+      <Field label="Destination City">
+        <input value={value.destinationCity} onChange={(e) => onChange({ ...value, destinationCity: e.target.value })} />
+      </Field>
+      <Field label="Origin Country">
+        <input value={value.originCountry} onChange={(e) => onChange({ ...value, originCountry: e.target.value })} />
+      </Field>
+      <Field label="Origin City">
+        <input value={value.originCity} onChange={(e) => onChange({ ...value, originCity: e.target.value })} />
+      </Field>
       <Field label="Port of Departure">
         <input value={value.portOfDeparture} onChange={(e) => onChange({ ...value, portOfDeparture: e.target.value })} />
       </Field>
@@ -2882,16 +3532,35 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
         <input value={value.portOfArrival} onChange={(e) => onChange({ ...value, portOfArrival: e.target.value })} />
       </Field>
       <Field label="Shipping Company">
-        <input list="logistics-partner-list" value={value.shippingCompany} onChange={(e) => onChange({ ...value, shippingCompany: e.target.value })} />
+        <input list="logistics-partner-list" value={value.shippingCompany} onChange={(e) => applyCarrier(e.target.value)} />
         <datalist id="logistics-partner-list">
           {logisticsPartners.map((partner) => <option key={partner.id} value={partner.partnerName} />)}
         </datalist>
+      </Field>
+      <Field label="Shipping Mode">
+        <select value={value.shippingMode} onChange={(e) => onChange({ ...value, shippingMode: e.target.value })}>
+          {shippingModes.map((mode) => <option key={mode}>{mode}</option>)}
+        </select>
+      </Field>
+      <Field label="Tracking Reference">
+        <input value={value.trackingReference} onChange={(e) => onChange({ ...value, trackingReference: e.target.value })} />
       </Field>
       <Field label="Freight Cost">
         <FormattedNumberInput value={value.freightCost} onChange={(nextValue) => onChange({ ...value, freightCost: nextValue })} />
       </Field>
       <Field label="ETA">
         <input type="date" value={value.eta} onChange={(e) => onChange({ ...value, eta: e.target.value })} />
+      </Field>
+      <Field label="Actual Delivery Date">
+        <input type="date" value={value.actualDeliveryDate} onChange={(e) => onChange({ ...value, actualDeliveryDate: e.target.value })} />
+      </Field>
+      <Field label="Customs Status">
+        <select value={value.customsStatus} onChange={(e) => onChange({ ...value, customsStatus: e.target.value })}>
+          {customsStatuses.map((status) => <option key={status}>{status}</option>)}
+        </select>
+      </Field>
+      <Field label="Delay Reason">
+        <input value={value.delayReason} onChange={(e) => onChange({ ...value, delayReason: e.target.value })} />
       </Field>
       <Field label="Status">
         <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
@@ -2916,13 +3585,13 @@ function ShipmentForm({ value, onChange, onSubmit, editingId, onCancel, orderOpt
   );
 }
 
-function ProcurementRequestForm({ value, onChange, onSubmit, editingId, onCancel, suppliers }) {
+function ProcurementRequestForm({ value, onChange, onSubmit, editingId, onCancel, suppliers, orders = [] }) {
   function applySupplier(name) {
     const supplier = suppliers.find((item) => item.supplierName === name);
     onChange({
       ...value,
       supplierName: name,
-      ...(supplier ? { supplierCountry: supplier.country } : {}),
+      ...(supplier ? { supplierCountry: supplier.country, supplierId: supplier.id } : { supplierId: '' }),
     });
   }
 
@@ -2933,6 +3602,14 @@ function ProcurementRequestForm({ value, onChange, onSubmit, editingId, onCancel
       </Field>
       <Field label="Vehicle Brand">
         <input value={value.vehicleBrand} onChange={(e) => onChange({ ...value, vehicleBrand: e.target.value })} required />
+      </Field>
+      <Field label="Item Type">
+        <select value={value.itemType} onChange={(e) => onChange({ ...value, itemType: e.target.value })}>
+          <option>Vehicle</option>
+          <option>Service</option>
+          <option>Parts</option>
+          <option>Other</option>
+        </select>
       </Field>
       <Field label="Vehicle Model">
         <input value={value.vehicleModel} onChange={(e) => onChange({ ...value, vehicleModel: e.target.value })} required />
@@ -2952,11 +3629,39 @@ function ProcurementRequestForm({ value, onChange, onSubmit, editingId, onCancel
       <Field label="Estimated Purchase Cost">
         <FormattedNumberInput value={value.estimatedPurchaseCost} onChange={(nextValue) => onChange({ ...value, estimatedPurchaseCost: nextValue })} />
       </Field>
+      <Field label="Unit Buy Price">
+        <FormattedNumberInput value={value.unitBuyPrice} onChange={(nextValue) => onChange({ ...value, unitBuyPrice: nextValue, estimatedPurchaseCost: nextValue })} />
+      </Field>
+      <Field label="Approved Purchase Amount">
+        <FormattedNumberInput value={value.approvedPurchaseAmount} onChange={(nextValue) => onChange({ ...value, approvedPurchaseAmount: nextValue })} />
+      </Field>
       <Field label="Estimated Freight Cost">
         <FormattedNumberInput value={value.estimatedFreightCost} onChange={(nextValue) => onChange({ ...value, estimatedFreightCost: nextValue })} />
       </Field>
       <Field label="Requested By">
         <input value={value.requestedBy} onChange={(e) => onChange({ ...value, requestedBy: e.target.value })} />
+      </Field>
+      <Field label="Linked Customer Order">
+        <select value={value.linkedOrderId} onChange={(e) => onChange({ ...value, linkedOrderId: e.target.value })}>
+          <option value="">No linked order</option>
+          {orders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber} - {order.customerName}</option>)}
+        </select>
+      </Field>
+      <Field label="Expected Delivery">
+        <input type="date" value={value.expectedDeliveryDate} onChange={(e) => onChange({ ...value, expectedDeliveryDate: e.target.value })} />
+      </Field>
+      <Field label="Actual Delivery">
+        <input type="date" value={value.actualDeliveryDate} onChange={(e) => onChange({ ...value, actualDeliveryDate: e.target.value })} />
+      </Field>
+      <Field label="Priority">
+        <select value={value.priority} onChange={(e) => onChange({ ...value, priority: e.target.value })}>
+          {procurementPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+        </select>
+      </Field>
+      <Field label="Payment Status">
+        <select value={value.paymentStatus} onChange={(e) => onChange({ ...value, paymentStatus: e.target.value })}>
+          {paymentStatuses.map((status) => <option key={status}>{status}</option>)}
+        </select>
       </Field>
       <Field label="Status">
         <select value={value.status} onChange={(e) => onChange({ ...value, status: e.target.value })}>
@@ -3692,7 +4397,7 @@ function Dashboard({ vehicles, orders, customers, shipments, procurementRequests
   );
 }
 
-function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete }) {
+function Inventory({ vehicles, vehicleEvents = {}, saveVehicle, deleteVehicle, canEdit, canDelete }) {
   const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
@@ -3700,6 +4405,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
   const newVehicleForm = useMemo(() => ({ ...blankVehicle, id: nextVehicleId }), [nextVehicleId]);
   const [form, setForm] = useState(newVehicleForm);
   const [editingId, setEditingId] = useState('');
+  const [expandedId, setExpandedId] = useState('');
   const filtered = vehicles.filter((vehicle) => {
     const locationMatches = locationFilter === 'All' || vehicle.locationName === locationFilter;
     return locationMatches && matchesSearch(vehicle, query);
@@ -3770,28 +4476,56 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
               <th>Profit Amount</th>
               <th>Profit Margin %</th>
               <th>Status</th>
+              <th>Lifecycle</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {table.rows.map((vehicle) => (
-              <tr key={vehicle.id}>
-                <td>{vehicle.id}</td>
-                <td>{vehicle.brand}</td>
-                <td>{vehicle.model}</td>
-                <td>{vehicle.category}</td>
-                <td>{vehicle.quantity}</td>
-                <td>{money.format(vehicle.purchasePrice)}</td>
-                <td>{money.format(vehicle.sellingPrice)}</td>
-                <td>{money.format(profitAmount(vehicle))}</td>
-                <td>{profitMargin(vehicle).toFixed(1)}%</td>
-                <td><StatusBadge status={vehicle.status} /></td>
-                <td className="row-actions">
-                  {canEdit && <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteVehicle(vehicle)}>Delete</button>}
-                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
-                </td>
-              </tr>
+              <React.Fragment key={vehicle.id}>
+                <tr>
+                  <td>{vehicle.id}</td>
+                  <td>{vehicle.brand}</td>
+                  <td>{vehicle.model}</td>
+                  <td>{vehicle.category}</td>
+                  <td>{vehicle.quantity}</td>
+                  <td>{money.format(vehicle.purchasePrice)}</td>
+                  <td>{money.format(vehicle.sellingPrice)}</td>
+                  <td>{money.format(profitAmount(vehicle))}</td>
+                  <td>{profitMargin(vehicle).toFixed(1)}%</td>
+                  <td><StatusBadge status={vehicle.status} /></td>
+                  <td><StatusBadge status={vehicle.lifecycleStatus} /></td>
+                  <td className="row-actions">
+                    <button className="mini" onClick={() => setExpandedId(expandedId === vehicle.id ? '' : vehicle.id)}>{expandedId === vehicle.id ? 'Close' : 'Details'}</button>
+                    {canEdit && <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>}
+                    {canDelete && <button className="mini danger" onClick={() => confirmDeleteVehicle(vehicle)}>Delete</button>}
+                    {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
+                  </td>
+                </tr>
+                {expandedId === vehicle.id && (
+                  <tr className="timeline-row">
+                    <td colSpan="12">
+                      <div className="enterprise-detail">
+                        <div className="detail-facts">
+                          <span><small>VIN</small><strong>{vehicle.vin || 'Not recorded'}</strong></span>
+                          <span><small>Variant</small><strong>{vehicle.variant || 'Standard'}</strong></span>
+                          <span><small>Color / Year</small><strong>{[vehicle.color, vehicle.modelYear].filter(Boolean).join(' / ') || 'Not recorded'}</strong></span>
+                          <span><small>Current location</small><strong>{vehicle.locationName}</strong></span>
+                        </div>
+                        <div className="timeline-track compact-timeline">
+                          {(vehicleEvents[vehicle.id] || []).map((event) => (
+                            <div className="timeline-step complete" key={event.id}>
+                              <span className="timeline-dot" />
+                              <div><strong>{event.status}</strong><small>{new Date(event.createdAt).toLocaleString()}</small><p>{event.note}</p></div>
+                            </div>
+                          ))}
+                          {!(vehicleEvents[vehicle.id] || []).length && <EmptyState label="Lifecycle history begins after the Phase 2 migration is installed." icon={Activity} />}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -3802,12 +4536,16 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
   );
 }
 
-function Procurement({ procurementRequests, suppliers, procurementTimelines, saveProcurementRequest, deleteProcurementRequest, addProcurementTimelineNote, saveSupplier, deleteSupplier, canEdit, canDelete }) {
+function Procurement({ procurementRequests, suppliers, orders, procurementTimelines, saveProcurementRequest, deleteProcurementRequest, addProcurementTimelineNote, saveSupplier, deleteSupplier, canEdit, canDelete }) {
   const confirm = useConfirm();
   const nextId = useMemo(() => nextProcurementId(procurementRequests), [procurementRequests]);
   const newRequestForm = useMemo(() => ({ ...blankProcurementRequest, procurementId: nextId }), [nextId]);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [priorityFilter, setPriorityFilter] = useState('All');
+  const [supplierFilter, setSupplierFilter] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [requestForm, setRequestForm] = useState(newRequestForm);
   const [editingRequestId, setEditingRequestId] = useState('');
   const [supplierForm, setSupplierForm] = useState(blankSupplier);
@@ -3821,14 +4559,16 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
 
   const filtered = procurementRequests.filter((request) => {
     const statusMatches = statusFilter === 'All' || request.status === statusFilter;
-    return statusMatches && matchesSearch(request, query);
+    const priorityMatches = priorityFilter === 'All' || request.priority === priorityFilter;
+    const supplierMatches = supplierFilter === 'All' || request.supplierName === supplierFilter;
+    return statusMatches && priorityMatches && supplierMatches && inDateRange(request.createdAt, startDate, endDate) && matchesSearch(request, query);
   });
   const requestTable = useTableView(filtered, { initialSortKey: 'procurementId' });
   const supplierTable = useTableView(suppliers, { initialSortKey: 'supplierName' });
   const totals = {
-    active: procurementRequests.filter((request) => request.status !== 'Added To Inventory').length,
+    active: procurementRequests.filter((request) => !['Received', 'Added To Inventory', 'Cancelled'].includes(request.status)).length,
     value: procurementRequests.reduce((sum, request) => sum + procurementValue(request), 0),
-    pendingApprovals: procurementRequests.filter((request) => ['Requested', 'Supplier Identified', 'Negotiation'].includes(request.status)).length,
+    pendingApprovals: procurementRequests.filter((request) => ['Draft', 'Pending Approval', 'Requested', 'Supplier Identified', 'Negotiation'].includes(request.status)).length,
     inTransit: procurementRequests.filter((request) => request.status === 'In Transit').length,
     incomingInventory: procurementRequests.filter((request) => request.status !== 'Added To Inventory').reduce((sum, request) => sum + numberValue(request.quantity), 0),
   };
@@ -3881,6 +4621,16 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
             <option>All</option>
             {procurementStatuses.map((status) => <option key={status}>{status}</option>)}
           </select>
+          <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+            <option>All</option>
+            {procurementPriorities.map((priority) => <option key={priority}>{priority}</option>)}
+          </select>
+          <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+            <option>All</option>
+            {suppliers.map((supplier) => <option key={supplier.id}>{supplier.supplierName}</option>)}
+          </select>
+          <input type="date" aria-label="Procurement start date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" aria-label="Procurement end date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           <TableSortControl table={requestTable} options={[
             { value: 'procurementId', label: 'Procurement ID' },
             { value: 'vehicleBrand', label: 'Vehicle brand' },
@@ -3896,7 +4646,7 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
         <Metric label="Pending approvals" value={totals.pendingApprovals} tone="danger" icon={ShieldCheck} />
         <Metric label="Incoming inventory" value={totals.incomingInventory} tone="success" icon={Warehouse} />
       </div>
-      {canEdit && <ProcurementRequestForm value={requestForm} onChange={setRequestForm} onSubmit={submitRequest} editingId={editingRequestId} suppliers={suppliers} onCancel={() => { setRequestForm(newRequestForm); setEditingRequestId(''); }} />}
+      {canEdit && <ProcurementRequestForm value={requestForm} onChange={setRequestForm} onSubmit={submitRequest} editingId={editingRequestId} suppliers={suppliers} orders={orders} onCancel={() => { setRequestForm(newRequestForm); setEditingRequestId(''); }} />}
       <div className="table-shell">
         <table>
           <thead>
@@ -3910,6 +4660,8 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
               <th>Freight Cost</th>
               <th>Total Value</th>
               <th>Requested By</th>
+              <th>Priority</th>
+              <th>Expected</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -3927,6 +4679,8 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
                   <td>{money.format(request.estimatedFreightCost)}</td>
                   <td>{money.format(procurementValue(request))}</td>
                   <td>{request.requestedBy}</td>
+                  <td><StatusBadge status={request.priority} /></td>
+                  <td>{request.expectedDeliveryDate || 'Not set'}</td>
                   <td><StatusBadge status={request.status} /></td>
                   <td className="row-actions">
                     <button className="mini" onClick={() => setExpandedId(expandedId === request.procurementId ? '' : request.procurementId)}>{expandedId === request.procurementId ? 'Hide timeline' : 'Timeline'}</button>
@@ -3936,8 +4690,14 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
                 </tr>
                 {expandedId === request.procurementId && (
                   <tr className="timeline-row">
-                    <td colSpan="11">
+                    <td colSpan="13">
                       <div className="timeline-panel">
+                        <div className="detail-facts">
+                          <span><small>Approved amount</small><strong>{money.format(request.approvedPurchaseAmount)}</strong></span>
+                          <span><small>Payment</small><strong>{request.paymentStatus}</strong></span>
+                          <span><small>Linked order</small><strong>{orders.find((order) => order.id === request.linkedOrderId)?.orderNumber || 'Not linked'}</strong></span>
+                          <span><small>Actual arrival</small><strong>{request.actualDeliveryDate || 'Pending'}</strong></span>
+                        </div>
                         <div className="timeline-track">
                           {procurementStatuses.map((status) => {
                             const event = (procurementTimelines[request.procurementId] || []).find((item) => item.status === status);
@@ -3988,6 +4748,9 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
               <th>Contact</th>
               <th>Phone</th>
               <th>Email</th>
+              <th>Rating</th>
+              <th>On-time %</th>
+              <th>Orders</th>
               <th>Notes</th>
               <th>Actions</th>
             </tr>
@@ -4000,6 +4763,9 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
                 <td>{supplier.contactPerson}</td>
                 <td>{supplier.phone}</td>
                 <td>{supplier.email}</td>
+                <td>{supplier.rating === '' ? 'Not rated' : `${supplier.rating}/5`}</td>
+                <td>{supplier.onTimeDeliveryRate === '' ? 'No history' : `${supplier.onTimeDeliveryRate}%`}</td>
+                <td>{procurementRequests.filter((request) => request.supplierName === supplier.supplierName).length}</td>
                 <td>{supplier.notes}</td>
                 <td className="row-actions">
                   {canEdit && <button className="mini" onClick={() => { setSupplierForm(supplier); setEditingSupplierId(supplier.id); }}>Edit</button>}
@@ -4305,13 +5071,41 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
   );
 }
 
-function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete }) {
+function Customers({
+  customers,
+  orders = [],
+  shipments = [],
+  financeRecords = [],
+  documents = [],
+  customerContacts = [],
+  customerNotes = [],
+  saveCustomer,
+  deleteCustomer,
+  saveCustomerContact,
+  deleteCustomerContact,
+  addCustomerNote,
+  deleteCustomerNote,
+  canEdit,
+  canDelete,
+}) {
   const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankCustomer);
   const [editingId, setEditingId] = useState('');
+  const [expandedId, setExpandedId] = useState('');
+  const [contactForm, setContactForm] = useState({ fullName: '', jobTitle: '', email: '', phone: '', isPrimary: false });
+  const [noteText, setNoteText] = useState('');
   const filtered = customers.filter((customer) => matchesSearch(customer, query));
   const table = useTableView(filtered, { initialSortKey: 'name' });
+  const customerMetrics = {
+    total: customers.length,
+    active: customers.filter((customer) => customer.active).length,
+    highValue: customers.filter((customer) => {
+      const revenue = orders.filter((order) => order.customerName === customer.name).reduce((sum, order) => sum + orderRevenue(order), 0);
+      return revenue >= 5000000;
+    }).length,
+    risk: customers.filter((customer) => customer.customerRating === 'Risk').length,
+  };
 
   async function submitCustomer(event) {
     event.preventDefault();
@@ -4361,6 +5155,38 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
     if (approved) await deleteCustomer(customer.id);
   }
 
+  async function submitContact(event, customerId) {
+    event.preventDefault();
+    if (!contactForm.fullName.trim()) return;
+    await saveCustomerContact({ ...contactForm, customerId });
+    setContactForm({ fullName: '', jobTitle: '', email: '', phone: '', isPrimary: false });
+  }
+
+  async function submitNote(event, customerId) {
+    event.preventDefault();
+    if (!noteText.trim()) return;
+    await addCustomerNote(customerId, noteText.trim());
+    setNoteText('');
+  }
+
+  async function confirmDeleteContact(contact) {
+    const approved = await confirm({
+      title: 'Delete customer contact?',
+      message: `${contact.fullName} will be removed from this customer profile.`,
+      confirmLabel: 'Delete contact',
+    });
+    if (approved) await deleteCustomerContact(contact.id);
+  }
+
+  async function confirmDeleteNote(note) {
+    const approved = await confirm({
+      title: 'Delete customer note?',
+      message: 'This timestamped CRM note will be permanently removed.',
+      confirmLabel: 'Delete note',
+    });
+    if (approved) await deleteCustomerNote(note.id);
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Customers" title="Customer records" description="Maintain clean buyer contact details, notes, and commercial context.">
@@ -4374,6 +5200,12 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
           ]} />
         </div>
       </PageHeader>
+      <div className="metrics-grid reports-summary">
+        <Metric label="Total customers" value={customerMetrics.total} icon={Users} />
+        <Metric label="Active customers" value={customerMetrics.active} tone="success" icon={Contact} />
+        <Metric label="High-value customers" value={customerMetrics.highValue} tone="accent" icon={CircleDollarSign} />
+        <Metric label="Risk customers" value={customerMetrics.risk} tone="danger" icon={AlertTriangle} />
+      </div>
       {canEdit && <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />}
       {canEdit && (
         <CsvImportPanel
@@ -4388,28 +5220,112 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
           <thead>
             <tr>
               <th>Customer Name</th>
+              <th>Type</th>
               <th>Phone</th>
               <th>Email</th>
               <th>Country / City</th>
+              <th>Rating</th>
               <th>Notes</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((customer) => (
-              <tr key={customer.id}>
-                <td>{customer.name}</td>
-                <td>{customer.phone}</td>
-                <td>{customer.email}</td>
-                <td>{customer.location}</td>
-                <td>{customer.notes}</td>
-                <td className="row-actions">
-                  {canEdit && <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteCustomer(customer)}>Delete</button>}
-                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
-                </td>
-              </tr>
-            ))}
+            {table.rows.map((customer) => {
+              const customerOrders = orders.filter((order) => order.customerName.trim().toLowerCase() === customer.name.trim().toLowerCase());
+              const customerShipments = shipments.filter((shipment) => shipment.customerId === customer.id || shipment.customerName.trim().toLowerCase() === customer.name.trim().toLowerCase());
+              const customerFinance = financeRecords.filter((record) => record.customerId === customer.id);
+              const customerDocuments = documents.filter((item) => item.linkedModule === 'Customers' && item.linkedRecordId === customer.id);
+              const contacts = customerContacts.filter((item) => item.customerId === customer.id);
+              const notes = customerNotes.filter((item) => item.customerId === customer.id);
+              const revenue = customerOrders.reduce((sum, order) => sum + orderRevenue(order), 0);
+              const profit = customerFinance.reduce((sum, record) => sum + record.netProfit, 0);
+              const outstanding = customerFinance.reduce((sum, record) => sum + record.amountPending, 0);
+              return (
+                <React.Fragment key={customer.id}>
+                  <tr>
+                    <td>{customer.name}</td>
+                    <td>{customer.customerType}</td>
+                    <td>{customer.phone}</td>
+                    <td>{customer.email}</td>
+                    <td>{customer.location || [customer.country, customer.city].filter(Boolean).join(' / ')}</td>
+                    <td><StatusBadge status={customer.customerRating} /></td>
+                    <td>{customer.notes}</td>
+                    <td className="row-actions">
+                      <button className="mini" onClick={() => setExpandedId(expandedId === customer.id ? '' : customer.id)}>{expandedId === customer.id ? 'Close' : 'Profile'}</button>
+                      {canEdit && <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>}
+                      {canDelete && <button className="mini danger" onClick={() => confirmDeleteCustomer(customer)}>Delete</button>}
+                      {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
+                    </td>
+                  </tr>
+                  {expandedId === customer.id && (
+                    <tr className="timeline-row">
+                      <td colSpan="8">
+                        <div className="customer-profile">
+                          <div className="profile-identity">
+                            <span className="avatar large">{customer.name.slice(0, 1).toUpperCase()}</span>
+                            <div><h3>{customer.name}</h3><p>{customer.contactPerson || 'Primary contact not recorded'} · Reliability {customer.paymentReliabilityScore}/100</p></div>
+                          </div>
+                          <div className="detail-facts">
+                            <span><small>Total orders</small><strong>{customerOrders.length}</strong></span>
+                            <span><small>Total revenue</small><strong>{money.format(revenue)}</strong></span>
+                            <span><small>Recorded profit</small><strong>{money.format(profit)}</strong></span>
+                            <span><small>Outstanding</small><strong>{money.format(outstanding)}</strong></span>
+                            <span><small>Shipments</small><strong>{customerShipments.length}</strong></span>
+                            <span><small>Documents</small><strong>{customerDocuments.length}</strong></span>
+                          </div>
+                          <div className="linked-records">
+                            <div><small>Recent orders</small>{customerOrders.slice(0, 3).map((order) => <p key={order.id}>{order.orderNumber} · {order.vehicle} · {order.status}</p>)}</div>
+                            <div><small>Recent shipments</small>{customerShipments.slice(0, 3).map((shipment) => <p key={shipment.shipmentId}>{shipment.shipmentId} · {shipment.status}</p>)}</div>
+                          </div>
+                          <div className="crm-profile-grid">
+                            <section>
+                              <div className="card-heading"><div><p className="eyebrow">Contacts</p><h3>Customer team</h3></div></div>
+                              <div className="crm-list">
+                                {contacts.map((contact) => (
+                                  <article key={contact.id}>
+                                    <div><strong>{contact.fullName}{contact.isPrimary ? ' · Primary' : ''}</strong><small>{contact.jobTitle || 'Contact'} · {contact.email || contact.phone || 'No details'}</small></div>
+                                    {canEdit && <button className="mini danger" onClick={() => confirmDeleteContact(contact)}>Delete</button>}
+                                  </article>
+                                ))}
+                                {!contacts.length && <p className="muted-copy">No additional contacts yet.</p>}
+                              </div>
+                              {canEdit && (
+                                <form className="crm-inline-form" onSubmit={(event) => submitContact(event, customer.id)}>
+                                  <input placeholder="Full name" value={contactForm.fullName} onChange={(event) => setContactForm({ ...contactForm, fullName: event.target.value })} required />
+                                  <input placeholder="Job title" value={contactForm.jobTitle} onChange={(event) => setContactForm({ ...contactForm, jobTitle: event.target.value })} />
+                                  <input type="email" placeholder="Email" value={contactForm.email} onChange={(event) => setContactForm({ ...contactForm, email: event.target.value })} />
+                                  <input placeholder="Phone" value={contactForm.phone} onChange={(event) => setContactForm({ ...contactForm, phone: event.target.value })} />
+                                  <label className="inline-check"><input type="checkbox" checked={contactForm.isPrimary} onChange={(event) => setContactForm({ ...contactForm, isPrimary: event.target.checked })} /> Primary contact</label>
+                                  <button type="submit">Add contact</button>
+                                </form>
+                              )}
+                            </section>
+                            <section>
+                              <div className="card-heading"><div><p className="eyebrow">CRM notes</p><h3>Relationship history</h3></div></div>
+                              <div className="crm-list">
+                                {notes.slice(0, 6).map((note) => (
+                                  <article key={note.id}>
+                                    <div><strong>{note.note}</strong><small>{new Date(note.createdAt).toLocaleString()}</small></div>
+                                    {canEdit && <button className="mini danger" onClick={() => confirmDeleteNote(note)}>Delete</button>}
+                                  </article>
+                                ))}
+                                {!notes.length && <p className="muted-copy">No timestamped notes yet.</p>}
+                              </div>
+                              {canEdit && (
+                                <form className="timeline-note-form" onSubmit={(event) => submitNote(event, customer.id)}>
+                                  <input placeholder="Add a customer note" value={noteText} onChange={(event) => setNoteText(event.target.value)} />
+                                  <button type="submit">Add note</button>
+                                </form>
+                              )}
+                            </section>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No customers found." icon={Users} />}
@@ -4419,25 +5335,36 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
   );
 }
 
-function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsPartners = [], saveLogisticsPartner, deleteLogisticsPartner, canEdit, canDelete }) {
+function Shipments({ shipments, shipmentEvents = {}, saveShipment, deleteShipment, orders, logisticsPartners = [], saveLogisticsPartner, deleteLogisticsPartner, canEdit, canDelete }) {
   const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [locationFilter, setLocationFilter] = useState('All');
+  const [carrierFilter, setCarrierFilter] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [form, setForm] = useState(blankShipment);
   const [editingId, setEditingId] = useState('');
   const [partnerForm, setPartnerForm] = useState(blankLogisticsPartner);
   const [editingPartnerId, setEditingPartnerId] = useState('');
+  const [expandedId, setExpandedId] = useState('');
   const filtered = shipments.filter((shipment) => {
     const statusMatches = statusFilter === 'All' || shipment.status === statusFilter;
     const locationMatches = locationFilter === 'All' || shipment.locationName === locationFilter;
-    return statusMatches && locationMatches && matchesSearch(shipment, query);
+    const carrierMatches = carrierFilter === 'All' || shipment.shippingCompany === carrierFilter;
+    return statusMatches && locationMatches && carrierMatches && inDateRange(shipment.eta, startDate, endDate) && matchesSearch(shipment, query);
   });
   const table = useTableView(filtered, { initialSortKey: 'shipmentId' });
   const partnerTable = useTableView(logisticsPartners, { initialSortKey: 'partnerName' });
   const orderNumberById = useMemo(() => {
     return orders.reduce((lookup, order) => ({ ...lookup, [order.id]: order.orderNumber || order.id }), {});
   }, [orders]);
+  const shipmentMetrics = {
+    active: shipments.filter((shipment) => !['Delivered', 'Cancelled'].includes(shipment.status)).length,
+    delayed: shipments.filter((shipment) => shipment.status === 'Delayed').length,
+    deliveredThisMonth: shipments.filter((shipment) => shipment.status === 'Delivered' && String(shipment.actualDeliveryDate || '').startsWith(today.slice(0, 7))).length,
+    freight: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
+  };
 
   async function submitShipment(event) {
     event.preventDefault();
@@ -4528,6 +5455,12 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
             <option>All</option>
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
+          <select value={carrierFilter} onChange={(e) => setCarrierFilter(e.target.value)}>
+            <option>All</option>
+            {logisticsPartners.map((partner) => <option key={partner.id}>{partner.partnerName}</option>)}
+          </select>
+          <input type="date" aria-label="Shipment ETA start" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <input type="date" aria-label="Shipment ETA end" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
           <TableSortControl table={table} options={[
             { value: 'shipmentId', label: 'Shipment ID' },
             { value: 'customerName', label: 'Customer' },
@@ -4537,6 +5470,12 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
           ]} />
         </div>
       </PageHeader>
+      <div className="metrics-grid reports-summary">
+        <Metric label="Active shipments" value={shipmentMetrics.active} icon={Truck} />
+        <Metric label="Delayed shipments" value={shipmentMetrics.delayed} tone="danger" icon={AlertTriangle} />
+        <Metric label="Delivered this month" value={shipmentMetrics.deliveredThisMonth} tone="success" icon={PackageCheck} />
+        <Metric label="Total freight cost" value={money.format(shipmentMetrics.freight)} tone="accent" icon={CircleDollarSign} />
+      </div>
       {canEdit && <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} logisticsPartners={logisticsPartners} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />}
       {canEdit && (
         <CsvImportPanel
@@ -4559,35 +5498,65 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
               <th>Departure Port</th>
               <th>Arrival Port</th>
               <th>Shipping Company</th>
+              <th>Mode</th>
               <th>Freight Cost</th>
               <th>ETA</th>
               <th>Status</th>
+              <th>Customs</th>
               <th>Notes</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {table.rows.map((shipment) => (
-              <tr key={shipment.shipmentId}>
-                <td>{shipment.shipmentId}</td>
-                <td>{orderNumberById[shipment.linkedOrderId] || shipment.linkedOrderId}</td>
-                <td>{shipment.customerName}</td>
-                <td>{shipment.vehicle}</td>
-                <td>{shipment.quantity}</td>
-                <td>{shipment.destinationCountry}</td>
-                <td>{shipment.portOfDeparture}</td>
-                <td>{shipment.portOfArrival}</td>
-                <td>{shipment.shippingCompany}</td>
-                <td>{money.format(shipment.freightCost)}</td>
-                <td>{shipment.eta}</td>
-                <td><StatusBadge status={shipment.status} /></td>
-                <td>{shipment.notes}</td>
-                <td className="row-actions">
-                  {canEdit && <button className="mini" onClick={() => editShipment(shipment)}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteShipment(shipment)}>Delete</button>}
-                  {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
-                </td>
-              </tr>
+              <React.Fragment key={shipment.shipmentId}>
+                <tr className={shipment.status === 'Delayed' ? 'row-attention' : ''}>
+                  <td>{shipment.shipmentId}</td>
+                  <td>{orderNumberById[shipment.linkedOrderId] || shipment.linkedOrderId}</td>
+                  <td>{shipment.customerName}</td>
+                  <td>{shipment.vehicle}</td>
+                  <td>{shipment.quantity}</td>
+                  <td>{[shipment.destinationCountry, shipment.destinationCity].filter(Boolean).join(' / ')}</td>
+                  <td>{shipment.portOfDeparture}</td>
+                  <td>{shipment.portOfArrival}</td>
+                  <td>{shipment.shippingCompany}</td>
+                  <td>{shipment.shippingMode}</td>
+                  <td>{money.format(shipment.freightCost)}</td>
+                  <td>{shipment.eta}</td>
+                  <td><StatusBadge status={shipment.status} /></td>
+                  <td><StatusBadge status={shipment.customsStatus} /></td>
+                  <td>{shipment.notes}</td>
+                  <td className="row-actions">
+                    <button className="mini" onClick={() => setExpandedId(expandedId === shipment.shipmentId ? '' : shipment.shipmentId)}>{expandedId === shipment.shipmentId ? 'Close' : 'Details'}</button>
+                    {canEdit && <button className="mini" onClick={() => editShipment(shipment)}>Edit</button>}
+                    {canDelete && <button className="mini danger" onClick={() => confirmDeleteShipment(shipment)}>Delete</button>}
+                    {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
+                  </td>
+                </tr>
+                {expandedId === shipment.shipmentId && (
+                  <tr className="timeline-row">
+                    <td colSpan="16">
+                      <div className="enterprise-detail">
+                        <div className="detail-facts">
+                          <span><small>Route</small><strong>{shipment.originCountry || 'Origin pending'} → {shipment.destinationCountry}</strong></span>
+                          <span><small>Tracking reference</small><strong>{shipment.trackingReference || 'Not assigned'}</strong></span>
+                          <span><small>Delay reason</small><strong>{shipment.delayReason || 'No delay reported'}</strong></span>
+                          <span><small>Actual delivery</small><strong>{shipment.actualDeliveryDate || 'Pending'}</strong></span>
+                        </div>
+                        <div className="timeline-track compact-timeline">
+                          {(shipmentEvents[shipment.shipmentId] || []).map((event) => (
+                            <div className="timeline-step complete" key={event.id}>
+                              <span className="timeline-dot" />
+                              <div><strong>{event.status}</strong><small>{new Date(event.createdAt).toLocaleString()}</small><p>{event.note}</p></div>
+                            </div>
+                          ))}
+                          {!(shipmentEvents[shipment.shipmentId] || []).length && <EmptyState label="Shipment timeline begins after the Phase 2 migration is installed." icon={Truck} />}
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -4682,6 +5651,285 @@ function OrderTimeline({ order, events, addOrderTimelineNote }) {
         <button type="submit">Add note</button>
       </form>
     </div>
+  );
+}
+
+function Finance({ financeRecords, orders, customers, shipments, procurementRequests, saveFinanceRecord, deleteFinanceRecord, canEdit }) {
+  const confirm = useConfirm();
+  const [query, setQuery] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('All');
+  const [customerFilter, setCustomerFilter] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [form, setForm] = useState(blankFinanceRecord);
+  const [editingId, setEditingId] = useState('');
+  const records = financeRecords.map(calculateFinanceRecord);
+  const filtered = records.filter((record) => {
+    const paymentMatches = paymentFilter === 'All' || record.paymentStatus === paymentFilter;
+    const order = orders.find((item) => item.id === record.orderId);
+    const customer = customers.find((item) => item.id === record.customerId);
+    const customerMatches = customerFilter === 'All' || record.customerId === customerFilter;
+    return paymentMatches && customerMatches && inDateRange(record.createdAt, startDate, endDate) && matchesSearch({ ...record, orderNumber: order?.orderNumber, customerName: customer?.name }, query);
+  });
+  const table = useTableView(filtered, { initialSortKey: 'createdAt', initialSortDirection: 'desc' });
+  const totals = {
+    revenue: records.reduce((sum, item) => sum + item.totalSaleAmount, 0),
+    cost: records.reduce((sum, item) => sum + item.totalCost, 0),
+    gross: records.reduce((sum, item) => sum + item.grossProfit, 0),
+    net: records.reduce((sum, item) => sum + item.netProfit, 0),
+    pending: records.reduce((sum, item) => sum + item.amountPending, 0),
+    overdue: records.filter((item) => item.paymentStatus === 'Overdue').reduce((sum, item) => sum + item.amountPending, 0),
+  };
+
+  function applyOrder(orderId) {
+    const order = orders.find((item) => item.id === orderId);
+    if (!order) {
+      setForm({ ...form, orderId });
+      return;
+    }
+    const customer = customers.find((item) => item.name.trim().toLowerCase() === order.customerName.trim().toLowerCase());
+    const projection = projectOrderFinance(order, shipments, procurementRequests);
+    setForm({
+      ...form,
+      ...projection,
+      orderId,
+      customerId: customer?.id || '',
+      paymentStatus: projection.totalSaleAmount > 0 ? 'Unpaid' : form.paymentStatus,
+    });
+  }
+
+  async function submitFinance(event) {
+    event.preventDefault();
+    await saveFinanceRecord(calculateFinanceRecord(form), editingId);
+    setForm(blankFinanceRecord);
+    setEditingId('');
+  }
+
+  async function confirmDelete(record) {
+    const approved = await confirm({
+      title: 'Delete finance record?',
+      message: 'This financial record will be removed. The linked order and customer will remain unchanged.',
+      confirmLabel: 'Delete record',
+    });
+    if (approved) await deleteFinanceRecord(record.id);
+  }
+
+  return (
+    <section className="page-stack">
+      <PageHeader eyebrow="Finance" title="Profit center" description="Consolidate real revenue, acquisition cost, freight, duties, payments, invoices, and net margin.">
+        <div className="toolbar">
+          <input className="search" placeholder="Search finance records" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
+            <option>All</option>
+            {paymentStatuses.map((status) => <option key={status}>{status}</option>)}
+          </select>
+          <select value={customerFilter} onChange={(event) => setCustomerFilter(event.target.value)}>
+            <option>All</option>
+            {customers.map((customer) => <option value={customer.id} key={customer.id}>{customer.name}</option>)}
+          </select>
+          <input type="date" aria-label="Finance start date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <input type="date" aria-label="Finance end date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <TableSortControl table={table} options={[
+            { value: 'createdAt', label: 'Created date' },
+            { value: 'totalSaleAmount', label: 'Revenue' },
+            { value: 'netProfit', label: 'Net profit' },
+            { value: 'amountPending', label: 'Outstanding' },
+            { value: 'paymentStatus', label: 'Payment status' },
+          ]} />
+        </div>
+      </PageHeader>
+      <div className="metrics-grid enterprise-metrics">
+        <Metric label="Total revenue" value={money.format(totals.revenue)} icon={BarChart3} />
+        <Metric label="Total cost" value={money.format(totals.cost)} icon={CircleDollarSign} />
+        <Metric label="Gross profit" value={money.format(totals.gross)} tone="accent" icon={Activity} />
+        <Metric label="Net profit" value={money.format(totals.net)} tone={totals.net < 0 ? 'danger' : 'success'} icon={Gauge} />
+        <Metric label="Pending payments" value={money.format(totals.pending)} icon={FileText} />
+        <Metric label="Overdue payments" value={money.format(totals.overdue)} tone="danger" icon={AlertTriangle} />
+      </div>
+      {canEdit && (
+        <form className="entry-form finance-form" onSubmit={submitFinance}>
+          <Field label="Linked Order">
+            <select value={form.orderId} onChange={(event) => applyOrder(event.target.value)} required>
+              <option value="">Select order</option>
+              {orders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber} - {order.customerName}</option>)}
+            </select>
+          </Field>
+          <Field label="Customer">
+            <select value={form.customerId} onChange={(event) => setForm({ ...form, customerId: event.target.value })}>
+              <option value="">Select customer</option>
+              {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
+            </select>
+          </Field>
+          {[
+            ['Total Sale Amount', 'totalSaleAmount'],
+            ['Vehicle Cost', 'vehicleCost'],
+            ['Procurement Cost', 'procurementCost'],
+            ['Freight Cost', 'freightCost'],
+            ['Tax / Duty Cost', 'taxDutyCost'],
+            ['Other Cost', 'otherCost'],
+            ['Amount Paid', 'amountPaid'],
+          ].map(([label, key]) => (
+            <Field label={label} key={key}>
+              <FormattedNumberInput value={form[key]} onChange={(value) => setForm({ ...form, [key]: value })} />
+            </Field>
+          ))}
+          <Field label="Payment Status">
+            <select value={form.paymentStatus} onChange={(event) => setForm({ ...form, paymentStatus: event.target.value })}>
+              {paymentStatuses.map((status) => <option key={status}>{status}</option>)}
+            </select>
+          </Field>
+          <Field label="Invoice Status">
+            <select value={form.invoiceStatus} onChange={(event) => setForm({ ...form, invoiceStatus: event.target.value })}>
+              {invoiceStatuses.map((status) => <option key={status}>{status}</option>)}
+            </select>
+          </Field>
+          <Field label="Due Date"><input type="date" value={form.dueDate} onChange={(event) => setForm({ ...form, dueDate: event.target.value })} /></Field>
+          <Field label="Notes"><textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></Field>
+          <div className="form-actions">
+            <button type="submit">{editingId ? 'Save finance record' : 'Create finance record'}</button>
+            {editingId && <button type="button" className="secondary" onClick={() => { setForm(blankFinanceRecord); setEditingId(''); }}>Cancel</button>}
+          </div>
+        </form>
+      )}
+      <div className="table-shell">
+        <table>
+          <thead><tr><th>Order</th><th>Customer</th><th>Revenue</th><th>Total Cost</th><th>Gross Profit</th><th>Net Profit</th><th>Margin</th><th>Paid</th><th>Pending</th><th>Payment</th><th>Invoice</th><th>Actions</th></tr></thead>
+          <tbody>
+            {table.rows.map((record) => {
+              const order = orders.find((item) => item.id === record.orderId);
+              const customer = customers.find((item) => item.id === record.customerId);
+              return (
+                <tr key={record.id} className={record.netProfit < 0 ? 'row-attention' : ''}>
+                  <td>{order?.orderNumber || 'Unlinked'}</td>
+                  <td>{customer?.name || order?.customerName || 'Unlinked'}</td>
+                  <td>{money.format(record.totalSaleAmount)}</td>
+                  <td>{money.format(record.totalCost)}</td>
+                  <td>{money.format(record.grossProfit)}</td>
+                  <td>{money.format(record.netProfit)}</td>
+                  <td>{record.marginPercentage.toFixed(1)}%</td>
+                  <td>{money.format(record.amountPaid)}</td>
+                  <td>{money.format(record.amountPending)}</td>
+                  <td><StatusBadge status={record.paymentStatus} /></td>
+                  <td><StatusBadge status={record.invoiceStatus} /></td>
+                  <td className="row-actions">
+                    {canEdit && <button className="mini" onClick={() => { setForm(record); setEditingId(record.id); }}>Edit</button>}
+                    {canEdit && <button className="mini danger" onClick={() => confirmDelete(record)}>Delete</button>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {!filtered.length && <EmptyState label="No finance records yet. Select an order to create the first profit record." icon={CircleDollarSign} />}
+        <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
+      </div>
+    </section>
+  );
+}
+
+function DocumentVault({ documents, uploadDocument, openDocument, deleteDocument, canEdit }) {
+  const confirm = useConfirm();
+  const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [moduleFilter, setModuleFilter] = useState('All');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [form, setForm] = useState(blankDocument);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const filtered = documents.filter((item) => {
+    const categoryMatches = categoryFilter === 'All' || item.category === categoryFilter;
+    const moduleMatches = moduleFilter === 'All' || item.linkedModule === moduleFilter;
+    return categoryMatches && moduleMatches && inDateRange(item.uploadedAt, startDate, endDate) && matchesSearch(item, query);
+  });
+  const table = useTableView(filtered, { initialSortKey: 'uploadedAt', initialSortDirection: 'desc' });
+
+  async function submitDocument(event) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    setBusy(true);
+    setMessage('');
+    try {
+      await uploadDocument(form);
+      setForm(blankDocument);
+      formElement.reset();
+      setMessage('Document uploaded securely.');
+    } catch (uploadError) {
+      setMessage(friendlyError(uploadError, 'Velora could not upload this document.'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openFile(item) {
+    setMessage('');
+    try {
+      await openDocument(item);
+    } catch (openError) {
+      setMessage(friendlyError(openError, 'Velora could not open this document.'));
+    }
+  }
+
+  async function confirmDelete(item) {
+    const approved = await confirm({
+      title: 'Delete document?',
+      message: `${item.fileName} will be removed from the secure vault. This cannot be undone.`,
+      confirmLabel: 'Delete document',
+    });
+    if (approved) await deleteDocument(item.id);
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return '0 KB';
+    if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return (
+    <section className="page-stack">
+      <PageHeader eyebrow="Document Vault" title="Secure business files" description="Organize invoices, supplier bills, customs documents, contracts, certificates, and delivery proof against operational records.">
+        <div className="toolbar">
+          <input className="search" placeholder="Search documents" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option>All</option>{documentCategories.map((category) => <option key={category}>{category}</option>)}</select>
+          <select value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)}><option>All</option>{['Orders', 'Customers', 'Shipments', 'Procurement', 'Finance', 'Inventory'].map((module) => <option key={module}>{module}</option>)}</select>
+          <input type="date" aria-label="Document upload start" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <input type="date" aria-label="Document upload end" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <TableSortControl table={table} options={[{ value: 'uploadedAt', label: 'Upload date' }, { value: 'fileName', label: 'File name' }, { value: 'category', label: 'Category' }, { value: 'linkedModule', label: 'Linked module' }]} />
+        </div>
+      </PageHeader>
+      {canEdit && (
+        <form className="entry-form document-form" onSubmit={submitDocument}>
+          <Field label="File">
+            <input type="file" accept=".pdf,.png,.jpg,.jpeg,.csv,.docx" onChange={(event) => setForm({ ...form, file: event.target.files?.[0] || null })} required />
+          </Field>
+          <Field label="Category"><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{documentCategories.map((category) => <option key={category}>{category}</option>)}</select></Field>
+          <Field label="Linked Module"><select value={form.linkedModule} onChange={(event) => setForm({ ...form, linkedModule: event.target.value })}><option value="">General document</option>{['Orders', 'Customers', 'Shipments', 'Procurement', 'Finance', 'Inventory'].map((module) => <option key={module}>{module}</option>)}</select></Field>
+          <Field label="Linked Record ID"><input value={form.linkedRecordId} onChange={(event) => setForm({ ...form, linkedRecordId: event.target.value })} placeholder="Order UUID, customer ID, shipment ID..." /></Field>
+          <Field label="Notes"><textarea value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></Field>
+          <div className="form-actions"><button type="submit" disabled={busy}>{busy ? 'Uploading securely...' : 'Upload document'}</button></div>
+        </form>
+      )}
+      {message && <div className={`app-message ${message.includes('uploaded') ? '' : 'error'}`}>{message}</div>}
+      <div className="document-grid">
+        {table.rows.map((item) => (
+          <article className="document-card" key={item.id}>
+            <span className="document-icon"><FileText size={22} /></span>
+            <div className="document-meta">
+              <strong>{item.fileName}</strong>
+              <small>{item.category} · {formatFileSize(item.fileSize)}</small>
+              <p>{item.linkedModule ? `${item.linkedModule} / ${item.linkedRecordId || 'Unspecified record'}` : 'General company document'}</p>
+              <time>{new Date(item.uploadedAt).toLocaleString()}</time>
+            </div>
+            <div className="row-actions">
+              <button className="mini" onClick={() => openFile(item)}><ExternalLink size={15} /> Open</button>
+              {canEdit && <button className="mini danger" onClick={() => confirmDelete(item)}>Delete</button>}
+            </div>
+          </article>
+        ))}
+      </div>
+      {!filtered.length && <EmptyState label="No documents match this view. Upload a file to begin the secure vault." icon={FolderLock} />}
+      <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
+    </section>
   );
 }
 
@@ -4970,14 +6218,17 @@ function AiAssistant({
   const [suggestedActions, setSuggestedActions] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const context = useMemo(() => buildAiContext({
-    permissions,
-    vehicles,
-    orders,
-    customers,
-    shipments,
-    procurementRequests,
-    alerts,
+  const context = useMemo(() => ({
+    ...buildAiContext({
+      permissions,
+      vehicles,
+      orders,
+      customers,
+      shipments,
+      procurementRequests,
+      alerts,
+    }),
+    enterpriseSummary,
   }), [
     permissions,
     vehicles,
@@ -4986,6 +6237,7 @@ function AiAssistant({
     shipments,
     procurementRequests,
     alerts,
+    enterpriseSummary,
   ]);
 
   async function askAssistant(prompt) {
@@ -5023,6 +6275,7 @@ function AiAssistant({
       ]);
       setSuggestedActions(Array.isArray(data?.actions) ? data.actions : []);
     } catch (requestError) {
+      recordHealthEvent({ type: 'ai-assistant', message: friendlyError(requestError) });
       setMessages((current) => [
         ...current,
         {
@@ -5191,6 +6444,13 @@ function App() {
     logisticsPartners,
     procurementRequests,
     suppliers,
+    financeRecords,
+    documents,
+    vehicleEvents,
+    shipmentEvents,
+    customerContacts,
+    customerNotes,
+    phase2Ready,
     loading,
     error,
     lastUpdated,
@@ -5214,6 +6474,15 @@ function App() {
     addProcurementTimelineNote,
     saveSupplier,
     deleteSupplier,
+    saveFinanceRecord,
+    deleteFinanceRecord,
+    uploadDocument,
+    openDocument,
+    deleteDocument,
+    saveCustomerContact,
+    deleteCustomerContact,
+    addCustomerNote,
+    deleteCustomerNote,
   } = useSupabaseRecords(user, profileLoading ? null : permissions);
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
   const searchIndexData = useMemo(
@@ -5226,9 +6495,20 @@ function App() {
       logisticsPartners,
       procurementRequests,
       suppliers,
+      financeRecords,
+      documents,
     }),
-    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers],
+    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers, financeRecords, documents],
   );
+  const enterpriseSummary = useMemo(() => buildEnterpriseSummary({
+    vehicles,
+    orders,
+    customers,
+    shipments,
+    procurements: procurementRequests,
+    financeRecords,
+    documents,
+  }), [vehicles, orders, customers, shipments, procurementRequests, financeRecords, documents]);
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
@@ -5353,18 +6633,25 @@ function App() {
           </div>
         )}
         {profileError && <div className="app-message error">{profileError}</div>}
+        {!phase2Ready && (
+          <div className="app-message phase2-notice">
+            Phase 2 database features are in compatibility mode. Run <code>supabase/phase2-enterprise-core.sql</code> in Supabase to enable Finance, Documents, and lifecycle history.
+          </div>
+        )}
         {!loading && !error && lastUpdated && (
           <div className="data-freshness">Data refreshed {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
         )}
         {permissions.canViewPage(activePage) ? (
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} />}
-            {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
-            {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
+            {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} orders={orders} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
+            {activePage === 'Inventory' && <Inventory vehicles={vehicles} vehicleEvents={vehicleEvents} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
             {activePage === 'Quotes' && <Quotes quotes={quotes} saveQuote={saveQuote} deleteQuote={deleteQuote} vehicles={vehicles} customers={customers} canEdit={permissions.canManageQuotes()} canDelete={permissions.canDeleteRecords('Quotes')} />}
-            {activePage === 'Customers' && <Customers customers={customers} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
-            {activePage === 'Shipments' && <Shipments shipments={shipments} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
+            {activePage === 'Customers' && <Customers customers={customers} orders={orders} shipments={shipments} financeRecords={financeRecords} documents={documents} customerContacts={customerContacts} customerNotes={customerNotes} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} saveCustomerContact={saveCustomerContact} deleteCustomerContact={deleteCustomerContact} addCustomerNote={addCustomerNote} deleteCustomerNote={deleteCustomerNote} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
+            {activePage === 'Shipments' && <Shipments shipments={shipments} shipmentEvents={shipmentEvents} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
+            {activePage === 'Finance' && (phase2Ready ? <Finance financeRecords={financeRecords} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} saveFinanceRecord={saveFinanceRecord} deleteFinanceRecord={deleteFinanceRecord} canEdit={permissions.canManageFinance()} /> : <Phase2SetupState moduleName="Finance & Profit Center" />)}
+            {activePage === 'Documents' && (phase2Ready ? <DocumentVault documents={documents} uploadDocument={uploadDocument} openDocument={openDocument} deleteDocument={deleteDocument} canEdit={permissions.canManageDocuments()} /> : <Phase2SetupState moduleName="Document Vault" />)}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
             {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} />}
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
@@ -5386,6 +6673,7 @@ function App() {
         shipments={shipments}
         procurementRequests={procurementRequests}
         alerts={alerts}
+        enterpriseSummary={enterpriseSummary}
       />
     </div>
   );
