@@ -327,6 +327,14 @@ function numberValue(value) {
   return Number(String(value ?? '').replace(/,/g, '')) || 0;
 }
 
+function textValue(value) {
+  return String(value ?? '').trim();
+}
+
+function sameText(left, right) {
+  return textValue(left).toLowerCase() === textValue(right).toLowerCase();
+}
+
 function profitAmount(record) {
   return numberValue(record.sellingPrice) - numberValue(record.purchasePrice ?? record.purchaseCost);
 }
@@ -497,7 +505,7 @@ function trendByMonth(items, dateKey, valueGetter) {
 function countByStatus(items) {
   return Object.entries(items.reduce((result, item) => ({
     ...result,
-    [item.status]: (result[item.status] || 0) + 1,
+    [textValue(item.status) || 'Unknown']: (result[textValue(item.status) || 'Unknown'] || 0) + 1,
   }), {})).map(([name, value]) => ({ name, value }));
 }
 
@@ -2260,7 +2268,7 @@ function useSupabaseRecords(user, permissions) {
 
   async function saveShipment(shipment, editingId) {
     if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage shipments.');
-    const linkedCustomer = customers.find((customer) => customer.name.trim().toLowerCase() === shipment.customerName.trim().toLowerCase());
+    const linkedCustomer = customers.find((customer) => sameText(customer.name, shipment.customerName));
     const shipmentToSave = { ...shipment, customerId: shipment.customerId || linkedCustomer?.id || '' };
     const query = editingId
       ? supabase.from('shipments').update(toShipmentRow(shipmentToSave, null, phase2Ready)).eq('shipment_id', editingId).select().single()
@@ -2807,7 +2815,8 @@ function CsvImportPanel({ title, description, sampleHeaders, onImport }) {
 }
 
 function AlertBadge({ severity }) {
-  return <span className={`alert-severity severity-${severity.toLowerCase()}`}>{severity}</span>;
+  const safeSeverity = textValue(severity) || 'Low';
+  return <span className={`alert-severity severity-${safeSeverity.toLowerCase()}`}>{safeSeverity}</span>;
 }
 
 function SystemHealthPanel({ vehicles, orders, customers, shipments, error, authError, healthEvents = [] }) {
@@ -3616,7 +3625,8 @@ function SupplierForm({ value, onChange, onSubmit, editingId, onCancel }) {
 }
 
 function StatusBadge({ status }) {
-  return <span className={`status status-${status.toLowerCase().replace(/\s+/g, '-')}`}>{status}</span>;
+  const safeStatus = textValue(status) || 'Unknown';
+  return <span className={`status status-${safeStatus.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>{safeStatus}</span>;
 }
 
 function PrivacyPolicy() {
@@ -4719,7 +4729,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
   }
 
   function generateInvoice(order) {
-    const customer = customers.find((item) => item.name.trim().toLowerCase() === order.customerName.trim().toLowerCase());
+    const customer = customers.find((item) => sameText(item.name, order.customerName));
     generateOrderInvoice(order, customer);
   }
 
@@ -4890,7 +4900,7 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
   }
 
   function quoteCustomer(quote) {
-    return customers.find((item) => item.name.trim().toLowerCase() === quote.customerName.trim().toLowerCase());
+    return customers.find((item) => sameText(item.name, quote.customerName));
   }
 
   async function confirmDeleteQuote(quote) {
@@ -5138,8 +5148,8 @@ function Customers({
           </thead>
           <tbody>
             {table.rows.map((customer) => {
-              const customerOrders = orders.filter((order) => order.customerName.trim().toLowerCase() === customer.name.trim().toLowerCase());
-              const customerShipments = shipments.filter((shipment) => shipment.customerId === customer.id || shipment.customerName.trim().toLowerCase() === customer.name.trim().toLowerCase());
+              const customerOrders = orders.filter((order) => sameText(order.customerName, customer.name));
+              const customerShipments = shipments.filter((shipment) => shipment.customerId === customer.id || sameText(shipment.customerName, customer.name));
               const customerFinance = financeRecords.filter((record) => record.customerId === customer.id);
               const customerDocuments = documents.filter((item) => item.linkedModule === 'Customers' && item.linkedRecordId === customer.id);
               const contacts = customerContacts.filter((item) => item.customerId === customer.id);
@@ -5594,7 +5604,7 @@ function Finance({ financeRecords, orders, customers, shipments, procurementRequ
       setForm({ ...form, orderId });
       return;
     }
-    const customer = customers.find((item) => item.name.trim().toLowerCase() === order.customerName.trim().toLowerCase());
+    const customer = customers.find((item) => sameText(item.name, order.customerName));
     const projection = projectOrderFinance(order, shipments, procurementRequests);
     setForm({
       ...form,
@@ -6064,7 +6074,7 @@ function AlertsCenter({ alerts }) {
       </PageHeader>
       <div className="alert-grid">
         {filtered.map((alert) => (
-          <article className={`alert-card severity-${alert.severity.toLowerCase()}`} key={alert.id}>
+          <article className={`alert-card severity-${(textValue(alert.severity) || 'Low').toLowerCase()}`} key={alert.id}>
             <div className="card-heading">
               <AlertBadge severity={alert.severity} />
               <span className="status">{alert.linked_module}</span>

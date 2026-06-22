@@ -13,10 +13,21 @@ export default class AppErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
+    const reference = `VEL-${Date.now().toString(36).toUpperCase()}`;
+    this.setState({ reference });
+    try {
+      window.sessionStorage.setItem('velora-last-render-error', JSON.stringify({
+        reference,
+        message: error?.message || 'The interface could not be rendered.',
+        createdAt: new Date().toISOString(),
+      }));
+    } catch {
+      // Recovery must remain available when browser storage is restricted.
+    }
     recordHealthEvent({
       type: 'render-failure',
       message: error?.message || 'The interface could not be rendered.',
-      context: { componentStack: info?.componentStack },
+      context: { componentStack: info?.componentStack, reference },
     });
   }
 
@@ -33,6 +44,11 @@ export default class AppErrorBoundary extends React.Component {
             Your data has not been changed. Reload Velora Tracker to restore the
             workspace, or contact your administrator if the issue continues.
           </p>
+          <details>
+            <summary>Technical details</summary>
+            <code>{this.state.error?.message || 'Unknown rendering error'}</code>
+            {this.state.reference && <small>Reference: {this.state.reference}</small>}
+          </details>
           <button onClick={() => window.location.reload()}>
             <RefreshCw size={17} />
             Reload application
