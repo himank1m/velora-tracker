@@ -184,6 +184,7 @@ alter table public.suppliers add column if not exists created_by uuid default au
 alter table public.suppliers add column if not exists created_at timestamptz not null default now();
 alter table public.suppliers add column if not exists updated_at timestamptz not null default now();
 
+alter table public.procurement_requests add column if not exists procurement_id text;
 alter table public.procurement_requests add column if not exists vehicle_brand text not null default '';
 alter table public.procurement_requests add column if not exists vehicle_model text not null default '';
 alter table public.procurement_requests add column if not exists quantity integer not null default 1;
@@ -207,6 +208,36 @@ alter table public.procurement_requests add column if not exists priority text d
 alter table public.procurement_requests add column if not exists created_by uuid default auth.uid();
 alter table public.procurement_requests add column if not exists created_at timestamptz not null default now();
 alter table public.procurement_requests add column if not exists updated_at timestamptz not null default now();
+
+-- Repair older procurement_requests schemas without procedural SQL.
+update public.procurement_requests
+set procurement_id = 'PR-' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8)
+where procurement_id is null or procurement_id = '';
+
+-- Preserve the first occurrence of any legacy duplicate identifier and give
+-- later duplicates a unique suffix so the foreign-key target can be indexed.
+with ranked as (
+  select
+    ctid,
+    procurement_id,
+    row_number() over (
+      partition by procurement_id
+      order by created_at nulls last, ctid
+    ) as duplicate_number
+  from public.procurement_requests
+)
+update public.procurement_requests as requests
+set procurement_id = ranked.procurement_id
+  || '-'
+  || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8)
+from ranked
+where requests.ctid = ranked.ctid
+  and ranked.duplicate_number > 1;
+
+-- Keep display identifiers unique without requiring fragile cross-version
+-- procurement foreign keys.
+create unique index if not exists procurement_requests_procurement_id_uidx
+  on public.procurement_requests(procurement_id);
 
 alter table public.procurement_orders add column if not exists procurement_number text;
 alter table public.procurement_orders add column if not exists supplier_id uuid;
@@ -396,12 +427,6 @@ begin
       foreign key (supplier_id) references public.suppliers(id) on delete set null not valid;
   end if;
 
-  if not exists (select 1 from pg_constraint where conname = 'finance_records_procurement_id_fkey' and conrelid = 'public.finance_records'::regclass) then
-    alter table public.finance_records
-      add constraint finance_records_procurement_id_fkey
-      foreign key (procurement_id) references public.procurement_requests(procurement_id) on delete set null not valid;
-  end if;
-
   if not exists (select 1 from pg_constraint where conname = 'finance_records_procurement_order_id_fkey' and conrelid = 'public.finance_records'::regclass) then
     alter table public.finance_records
       add constraint finance_records_procurement_order_id_fkey
@@ -448,12 +473,6 @@ begin
     alter table public.vehicles
       add constraint vehicles_supplier_id_fkey
       foreign key (supplier_id) references public.suppliers(id) on delete set null not valid;
-  end if;
-
-  if not exists (select 1 from pg_constraint where conname = 'vehicles_linked_procurement_id_fkey' and conrelid = 'public.vehicles'::regclass) then
-    alter table public.vehicles
-      add constraint vehicles_linked_procurement_id_fkey
-      foreign key (linked_procurement_id) references public.procurement_requests(procurement_id) on delete set null not valid;
   end if;
 
   if not exists (select 1 from pg_constraint where conname = 'vehicles_linked_order_id_fkey' and conrelid = 'public.vehicles'::regclass) then
