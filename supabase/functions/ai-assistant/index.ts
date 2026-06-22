@@ -17,19 +17,27 @@ const roles = [
 type Role = typeof roles[number];
 
 const allowedSections: Record<Role, string[]> = {
-  CEO: ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports'],
-  'Company Manager': ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports'],
-  'Logistics Manager': ['dashboard', 'orders', 'shipments'],
-  'Inventory Manager': ['dashboard', 'inventory'],
-  'Finance Manager': ['dashboard', 'inventory', 'shipments', 'reports'],
+  CEO: ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary'],
+  'Company Manager': ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary'],
+  'Logistics Manager': ['dashboard', 'orders', 'shipments', 'enterpriseSummary'],
+  'Inventory Manager': ['dashboard', 'inventory', 'enterpriseSummary'],
+  'Finance Manager': ['dashboard', 'inventory', 'shipments', 'reports', 'enterpriseSummary'],
 };
 
 const allowedActionModules: Record<Role, string[]> = {
-  CEO: ['Command Center', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Reports', 'Alerts Center'],
-  'Company Manager': ['Command Center', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Reports', 'Alerts Center'],
-  'Logistics Manager': ['Shipments', 'Timeline', 'Alerts Center'],
-  'Inventory Manager': ['Procurement', 'Inventory', 'Alerts Center'],
-  'Finance Manager': ['Procurement', 'Quotes', 'Reports', 'Alerts Center'],
+  CEO: ['Command Center', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  'Company Manager': ['Command Center', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  'Logistics Manager': ['Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+  'Inventory Manager': ['Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+  'Finance Manager': ['Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+};
+
+const allowedEnterpriseSummarySections: Record<Role, string[]> = {
+  CEO: ['procurement', 'finance', 'crm', 'logistics', 'inventory', 'orders', 'documents'],
+  'Company Manager': ['procurement', 'finance', 'crm', 'logistics', 'inventory', 'orders', 'documents'],
+  'Logistics Manager': ['logistics', 'orders', 'documents'],
+  'Inventory Manager': ['procurement', 'inventory', 'documents'],
+  'Finance Manager': ['procurement', 'finance', 'logistics', 'orders', 'documents'],
 };
 
 const financialKeyPattern = /(purchase|selling|revenue|profit|freight|cost|margin|price|value)/i;
@@ -75,11 +83,20 @@ function filterContext(context: unknown, role: Role) {
     || role === 'Company Manager'
     || role === 'Finance Manager';
 
-  return Object.fromEntries(
+  const filtered = Object.fromEntries(
     allowedSections[role]
       .filter((section) => section in source)
       .map((section) => [section, sanitizeValue(source[section], canViewFinancials)]),
   );
+  const summary = source.enterpriseSummary;
+  if (summary && typeof summary === 'object') {
+    filtered.enterpriseSummary = Object.fromEntries(
+      Object.entries(summary as Record<string, unknown>)
+        .filter(([section]) => allowedEnterpriseSummarySections[role].includes(section))
+        .map(([section, value]) => [section, sanitizeValue(value, canViewFinancials)]),
+    );
+  }
+  return filtered;
 }
 
 function responseParts(response: Record<string, unknown>) {
