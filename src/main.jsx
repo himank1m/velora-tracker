@@ -6123,6 +6123,7 @@ function AiAssistant({
   shipments,
   procurementRequests,
   alerts,
+  enterpriseSummary,
 }) {
   const confirm = useConfirm();
   const [question, setQuestion] = useState('');
