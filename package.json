@@ -8,7 +8,8 @@
     "android": "npm run build && cap sync android && cap open android",
     "tauri": "npx --yes @tauri-apps/cli@2",
     "tauri:dev": "npx --yes @tauri-apps/cli@2 dev",
-    "tauri:build": "npx --yes @tauri-apps/cli@2 build"
+    "tauri:build": "npx --yes @tauri-apps/cli@2 build",
+    "test:load": "playwright test --workers=10"
   },
   "dependencies": {
     "@capacitor/android": "^7.0.0",
@@ -23,5 +24,8 @@
     "react-dom": "latest",
     "recharts": "^3.8.1",
     "vite": "latest"
+  },
+  "devDependencies": {
+    "@playwright/test": "latest"
   }
 }

@@ -1,7 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createRoot } from 'react-dom/client';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import {
   Activity,
   AlertTriangle,
@@ -48,7 +53,17 @@ import {
   YAxis,
 } from 'recharts';
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
+import AppErrorBoundary from './components/AppErrorBoundary';
+import {
+  getHealthEvents,
+  installGlobalHealthListeners,
+  recordHealthEvent,
+  subscribeToHealthEvents,
+} from './lib/appHealth';
+import { buildSearchIndex, searchIndex } from './services/searchService';
 import './styles.css';
+
+installGlobalHealthListeners();
 
 function formatIndianNumber(value) {
   const rounded = Math.round(Number(value) || 0);
@@ -340,6 +355,106 @@ function matchesSearch(record, query) {
   return text.includes(query.toLowerCase());
 }
 
+function friendlyError(error, fallback = 'Velora could not complete this request.') {
+  const message = String(error?.message || error || '').toLowerCase();
+  if (!message) return fallback;
+  if (message.includes('failed to fetch') || message.includes('network')) {
+    return 'Velora could not reach the server. Check your connection and try again.';
+  }
+  if (message.includes('jwt') || message.includes('session') || message.includes('token')) {
+    return 'Your secure session needs to be refreshed. Sign in again and retry.';
+  }
+  if (message.includes('permission') || message.includes('row-level security') || message.includes('policy')) {
+    return 'Your current role does not have permission to complete this action.';
+  }
+  if (message.includes('duplicate key') || error?.code === '23505') {
+    return 'A record with this identifier already exists. Use a different identifier and try again.';
+  }
+  if (message.includes('schema cache') || message.includes('does not exist')) {
+    return 'A required data service is not available yet. Ask an administrator to verify the Supabase setup.';
+  }
+  return error?.message || fallback;
+}
+
+function useHealthEvents() {
+  const [events, setEvents] = useState(() => getHealthEvents());
+
+  useEffect(() => subscribeToHealthEvents(setEvents), []);
+  return events;
+}
+
+const ConfirmContext = createContext(null);
+
+function ConfirmProvider({ children }) {
+  const [request, setRequest] = useState(null);
+  const confirmButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!request) return undefined;
+    window.requestAnimationFrame(() => confirmButtonRef.current?.focus());
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        request.resolve(false);
+        setRequest(null);
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [request]);
+
+  function confirm(options) {
+    return new Promise((resolve) => {
+      setRequest({
+        title: options.title || 'Confirm action',
+        message: options.message || 'Please confirm that you want to continue.',
+        confirmLabel: options.confirmLabel || 'Confirm',
+        danger: options.danger !== false,
+        resolve,
+      });
+    });
+  }
+
+  function close(result) {
+    request?.resolve(result);
+    setRequest(null);
+  }
+
+  return (
+    <ConfirmContext.Provider value={confirm}>
+      {children}
+      {request && (
+        <div className="confirm-backdrop" role="presentation" onMouseDown={() => close(false)}>
+          <section
+            className="confirm-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className={request.danger ? 'danger' : ''}><AlertTriangle size={22} /></span>
+            <div>
+              <p className="eyebrow">Protected action</p>
+              <h2 id="confirm-title">{request.title}</h2>
+              <p>{request.message}</p>
+            </div>
+            <div className="confirm-actions">
+              <button className="secondary" onClick={() => close(false)}>Cancel</button>
+              <button ref={confirmButtonRef} className={request.danger ? 'danger-button' : ''} onClick={() => close(true)}>
+                {request.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </ConfirmContext.Provider>
+  );
+}
+
+function useConfirm() {
+  return useContext(ConfirmContext);
+}
+
 function groupTimelineRows(events) {
   return events.reduce((groups, event) => {
     const key = event.orderId || event.procurementId;
@@ -558,24 +673,6 @@ function createAlerts({ vehicles, orders, customers, shipments, orderTimelines, 
   });
 }
 
-function buildGlobalResults({ vehicles, orders, quotes = [], customers, shipments, logisticsPartners = [], procurementRequests = [], suppliers = [] }, query) {
-  if (!query.trim()) return [];
-  const q = query.toLowerCase();
-  const toResult = (module, title, subtitle, page) => ({ module, title, subtitle, page });
-  return [
-    ...vehicles.map((item) => toResult('Vehicle', `${item.brand} ${item.model}`, `${item.id} - ${item.status}`, 'Inventory')),
-    ...orders.map((item) => toResult('Order', `Order ${item.orderNumber}`, `${item.customerName} - ${item.status}`, 'Orders')),
-    ...quotes.map((item) => toResult('Quote', item.quoteId, `${item.customerName} - ${item.status}`, 'Quotes')),
-    ...customers.map((item) => toResult('Customer', item.name, `${item.email || 'No email'} - ${item.location || 'No city'}`, 'Customers')),
-    ...shipments.map((item) => toResult('Shipment', item.shipmentId, `${item.destinationCountry} - ${item.status}`, 'Shipments')),
-    ...logisticsPartners.map((item) => toResult('Logistics Partner', item.partnerName, `${item.country || 'No country'} - ${item.serviceType || 'Logistics'}`, 'Shipments')),
-    ...procurementRequests.map((item) => toResult('Procurement', item.procurementId, `${item.vehicleBrand} ${item.vehicleModel} - ${item.status}`, 'Procurement')),
-    ...suppliers.map((item) => toResult('Supplier', item.supplierName, `${item.country || 'No country'} - ${item.email || 'No email'}`, 'Procurement')),
-    toResult('Report', 'Business reports', 'Exports, profit, freight, inventory value', 'Reports'),
-    toResult('Audit', 'Audit logs', 'Operational record feed', 'Audit Logs'),
-  ].filter((result) => `${result.module} ${result.title} ${result.subtitle}`.toLowerCase().includes(q)).slice(0, 8);
-}
-
 function buildAuditLogs({ orders, shipments, customers, vehicles }) {
   return [
     ...orders.map((order) => ({ label: `Order ${order.orderNumber} is ${order.status}`, meta: order.customerName, time: order.createdAt })),
@@ -717,7 +814,23 @@ function exportCsv(report) {
   downloadFile(`${report.slug}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
-function exportPdf(report, totals) {
+let pdfToolsPromise;
+
+function loadPdfTools() {
+  if (!pdfToolsPromise) {
+    pdfToolsPromise = Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ]).then(([jsPdfModule, autoTableModule]) => ({
+      jsPDF: jsPdfModule.default,
+      autoTable: autoTableModule.default,
+    }));
+  }
+  return pdfToolsPromise;
+}
+
+async function exportPdf(report, totals) {
+  const { jsPDF, autoTable } = await loadPdfTools();
   const doc = new jsPDF({ orientation: 'landscape' });
   const generatedAt = new Date().toLocaleString();
 
@@ -767,7 +880,8 @@ function quoteProfit(quote) {
   return numberValue(quote.sellingPrice) - numberValue(quote.purchaseCost);
 }
 
-function generateOrderInvoice(order, customer) {
+async function generateOrderInvoice(order, customer) {
+  const { jsPDF, autoTable } = await loadPdfTools();
   const doc = new jsPDF({ orientation: 'portrait' });
   const generatedAt = new Date().toLocaleString();
   const invoiceNo = invoiceNumber(order);
@@ -849,7 +963,8 @@ function generateOrderInvoice(order, customer) {
   doc.save(`${cleanFilePart(invoiceNo)}-${cleanFilePart(order.customerName)}.pdf`);
 }
 
-function generateQuotePdf(quote, customer) {
+async function generateQuotePdf(quote, customer) {
+  const { jsPDF, autoTable } = await loadPdfTools();
   const doc = new jsPDF({ orientation: 'portrait' });
   const generatedAt = new Date().toLocaleString();
   const quantity = numberValue(quote.quantity);
@@ -1472,7 +1587,11 @@ function useAuthSession() {
 
     supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
-      if (error) setAuthError(error.message);
+      if (error) {
+        const message = friendlyError(error, 'Velora could not restore your secure session.');
+        setAuthError(message);
+        recordHealthEvent({ type: 'authentication', message });
+      }
       setSession(data.session);
       setAuthLoading(false);
     });
@@ -1492,7 +1611,11 @@ function useAuthSession() {
     setAuthError('');
     window.localStorage.removeItem(pendingOAuthRoleKey);
     const { error } = await supabase.auth.signOut();
-    if (error) setAuthError(error.message);
+    if (error) {
+      const message = friendlyError(error, 'Velora could not sign you out.');
+      setAuthError(message);
+      recordHealthEvent({ type: 'authentication', message });
+    }
   }
 
   return { session, user: session?.user || null, authLoading, authError, signOut };
@@ -1579,7 +1702,9 @@ function useUserProfile(user) {
               email: user.email,
               role: normalizeRole(user.user_metadata?.role),
             });
-          setProfileError(requestError.message || 'Could not load profile role.');
+          const message = friendlyError(requestError, 'Velora could not load your access profile.');
+          setProfileError(message);
+          recordHealthEvent({ type: 'profile', message });
         }
       } finally {
         if (mounted) setProfileLoading(false);
@@ -1608,23 +1733,35 @@ function useSupabaseRecords(user, permissions) {
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  async function runRequest(request) {
-    setError('');
+  async function runRequest(request, operation = 'database request') {
     const { data, error: requestError } = await request;
     if (requestError) {
-      setError(requestError.message);
+      const message = friendlyError(requestError);
+      setError(message);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message,
+        context: { operation, code: requestError.code },
+      });
       throw requestError;
     }
     return data;
   }
 
-  async function runOptionalRequest(request) {
+  async function runOptionalRequest(request, operation = 'optional database request') {
     const { data, error: requestError } = await request;
     if (requestError) {
       const message = requestError.message || '';
       if (requestError.code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) return [];
-      setError(requestError.message);
+      const friendlyMessage = friendlyError(requestError);
+      setError(friendlyMessage);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message: friendlyMessage,
+        context: { operation, code: requestError.code },
+      });
       throw requestError;
     }
     return data || [];
@@ -1649,6 +1786,7 @@ function useSupabaseRecords(user, permissions) {
       setProcurementRequests([]);
       setSuppliers([]);
       setLoading(false);
+      setLastUpdated(null);
       return;
     }
 
@@ -1657,48 +1795,67 @@ function useSupabaseRecords(user, permissions) {
 
     try {
       const readAll = permissions.isExecutive || permissions.role === 'Finance Manager';
-      const vehicleQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('vehicles').select('*').order('created_at', { ascending: false })
-        : supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const orderQuery = readAll || permissions.role === 'Logistics Manager'
-        ? supabase.from('orders').select('*').order('created_at', { ascending: false })
-        : supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const quoteQuery = readAll
-        ? supabase.from('quotes').select('*').order('created_at', { ascending: false })
-        : supabase.from('quotes').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const customerQuery = readAll
-        ? supabase.from('customers').select('*').order('created_at', { ascending: false })
-        : supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const shipmentQuery = permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('shipments').select('*').order('created_at', { ascending: false })
-        : supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const logisticsPartnerQuery = permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('logistics_partners').select('*').order('created_at', { ascending: false })
-        : supabase.from('logistics_partners').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const timelineQuery = permissions.isExecutive || permissions.role === 'Logistics Manager'
-        ? supabase.from('order_timeline_events').select('*').order('created_at', { ascending: true })
-        : supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
-      const procurementQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('procurement_requests').select('*').order('created_at', { ascending: false })
-        : supabase.from('procurement_requests').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const supplierQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('suppliers').select('*').order('created_at', { ascending: false })
-        : supabase.from('suppliers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
-      const procurementTimelineQuery = permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-        ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
-        : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+      const emptyQuery = Promise.resolve({ data: [], error: null });
+      const needsVehicles = permissions.canViewPage('Inventory') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes');
+      const needsOrders = permissions.canViewPage('Orders') || permissions.canViewPage('Timeline') || permissions.canViewPage('Shipments');
+      const needsQuotes = permissions.canViewPage('Quotes');
+      const needsCustomers = permissions.canViewPage('Customers') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes');
+      const needsShipments = permissions.canViewPage('Shipments');
+      const needsTimeline = permissions.canViewPage('Timeline') || permissions.canViewPage('Orders');
+      const needsProcurement = permissions.canViewPage('Procurement');
+
+      const vehicleQuery = !needsVehicles ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+          ? supabase.from('vehicles').select('*').order('created_at', { ascending: false })
+          : supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const orderQuery = !needsOrders ? emptyQuery
+        : readAll || permissions.role === 'Logistics Manager'
+          ? supabase.from('orders').select('*').order('created_at', { ascending: false })
+          : supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const quoteQuery = !needsQuotes ? emptyQuery
+        : readAll
+          ? supabase.from('quotes').select('*').order('created_at', { ascending: false })
+          : supabase.from('quotes').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const customerQuery = !needsCustomers ? emptyQuery
+        : readAll
+          ? supabase.from('customers').select('*').order('created_at', { ascending: false })
+          : supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const shipmentQuery = !needsShipments ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
+          ? supabase.from('shipments').select('*').order('created_at', { ascending: false })
+          : supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const logisticsPartnerQuery = !needsShipments ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
+          ? supabase.from('logistics_partners').select('*').order('created_at', { ascending: false })
+          : supabase.from('logistics_partners').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const timelineQuery = !needsTimeline ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Logistics Manager'
+          ? supabase.from('order_timeline_events').select('*').order('created_at', { ascending: true })
+          : supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+      const procurementQuery = !needsProcurement ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+          ? supabase.from('procurement_requests').select('*').order('created_at', { ascending: false })
+          : supabase.from('procurement_requests').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const supplierQuery = !needsProcurement ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+          ? supabase.from('suppliers').select('*').order('created_at', { ascending: false })
+          : supabase.from('suppliers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+      const procurementTimelineQuery = !needsProcurement ? emptyQuery
+        : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
+          ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
+          : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
 
       const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows] = await Promise.all([
-        runRequest(vehicleQuery),
-        runRequest(orderQuery),
-        runOptionalRequest(quoteQuery),
-        runRequest(customerQuery),
-        runRequest(shipmentQuery),
-        runOptionalRequest(logisticsPartnerQuery),
-        runRequest(timelineQuery),
-        runOptionalRequest(procurementQuery),
-        runOptionalRequest(supplierQuery),
-        runOptionalRequest(procurementTimelineQuery),
+        runRequest(vehicleQuery, 'load vehicles'),
+        runRequest(orderQuery, 'load orders'),
+        runOptionalRequest(quoteQuery, 'load quotes'),
+        runRequest(customerQuery, 'load customers'),
+        runRequest(shipmentQuery, 'load shipments'),
+        runOptionalRequest(logisticsPartnerQuery, 'load logistics partners'),
+        runRequest(timelineQuery, 'load order timeline'),
+        runOptionalRequest(procurementQuery, 'load procurement requests'),
+        runOptionalRequest(supplierQuery, 'load suppliers'),
+        runOptionalRequest(procurementTimelineQuery, 'load procurement timeline'),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -1711,6 +1868,9 @@ function useSupabaseRecords(user, permissions) {
       setProcurementRequests(procurementRows.map(fromProcurementRow));
       setSuppliers(supplierRows.map(fromSupplierRow));
       setProcurementTimelines(groupTimelineRows(procurementTimelineRows.map(fromProcurementTimelineRow)));
+      setLastUpdated(new Date());
+    } catch (requestError) {
+      setError((current) => current || friendlyError(requestError, 'Velora could not load company records.'));
     } finally {
       setLoading(false);
     }
@@ -1959,6 +2119,8 @@ function useSupabaseRecords(user, permissions) {
     suppliers,
     loading,
     error,
+    lastUpdated,
+    refreshRecords: loadRecords,
     saveVehicle,
     deleteVehicle,
     saveOrder,
@@ -2036,14 +2198,95 @@ function PageHeader({ eyebrow, title, description, children }) {
   );
 }
 
-function TableFooter({ count }) {
+function compareTableValues(left, right) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (left !== '' && right !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return leftNumber - rightNumber;
+  }
+  return String(left ?? '').localeCompare(String(right ?? ''), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+}
+
+function useTableView(items, {
+  initialSortKey,
+  pageSize = 10,
+} = {}) {
+  const [sortKey, setSortKey] = useState(initialSortKey || '');
+  const [sortDirection, setSortDirection] = useState('asc');
+  const [page, setPage] = useState(1);
+
+  const sortedItems = useMemo(() => {
+    if (!sortKey) return items;
+    return [...items].sort((left, right) => {
+      const comparison = compareTableValues(left?.[sortKey], right?.[sortKey]);
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [items, sortKey, sortDirection]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedItems.length / pageSize));
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, totalPages));
+  }, [totalPages]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [items.length, sortKey, sortDirection]);
+
+  return {
+    rows: sortedItems.slice((page - 1) * pageSize, page * pageSize),
+    page,
+    setPage,
+    totalPages,
+    sortKey,
+    setSortKey,
+    sortDirection,
+    setSortDirection,
+    count: sortedItems.length,
+    firstItem: sortedItems.length ? (page - 1) * pageSize + 1 : 0,
+    lastItem: Math.min(page * pageSize, sortedItems.length),
+  };
+}
+
+function TableSortControl({ table, options }) {
+  return (
+    <div className="table-sort-control">
+      <select
+        aria-label="Sort table"
+        value={table.sortKey}
+        onChange={(event) => table.setSortKey(event.target.value)}
+      >
+        {options.map((option) => (
+          <option value={option.value} key={option.value}>{option.label}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        className="sort-direction"
+        onClick={() => table.setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')}
+        aria-label={`Sort ${table.sortDirection === 'asc' ? 'descending' : 'ascending'}`}
+        title={`Sort ${table.sortDirection === 'asc' ? 'descending' : 'ascending'}`}
+      >
+        {table.sortDirection === 'asc' ? '↑' : '↓'}
+      </button>
+    </div>
+  );
+}
+
+function TableFooter({ count, page = 1, totalPages = 1, firstItem = count ? 1 : 0, lastItem = count, onPageChange }) {
   return (
     <div className="table-footer">
-      <span>Showing {count} record{count === 1 ? '' : 's'}</span>
+      <span>
+        {count ? `Showing ${firstItem}-${lastItem} of ${count}` : 'Showing 0 records'}
+      </span>
       <div className="pagination">
-        <button disabled>Previous</button>
-        <strong>1</strong>
-        <button disabled>Next</button>
+        <button disabled={page <= 1} onClick={() => onPageChange?.(page - 1)}>Previous</button>
+        <strong>{page}</strong>
+        <span>of {totalPages}</span>
+        <button disabled={page >= totalPages} onClick={() => onPageChange?.(page + 1)}>Next</button>
       </div>
     </div>
   );
@@ -2098,17 +2341,22 @@ function AlertBadge({ severity }) {
   return <span className={`alert-severity severity-${severity.toLowerCase()}`}>{severity}</span>;
 }
 
-function SystemHealthPanel({ vehicles, orders, customers, shipments, error, authError }) {
+function SystemHealthPanel({ vehicles, orders, customers, shipments, error, authError, healthEvents = [] }) {
   const totalRecords = vehicles.length + orders.length + customers.length + shipments.length;
   const lastActivity = buildAuditLogs({ vehicles, orders, customers, shipments })[0]?.time;
   const hasError = Boolean(error || authError);
+  const latestHealthEvent = healthEvents[0];
   const checks = [
     { label: 'Database Status', value: hasError ? 'Attention' : 'Connected', tone: hasError ? 'danger' : 'success' },
     { label: 'Authentication Status', value: authError ? 'Check setup' : 'Active', tone: authError ? 'danger' : 'success' },
     { label: 'Total Records', value: formatIndianNumber(totalRecords), tone: 'info' },
     { label: 'Last Activity', value: lastActivity ? new Date(lastActivity).toLocaleString() : 'No activity yet', tone: 'info' },
     { label: 'System Uptime', value: 'Operational', tone: 'success' },
-    { label: 'Recent Errors', value: error || authError || 'None', tone: hasError ? 'danger' : 'success' },
+    {
+      label: 'Recent Errors',
+      value: error || authError || latestHealthEvent?.message || 'None',
+      tone: hasError || latestHealthEvent ? 'danger' : 'success',
+    },
   ];
 
   return (
@@ -2166,19 +2414,77 @@ function DepartmentShortcuts({ setActivePage, alerts, totals }) {
   );
 }
 
-function GlobalSearch({ data, setActivePage, allowedPages }) {
+function GlobalSearch({ index, setActivePage, allowedPages }) {
   const [query, setQuery] = useState('');
-  const results = useMemo(() => buildGlobalResults(data, query).filter((result) => allowedPages.includes(result.page)), [data, query, allowedPages]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const inputRef = useRef(null);
+  const results = useMemo(
+    () => searchIndex(index, query, allowedPages),
+    [index, query, allowedPages],
+  );
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [query]);
+
+  useEffect(() => {
+    function focusSearch(event) {
+      if (event.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+        event.preventDefault();
+        inputRef.current?.focus();
+      }
+    }
+    window.addEventListener('keydown', focusSearch);
+    return () => window.removeEventListener('keydown', focusSearch);
+  }, []);
+
+  function openResult(result) {
+    if (!result) return;
+    setActivePage(result.page);
+    setQuery('');
+  }
+
+  function handleKeyDown(event) {
+    if (!results.length) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setSelectedIndex((current) => (current + 1) % results.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setSelectedIndex((current) => (current - 1 + results.length) % results.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      openResult(results[selectedIndex]);
+    } else if (event.key === 'Escape') {
+      setQuery('');
+      inputRef.current?.blur();
+    }
+  }
 
   return (
     <div className="global-search">
       <Search size={16} />
-      <input placeholder="Search vehicles, orders, quotes, customers, shipments..." value={query} onChange={(event) => setQuery(event.target.value)} />
-      <kbd>Ctrl K</kbd>
+      <input
+        ref={inputRef}
+        placeholder="Search vehicles, orders, customers, shipments..."
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={handleKeyDown}
+        aria-label="Search Velora records"
+        aria-expanded={results.length > 0}
+      />
+      <kbd>/</kbd>
       {results.length > 0 && (
-        <div className="search-popover">
-          {results.map((result) => (
-            <button key={`${result.module}-${result.title}`} onClick={() => { setActivePage(result.page); setQuery(''); }}>
+        <div className="search-popover" role="listbox" aria-label="Search results">
+          {results.map((result, indexPosition) => (
+            <button
+              key={`${result.module}-${result.title}`}
+              className={selectedIndex === indexPosition ? 'selected' : ''}
+              role="option"
+              aria-selected={selectedIndex === indexPosition}
+              onMouseEnter={() => setSelectedIndex(indexPosition)}
+              onClick={() => openResult(result)}
+            >
               <span>{result.module}</span>
               <strong>{result.title}</strong>
               <small>{result.subtitle}</small>
@@ -3170,7 +3476,7 @@ function LogisticsPartnerForm({ value, onChange, onSubmit, editingId, onCancel }
   );
 }
 
-function Dashboard({ vehicles, orders, customers, shipments, procurementRequests, suppliers, orderTimelines, setActivePage, error, authError }) {
+function Dashboard({ vehicles, orders, customers, shipments, procurementRequests, suppliers, orderTimelines, setActivePage, error, authError, healthEvents }) {
   const totals = useMemo(() => {
     const activeOrders = orders.filter((order) => order.status !== 'Completed').length;
     const completedOrders = orders.filter((order) => order.status === 'Completed').length;
@@ -3348,7 +3654,7 @@ function Dashboard({ vehicles, orders, customers, shipments, procurementRequests
           </div>
         </section>
         <DepartmentShortcuts setActivePage={setActivePage} alerts={alerts} totals={totals} />
-        <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} />
+        <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} healthEvents={healthEvents} />
       </div>
       <div className="section-heading compact-heading">
         <div>
@@ -3387,6 +3693,7 @@ function Dashboard({ vehicles, orders, customers, shipments, procurementRequests
 }
 
 function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete }) {
+  const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
   const nextVehicleId = useMemo(() => nextDisplayId(vehicles, 'id'), [vehicles]);
@@ -3397,6 +3704,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
     const locationMatches = locationFilter === 'All' || vehicle.locationName === locationFilter;
     return locationMatches && matchesSearch(vehicle, query);
   });
+  const table = useTableView(filtered, { initialSortKey: 'id' });
 
   async function submitVehicle(event) {
     event.preventDefault();
@@ -3420,6 +3728,15 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
     setEditingId(vehicle.id);
   }
 
+  async function confirmDeleteVehicle(vehicle) {
+    const approved = await confirm({
+      title: 'Delete vehicle record?',
+      message: `${vehicle.brand} ${vehicle.model} (${vehicle.id}) will be permanently removed from inventory.`,
+      confirmLabel: 'Delete vehicle',
+    });
+    if (approved) await deleteVehicle(vehicle.id);
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Inventory" title="Vehicle stock" description="Track available, reserved, and sold vehicles across Velora locations.">
@@ -3429,6 +3746,13 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
             <option>All</option>
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
+          <TableSortControl table={table} options={[
+            { value: 'id', label: 'Vehicle ID' },
+            { value: 'brand', label: 'Brand' },
+            { value: 'model', label: 'Model' },
+            { value: 'quantity', label: 'Quantity' },
+            { value: 'status', label: 'Status' },
+          ]} />
         </div>
       </PageHeader>
       {canEdit && <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(newVehicleForm); setEditingId(''); }} />}
@@ -3450,7 +3774,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
             </tr>
           </thead>
           <tbody>
-            {filtered.map((vehicle) => (
+            {table.rows.map((vehicle) => (
               <tr key={vehicle.id}>
                 <td>{vehicle.id}</td>
                 <td>{vehicle.brand}</td>
@@ -3464,7 +3788,7 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
                 <td><StatusBadge status={vehicle.status} /></td>
                 <td className="row-actions">
                   {canEdit && <button className="mini" onClick={() => editVehicle(vehicle)}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteVehicle(vehicle.id)}>Delete</button>}
+                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteVehicle(vehicle)}>Delete</button>}
                   {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
@@ -3472,13 +3796,14 @@ function Inventory({ vehicles, saveVehicle, deleteVehicle, canEdit, canDelete })
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No vehicles found." />}
-        <TableFooter count={filtered.length} />
+        <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
       </div>
     </section>
   );
 }
 
 function Procurement({ procurementRequests, suppliers, procurementTimelines, saveProcurementRequest, deleteProcurementRequest, addProcurementTimelineNote, saveSupplier, deleteSupplier, canEdit, canDelete }) {
+  const confirm = useConfirm();
   const nextId = useMemo(() => nextProcurementId(procurementRequests), [procurementRequests]);
   const newRequestForm = useMemo(() => ({ ...blankProcurementRequest, procurementId: nextId }), [nextId]);
   const [query, setQuery] = useState('');
@@ -3498,6 +3823,8 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
     const statusMatches = statusFilter === 'All' || request.status === statusFilter;
     return statusMatches && matchesSearch(request, query);
   });
+  const requestTable = useTableView(filtered, { initialSortKey: 'procurementId' });
+  const supplierTable = useTableView(suppliers, { initialSortKey: 'supplierName' });
   const totals = {
     active: procurementRequests.filter((request) => request.status !== 'Added To Inventory').length,
     value: procurementRequests.reduce((sum, request) => sum + procurementValue(request), 0),
@@ -3527,6 +3854,24 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
     setTimelineNote('');
   }
 
+  async function confirmDeleteProcurement(request) {
+    const approved = await confirm({
+      title: 'Delete procurement request?',
+      message: `${request.procurementId} and its operational record will be permanently removed.`,
+      confirmLabel: 'Delete request',
+    });
+    if (approved) await deleteProcurementRequest(request.procurementId);
+  }
+
+  async function confirmDeleteSupplier(supplier) {
+    const approved = await confirm({
+      title: 'Delete supplier?',
+      message: `${supplier.supplierName} will be permanently removed from the supplier directory.`,
+      confirmLabel: 'Delete supplier',
+    });
+    if (approved) await deleteSupplier(supplier.id);
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Procurement" title="Vehicle acquisition" description="Track sourcing, supplier negotiation, purchase progress, and incoming inventory before stock entry.">
@@ -3536,6 +3881,13 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
             <option>All</option>
             {procurementStatuses.map((status) => <option key={status}>{status}</option>)}
           </select>
+          <TableSortControl table={requestTable} options={[
+            { value: 'procurementId', label: 'Procurement ID' },
+            { value: 'vehicleBrand', label: 'Vehicle brand' },
+            { value: 'supplierName', label: 'Supplier' },
+            { value: 'quantity', label: 'Quantity' },
+            { value: 'status', label: 'Status' },
+          ]} />
         </div>
       </PageHeader>
       <div className="metrics-grid reports-summary">
@@ -3563,7 +3915,7 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
             </tr>
           </thead>
           <tbody>
-            {filtered.map((request) => (
+            {requestTable.rows.map((request) => (
               <React.Fragment key={request.procurementId}>
                 <tr>
                   <td>{request.procurementId}</td>
@@ -3579,7 +3931,7 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
                   <td className="row-actions">
                     <button className="mini" onClick={() => setExpandedId(expandedId === request.procurementId ? '' : request.procurementId)}>{expandedId === request.procurementId ? 'Hide timeline' : 'Timeline'}</button>
                     {canEdit && <button className="mini" onClick={() => { setRequestForm(request); setEditingRequestId(request.procurementId); }}>Edit</button>}
-                    {canDelete && <button className="mini danger" onClick={() => deleteProcurementRequest(request.procurementId)}>Delete</button>}
+                    {canDelete && <button className="mini danger" onClick={() => confirmDeleteProcurement(request)}>Delete</button>}
                   </td>
                 </tr>
                 {expandedId === request.procurementId && (
@@ -3616,9 +3968,16 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No procurement requests found." icon={ClipboardList} />}
-        <TableFooter count={filtered.length} />
+        <TableFooter count={requestTable.count} page={requestTable.page} totalPages={requestTable.totalPages} firstItem={requestTable.firstItem} lastItem={requestTable.lastItem} onPageChange={requestTable.setPage} />
       </div>
       <PageHeader eyebrow="Suppliers" title="Supplier management" description="Maintain sourcing partners and their contact details for procurement follow-up." />
+      <div className="table-toolbar">
+        <TableSortControl table={supplierTable} options={[
+          { value: 'supplierName', label: 'Supplier name' },
+          { value: 'country', label: 'Country' },
+          { value: 'contactPerson', label: 'Contact person' },
+        ]} />
+      </div>
       {canEdit && <SupplierForm value={supplierForm} onChange={setSupplierForm} onSubmit={submitSupplier} editingId={editingSupplierId} onCancel={() => { setSupplierForm(blankSupplier); setEditingSupplierId(''); }} />}
       <div className="table-shell">
         <table>
@@ -3634,7 +3993,7 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
             </tr>
           </thead>
           <tbody>
-            {suppliers.map((supplier) => (
+            {supplierTable.rows.map((supplier) => (
               <tr key={supplier.id}>
                 <td>{supplier.supplierName}</td>
                 <td>{supplier.country}</td>
@@ -3644,7 +4003,7 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
                 <td>{supplier.notes}</td>
                 <td className="row-actions">
                   {canEdit && <button className="mini" onClick={() => { setSupplierForm(supplier); setEditingSupplierId(supplier.id); }}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteSupplier(supplier.id)}>Delete</button>}
+                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteSupplier(supplier)}>Delete</button>}
                   {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
@@ -3652,13 +4011,14 @@ function Procurement({ procurementRequests, suppliers, procurementTimelines, sav
           </tbody>
         </table>
         {!suppliers.length && <EmptyState label="No suppliers saved yet." icon={Users} />}
-        <TableFooter count={suppliers.length} />
+        <TableFooter count={supplierTable.count} page={supplierTable.page} totalPages={supplierTable.totalPages} firstItem={supplierTable.firstItem} lastItem={supplierTable.lastItem} onPageChange={supplierTable.setPage} />
       </div>
     </section>
   );
 }
 
 function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, customers, orderTimelines, addOrderTimelineNote, canEdit, canDelete }) {
+  const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [locationFilter, setLocationFilter] = useState('All');
   const nextNumber = useMemo(() => nextOrderNumber(orders), [orders]);
@@ -3670,6 +4030,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
     const locationMatches = locationFilter === 'All' || order.locationName === locationFilter;
     return locationMatches && matchesSearch(order, query);
   });
+  const table = useTableView(filtered, { initialSortKey: 'orderNumber' });
 
   async function submitOrder(event) {
     event.preventDefault();
@@ -3687,6 +4048,15 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
   function generateInvoice(order) {
     const customer = customers.find((item) => item.name.trim().toLowerCase() === order.customerName.trim().toLowerCase());
     generateOrderInvoice(order, customer);
+  }
+
+  async function confirmDeleteOrder(order) {
+    const approved = await confirm({
+      title: 'Delete order?',
+      message: `Order ${order.orderNumber} for ${order.customerName} will be permanently removed.`,
+      confirmLabel: 'Delete order',
+    });
+    if (approved) await deleteOrder(order.id);
   }
 
   async function importOrders(rows) {
@@ -3733,6 +4103,13 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
             <option>All</option>
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
+          <TableSortControl table={table} options={[
+            { value: 'orderNumber', label: 'Order number' },
+            { value: 'customerName', label: 'Customer' },
+            { value: 'orderDate', label: 'Order date' },
+            { value: 'status', label: 'Status' },
+            { value: 'sellingPrice', label: 'Selling price' },
+          ]} />
         </div>
       </PageHeader>
       {canEdit && <OrderForm value={form} onChange={setForm} onSubmit={submitOrder} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(newOrderForm); setEditingId(''); }} />}
@@ -3762,7 +4139,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
             </tr>
           </thead>
           <tbody>
-            {filtered.map((order) => (
+            {table.rows.map((order) => (
               <React.Fragment key={order.id}>
                 <tr>
                   <td>{order.orderNumber}</td>
@@ -3789,7 +4166,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
                       {expandedOrderId === order.id ? 'Hide timeline' : 'Timeline'}
                     </button>
                     {canEdit && <button className="mini" onClick={() => { setForm(order); setEditingId(order.id); }}>Edit</button>}
-                    {canDelete && <button className="mini danger" onClick={() => deleteOrder(order.id)}>Delete</button>}
+                    {canDelete && <button className="mini danger" onClick={() => confirmDeleteOrder(order)}>Delete</button>}
                   </td>
                 </tr>
                 {expandedOrderId === order.id && (
@@ -3804,13 +4181,14 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No orders found." />}
-        <TableFooter count={filtered.length} />
+        <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
       </div>
     </section>
   );
 }
 
 function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, canDelete }) {
+  const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [locationFilter, setLocationFilter] = useState('All');
@@ -3823,6 +4201,7 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
     const locationMatches = locationFilter === 'All' || quote.locationName === locationFilter;
     return statusMatches && locationMatches && matchesSearch(quote, query);
   });
+  const table = useTableView(filtered, { initialSortKey: 'quoteId' });
 
   async function submitQuote(event) {
     event.preventDefault();
@@ -3839,6 +4218,15 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
 
   function quoteCustomer(quote) {
     return customers.find((item) => item.name.trim().toLowerCase() === quote.customerName.trim().toLowerCase());
+  }
+
+  async function confirmDeleteQuote(quote) {
+    const approved = await confirm({
+      title: 'Delete quote?',
+      message: `${quote.quoteId} for ${quote.customerName} will be permanently removed.`,
+      confirmLabel: 'Delete quote',
+    });
+    if (approved) await deleteQuote(quote.quoteId);
   }
 
   useEffect(() => {
@@ -3860,6 +4248,13 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
             <option>All</option>
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
+          <TableSortControl table={table} options={[
+            { value: 'quoteId', label: 'Quote ID' },
+            { value: 'customerName', label: 'Customer' },
+            { value: 'validUntil', label: 'Valid until' },
+            { value: 'status', label: 'Status' },
+            { value: 'sellingPrice', label: 'Quoted price' },
+          ]} />
         </div>
       </PageHeader>
       {canEdit && <QuoteForm value={form} onChange={setForm} onSubmit={submitQuote} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(newQuoteForm); setEditingId(''); }} />}
@@ -3881,7 +4276,7 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
             </tr>
           </thead>
           <tbody>
-            {filtered.map((quote) => (
+            {table.rows.map((quote) => (
               <tr key={quote.quoteId}>
                 <td>{quote.quoteId}</td>
                 <td>{quote.customerName}</td>
@@ -3896,7 +4291,7 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
                 <td className="row-actions">
                   <button className="mini invoice-action" onClick={() => generateQuotePdf(quote, quoteCustomer(quote))}>Quote PDF</button>
                   {canEdit && <button className="mini" onClick={() => { setForm(quote); setEditingId(quote.quoteId); }}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteQuote(quote.quoteId)}>Delete</button>}
+                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteQuote(quote)}>Delete</button>}
                   {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
@@ -3904,15 +4299,19 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No quotes found." icon={FileText} />}
-        <TableFooter count={filtered.length} />
+        <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
       </div>
     </section>
   );
 }
 
 function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete }) {
+  const confirm = useConfirm();
+  const [query, setQuery] = useState('');
   const [form, setForm] = useState(blankCustomer);
   const [editingId, setEditingId] = useState('');
+  const filtered = customers.filter((customer) => matchesSearch(customer, query));
+  const table = useTableView(filtered, { initialSortKey: 'name' });
 
   async function submitCustomer(event) {
     event.preventDefault();
@@ -3953,9 +4352,28 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
     return imported;
   }
 
+  async function confirmDeleteCustomer(customer) {
+    const approved = await confirm({
+      title: 'Delete customer?',
+      message: `${customer.name} and their saved contact details will be permanently removed.`,
+      confirmLabel: 'Delete customer',
+    });
+    if (approved) await deleteCustomer(customer.id);
+  }
+
   return (
     <section className="page-stack">
-      <PageHeader eyebrow="Customers" title="Customer records" description="Maintain clean buyer contact details, notes, and commercial context." />
+      <PageHeader eyebrow="Customers" title="Customer records" description="Maintain clean buyer contact details, notes, and commercial context.">
+        <div className="toolbar">
+          <input className="search" placeholder="Search customers" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <TableSortControl table={table} options={[
+            { value: 'name', label: 'Customer name' },
+            { value: 'location', label: 'Country / City' },
+            { value: 'email', label: 'Email' },
+            { value: 'createdAt', label: 'Created date' },
+          ]} />
+        </div>
+      </PageHeader>
       {canEdit && <CustomerForm value={form} onChange={setForm} onSubmit={submitCustomer} editingId={editingId} onCancel={() => { setForm(blankCustomer); setEditingId(''); }} />}
       {canEdit && (
         <CsvImportPanel
@@ -3978,7 +4396,7 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
             </tr>
           </thead>
           <tbody>
-            {customers.map((customer) => (
+            {table.rows.map((customer) => (
               <tr key={customer.id}>
                 <td>{customer.name}</td>
                 <td>{customer.phone}</td>
@@ -3987,20 +4405,22 @@ function Customers({ customers, saveCustomer, deleteCustomer, canEdit, canDelete
                 <td>{customer.notes}</td>
                 <td className="row-actions">
                   {canEdit && <button className="mini" onClick={() => { setForm(customer); setEditingId(customer.id); }}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteCustomer(customer.id)}>Delete</button>}
+                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteCustomer(customer)}>Delete</button>}
                   {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <TableFooter count={customers.length} />
+        {!filtered.length && <EmptyState label="No customers found." icon={Users} />}
+        <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
       </div>
     </section>
   );
 }
 
 function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsPartners = [], saveLogisticsPartner, deleteLogisticsPartner, canEdit, canDelete }) {
+  const confirm = useConfirm();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [locationFilter, setLocationFilter] = useState('All');
@@ -4013,6 +4433,8 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
     const locationMatches = locationFilter === 'All' || shipment.locationName === locationFilter;
     return statusMatches && locationMatches && matchesSearch(shipment, query);
   });
+  const table = useTableView(filtered, { initialSortKey: 'shipmentId' });
+  const partnerTable = useTableView(logisticsPartners, { initialSortKey: 'partnerName' });
   const orderNumberById = useMemo(() => {
     return orders.reduce((lookup, order) => ({ ...lookup, [order.id]: order.orderNumber || order.id }), {});
   }, [orders]);
@@ -4073,6 +4495,24 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
     return imported;
   }
 
+  async function confirmDeleteShipment(shipment) {
+    const approved = await confirm({
+      title: 'Delete shipment?',
+      message: `Shipment ${shipment.shipmentId} will be permanently removed from tracking.`,
+      confirmLabel: 'Delete shipment',
+    });
+    if (approved) await deleteShipment(shipment.shipmentId);
+  }
+
+  async function confirmDeletePartner(partner) {
+    const approved = await confirm({
+      title: 'Delete logistics partner?',
+      message: `${partner.partnerName} will be permanently removed from the partner directory.`,
+      confirmLabel: 'Delete partner',
+    });
+    if (approved) await deleteLogisticsPartner?.(partner.id);
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Shipments" title="Shipment tracking" description="Monitor freight movement, ports, carriers, ETA, and delivery progress.">
@@ -4088,6 +4528,13 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
             <option>All</option>
             {locationOptions.map((location) => <option key={location}>{location}</option>)}
           </select>
+          <TableSortControl table={table} options={[
+            { value: 'shipmentId', label: 'Shipment ID' },
+            { value: 'customerName', label: 'Customer' },
+            { value: 'eta', label: 'ETA' },
+            { value: 'status', label: 'Status' },
+            { value: 'destinationCountry', label: 'Destination' },
+          ]} />
         </div>
       </PageHeader>
       {canEdit && <ShipmentForm value={form} onChange={setForm} onSubmit={submitShipment} editingId={editingId} orderOptions={orders} logisticsPartners={logisticsPartners} onCancel={() => { setForm(blankShipment); setEditingId(''); }} />}
@@ -4120,7 +4567,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
             </tr>
           </thead>
           <tbody>
-            {filtered.map((shipment) => (
+            {table.rows.map((shipment) => (
               <tr key={shipment.shipmentId}>
                 <td>{shipment.shipmentId}</td>
                 <td>{orderNumberById[shipment.linkedOrderId] || shipment.linkedOrderId}</td>
@@ -4137,7 +4584,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
                 <td>{shipment.notes}</td>
                 <td className="row-actions">
                   {canEdit && <button className="mini" onClick={() => editShipment(shipment)}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteShipment(shipment.shipmentId)}>Delete</button>}
+                  {canDelete && <button className="mini danger" onClick={() => confirmDeleteShipment(shipment)}>Delete</button>}
                   {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
@@ -4145,9 +4592,16 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
           </tbody>
         </table>
         {!filtered.length && <EmptyState label="No shipments found." />}
-        <TableFooter count={filtered.length} />
+        <TableFooter count={table.count} page={table.page} totalPages={table.totalPages} firstItem={table.firstItem} lastItem={table.lastItem} onPageChange={table.setPage} />
       </div>
       <PageHeader eyebrow="Logistics partners" title="Partner management" description="Maintain freight forwarders, shipping agents, customs brokers, and port handling contacts." />
+      <div className="table-toolbar">
+        <TableSortControl table={partnerTable} options={[
+          { value: 'partnerName', label: 'Partner name' },
+          { value: 'country', label: 'Country' },
+          { value: 'serviceType', label: 'Service type' },
+        ]} />
+      </div>
       {canEdit && <LogisticsPartnerForm value={partnerForm} onChange={setPartnerForm} onSubmit={submitPartner} editingId={editingPartnerId} onCancel={() => { setPartnerForm(blankLogisticsPartner); setEditingPartnerId(''); }} />}
       <div className="table-shell">
         <table>
@@ -4164,7 +4618,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
             </tr>
           </thead>
           <tbody>
-            {logisticsPartners.map((partner) => (
+            {partnerTable.rows.map((partner) => (
               <tr key={partner.id}>
                 <td>{partner.partnerName}</td>
                 <td>{partner.country}</td>
@@ -4175,7 +4629,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
                 <td>{partner.notes}</td>
                 <td className="row-actions">
                   {canEdit && <button className="mini" onClick={() => { setPartnerForm(partner); setEditingPartnerId(partner.id); }}>Edit</button>}
-                  {canDelete && <button className="mini danger" onClick={() => deleteLogisticsPartner?.(partner.id)}>Delete</button>}
+                  {canDelete && <button className="mini danger" onClick={() => confirmDeletePartner(partner)}>Delete</button>}
                   {!canEdit && !canDelete && <span className="locked-label">Locked</span>}
                 </td>
               </tr>
@@ -4183,7 +4637,7 @@ function Shipments({ shipments, saveShipment, deleteShipment, orders, logisticsP
           </tbody>
         </table>
         {!logisticsPartners.length && <EmptyState label="No logistics partners saved yet." icon={Truck} />}
-        <TableFooter count={logisticsPartners.length} />
+        <TableFooter count={partnerTable.count} page={partnerTable.page} totalPages={partnerTable.totalPages} firstItem={partnerTable.firstItem} lastItem={partnerTable.lastItem} onPageChange={partnerTable.setPage} />
       </div>
     </section>
   );
@@ -4505,6 +4959,7 @@ function AiAssistant({
   procurementRequests,
   alerts,
 }) {
+  const confirm = useConfirm();
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([
     {
@@ -4586,12 +5041,14 @@ function AiAssistant({
     askAssistant(question);
   }
 
-  function reviewAction(action) {
+  async function reviewAction(action) {
     if (action.requiresConfirmation) {
-      const confirmed = window.confirm(
-        'This suggestion could change or remove company data. Confirm that you want to review it. No record will be changed automatically.',
-      );
-      if (!confirmed) return;
+      const approved = await confirm({
+        title: 'Review sensitive AI suggestion?',
+        message: 'This suggestion could change or remove company data. No record will be changed automatically; Velora will only open the relevant module.',
+        confirmLabel: 'Open for review',
+      });
+      if (!approved) return;
     }
     onNavigate(action.module);
     onClose();
@@ -4684,6 +5141,34 @@ function AiAssistant({
   );
 }
 
+function PageSkeleton() {
+  return (
+    <div className="page-skeleton" aria-label="Loading Velora records" aria-busy="true">
+      <div className="skeleton-line wide" />
+      <div className="skeleton-metrics">
+        {Array.from({ length: 4 }, (_, index) => <div className="skeleton-card" key={index} />)}
+      </div>
+      <div className="skeleton-panel">
+        <div className="skeleton-line" />
+        <div className="skeleton-line medium" />
+        <div className="skeleton-line short" />
+      </div>
+    </div>
+  );
+}
+
+function ScreenLoader({ label }) {
+  return (
+    <div className="screen-loader">
+      <div className="screen-loader-content">
+        <span className="loader-mark">VM</span>
+        <span className="loader-spinner" />
+        <strong>{label}</strong>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [activePage, setActivePage] = useState('Command Center');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -4691,6 +5176,7 @@ function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [theme, setTheme] = useTheme();
+  const healthEvents = useHealthEvents();
   const { user, authLoading, authError, signOut } = useAuthSession();
   const { profile, profileLoading, profileError } = useUserProfile(user);
   const permissions = useMemo(() => createPermissions(profile?.role), [profile?.role]);
@@ -4707,6 +5193,8 @@ function App() {
     suppliers,
     loading,
     error,
+    lastUpdated,
+    refreshRecords,
     saveVehicle,
     deleteVehicle,
     saveOrder,
@@ -4728,7 +5216,19 @@ function App() {
     deleteSupplier,
   } = useSupabaseRecords(user, profileLoading ? null : permissions);
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
-  const searchData = useMemo(() => ({ vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers }), [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers]);
+  const searchIndexData = useMemo(
+    () => buildSearchIndex({
+      vehicles,
+      orders,
+      quotes,
+      customers,
+      shipments,
+      logisticsPartners,
+      procurementRequests,
+      suppliers,
+    }),
+    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers],
+  );
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
@@ -4754,7 +5254,7 @@ function App() {
   }, []);
 
   if (authLoading) {
-    return <div className="screen-loader">Checking Velora session...</div>;
+    return <ScreenLoader label="Restoring your secure session..." />;
   }
 
   if (!user) {
@@ -4762,7 +5262,7 @@ function App() {
   }
 
   if (profileLoading) {
-    return <div className="screen-loader">Loading Velora role access...</div>;
+    return <ScreenLoader label="Preparing your Velora workspace..." />;
   }
 
   function goToPage(page) {
@@ -4804,7 +5304,12 @@ function App() {
               {group.pages.map((page) => {
                 const Icon = navIcons[page];
                 return (
-                  <button key={page} className={activePage === page ? 'active' : ''} onClick={() => goToPage(page)}>
+                  <button
+                    key={page}
+                    className={activePage === page ? 'active' : ''}
+                    aria-current={activePage === page ? 'page' : undefined}
+                    onClick={() => goToPage(page)}
+                  >
                     <Icon size={18} />
                     <span>{page}</span>
                   </button>
@@ -4825,7 +5330,7 @@ function App() {
             <h1>{activePage}</h1>
           </div>
           <div className="topbar-actions">
-            <GlobalSearch data={searchData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
+            <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
             <button className="theme-toggle ai-button" onClick={() => setAiOpen(true)}>
               <Sparkles size={17} />
               <span>AI Assistant</span>
@@ -4840,12 +5345,20 @@ function App() {
             </button>
           </div>
         </header>
-        {loading && <div className="app-message">Loading Velora records...</div>}
-        {error && <div className="app-message error">{error}</div>}
+        {loading && <PageSkeleton />}
+        {error && (
+          <div className="app-message error retry-message">
+            <span>{error}</span>
+            <button onClick={refreshRecords}>Retry</button>
+          </div>
+        )}
         {profileError && <div className="app-message error">{profileError}</div>}
+        {!loading && !error && lastUpdated && (
+          <div className="data-freshness">Data refreshed {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+        )}
         {permissions.canViewPage(activePage) ? (
           <>
-            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} />}
+            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} />}
             {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
@@ -4881,5 +5394,9 @@ function App() {
 const publicPath = window.location.pathname.replace(/\/+$/, '') || '/';
 
 createRoot(document.getElementById('root')).render(
-  publicPath === '/privacy' ? <PrivacyPolicy /> : <App />,
+  <AppErrorBoundary>
+    <ConfirmProvider>
+      {publicPath === '/privacy' ? <PrivacyPolicy /> : <App />}
+    </ConfirmProvider>
+  </AppErrorBoundary>,
 );

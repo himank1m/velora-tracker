@@ -354,6 +354,96 @@ Then run:
 supabase functions serve ai-assistant --env-file supabase/.env.local
 ```
 
+## Playwright Concurrency Test
+
+The production concurrency suite runs ten independent browser tests in parallel
+against:
+
+```text
+https://velora-tracker.vercel.app
+```
+
+It measures website startup, authentication-to-dashboard time, and each
+role-permitted module navigation. Results are written to:
+
+```text
+test-results/load-summary.json
+playwright-report/
+```
+
+### Install Playwright
+
+Install dependencies and the Chromium browser once:
+
+```powershell
+npm install
+npx playwright install chromium
+```
+
+### Configure ten test accounts
+
+Copy the credential template:
+
+```powershell
+Copy-Item tests\load-users.example.json tests\load-users.json
+```
+
+Replace every placeholder with a real, dedicated test account. The file must
+contain at least ten unique email addresses and is ignored by Git.
+
+Each account object supports:
+
+```json
+{
+  "label": "load-user-01",
+  "email": "dedicated-test-user@example.com",
+  "password": "test-account-password",
+  "role": "Inventory Manager",
+  "allowOrderCreation": false
+}
+```
+
+You may alternatively provide the array through
+`VELORA_LOAD_TEST_USERS_JSON`, or point `VELORA_LOAD_TEST_USERS_FILE` to
+another JSON file.
+
+### Run ten concurrent workers
+
+```powershell
+npm run test:load
+```
+
+The suite respects Velora RBAC. Every worker loads Command Center, then tests
+Inventory, Orders, Shipments, and Reports only when that account's role permits
+the module. RBAC-locked modules are recorded as skipped in the load summary.
+This preserves the production restriction that only the unique CEO and Company
+Manager accounts have access to every requested module.
+
+### Optional test-order creation
+
+Production writes are disabled by default. To create clearly marked
+`LOAD-TEST` orders, set both controls:
+
+1. Set `"allowOrderCreation": true` only on a dedicated CEO or Company Manager
+   test account.
+2. Run:
+
+```powershell
+$env:VELORA_LOAD_TEST_CREATE_ORDERS='true'
+npm run test:load
+```
+
+The suite deletes its test order after verification by default. Set
+`VELORA_LOAD_TEST_KEEP_ORDERS=true` only when you intentionally want to inspect
+the marked records afterward.
+
+To test another deployment without changing source:
+
+```powershell
+$env:VELORA_LOAD_TEST_URL='https://preview.example.com'
+npm run test:load
+```
+
 ## Branding Assets
 
 Placeholder Velora branding assets are included in:
