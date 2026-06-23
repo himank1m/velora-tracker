@@ -549,6 +549,50 @@ All outputs are planning estimates based on current records and explicit
 assumptions. They are not guaranteed financial outcomes and are never
 automatically applied to operational modules.
 
+## Velora OS AI COO
+
+The AI COO is Velora's digital executive layer. It continuously converts
+permission-scoped company records into:
+
+- A daily executive briefing.
+- Critical issues and emerging risk alerts.
+- Ranked commercial and operational opportunities.
+- Explainable management recommendations.
+- Prioritized advisory tasks.
+- Customer, supplier, shipment, procurement, and inventory scores.
+- Secure executive-chat context.
+
+The monitoring and scoring engine is deterministic and remains available even
+when the Gemini service is unavailable. Gemini receives the same filtered,
+explainable context for executive conversation; it does not generate hidden
+operational facts.
+
+To persist task progress across devices, run:
+
+```text
+supabase/phase7-ai-coo.sql
+```
+
+The migration creates only `public.ai_coo_tasks`. It grants no delete policy and
+does not alter operational tables. Tasks can be opened, started, completed, or
+reopened, but the AI COO cannot execute the underlying recommendation.
+
+Redeploy the secure assistant function after installing this phase:
+
+```powershell
+supabase functions deploy ai-assistant
+```
+
+AI COO safety policy:
+
+- Recommendations always include the reason, evidence, expected impact, and
+  confidence level.
+- Financial insights remain unavailable to roles without Finance visibility.
+- Task and insight history is isolated by authenticated user and current RBAC
+  role.
+- No procurement, payment, shipment, customer, supplier, order, or inventory
+  action is executed autonomously.
+
 ## Safety Notes
 
 - The website remains a normal Vite React app.

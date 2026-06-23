@@ -61,6 +61,7 @@ import {
 } from 'recharts';
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import AiCooCommandCenter from './components/AiCooCommandCenter';
 import DigitalTwin from './components/DigitalTwin';
 import StrategicWarRoom from './components/StrategicWarRoom';
 import TimeMachine from './components/TimeMachine';
@@ -74,6 +75,7 @@ import { buildSearchIndex, searchIndex } from './services/searchService';
 import { buildDigitalTwinAiContext } from './services/digitalTwinService';
 import { buildTimeMachineAiContext } from './services/timeMachineService';
 import { buildStrategicAiContext } from './services/strategicSimulationService';
+import { buildAiCooContext } from './services/aiCooService';
 import {
   buildEnterpriseSummary,
   calculateFinanceRecord,
@@ -306,9 +308,9 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
-  { label: 'Command', pages: ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
+  { label: 'Command', pages: ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center'] },
@@ -317,6 +319,7 @@ const navGroups = [
 ];
 const navIcons = {
   'Command Center': LayoutDashboard,
+  'AI COO': Bot,
   'Digital Twin': Globe2,
   'Time Machine': History,
   'Strategic War Room': Target,
@@ -1611,9 +1614,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages,
-    'Logistics Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-    'Finance Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+    'Logistics Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+    'Finance Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -1668,11 +1671,11 @@ function createPermissions(role) {
 }
 
 const aiQuickPrompts = [
-  'Summarize today',
-  'What needs attention?',
-  'Draft customer update',
-  'Shipment risk check',
-  'Inventory low-stock check',
+  'What should management focus on today?',
+  'What is our biggest risk?',
+  'Which customer is most valuable?',
+  'What should we procure next?',
+  'Which supplier is underperforming?',
   'What happens if freight costs rise by 30%?',
 ];
 
@@ -2090,7 +2093,8 @@ function useSupabaseRecords(user, permissions) {
       const emptyQuery = Promise.resolve({ data: [], error: null });
       const needsCompanyModel = permissions.canViewPage('Digital Twin')
         || permissions.canViewPage('Time Machine')
-        || permissions.canViewPage('Strategic War Room');
+        || permissions.canViewPage('Strategic War Room')
+        || permissions.canViewPage('AI COO');
       const needsVehicles = permissions.canViewPage('Inventory')
         || permissions.canViewPage('Orders')
         || permissions.canViewPage('Quotes')
@@ -3038,6 +3042,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dialogRef = useRef(null);
   const actions = useMemo(() => [
+    { label: 'Open AI COO', page: 'AI COO', icon: Bot },
     { label: 'Open Digital Twin', page: 'Digital Twin', icon: Globe2 },
     { label: 'Open Time Machine', page: 'Time Machine', icon: History },
     { label: 'Open Strategic War Room', page: 'Strategic War Room', icon: Target },
@@ -6247,7 +6252,7 @@ function AiAssistant({
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      text: 'Ask about current operations, risks, customers, inventory, shipments, or reports. I only use data available to your role.',
+      text: 'I am your Velora AI COO. Ask what management should focus on, which risks are emerging, where opportunities exist, or why a recommendation was generated.',
     },
   ]);
   const [suggestedActions, setSuggestedActions] = useState([]);
@@ -6299,6 +6304,16 @@ function AiAssistant({
       suppliers,
       financeRecords: permissions.canViewFinancials() ? financeRecords : [],
     }, strategicScenarios),
+    aiCoo: buildAiCooContext({
+      vehicles,
+      orders,
+      customers,
+      shipments,
+      procurementRequests,
+      suppliers,
+      financeRecords: permissions.canViewFinancials() ? financeRecords : [],
+      canViewFinancials: permissions.canViewFinancials(),
+    }),
   }), [
     permissions,
     vehicles,
@@ -6390,14 +6405,14 @@ function AiAssistant({
 
   return (
     <>
-      <button className="ai-backdrop" onClick={onClose} aria-label="Close Velora AI Assistant" />
-      <aside className="ai-panel" aria-label="Velora AI Assistant">
+      <button className="ai-backdrop" onClick={onClose} aria-label="Close Velora AI COO" />
+      <aside className="ai-panel" aria-label="Velora AI COO">
         <header className="ai-panel-header">
           <div className="ai-title">
             <span><Sparkles size={19} /></span>
             <div>
-              <p className="eyebrow">Secure operations copilot</p>
-              <h2>Velora AI Assistant</h2>
+              <p className="eyebrow">Digital executive layer</p>
+              <h2>Velora AI COO</h2>
             </div>
           </div>
           <button className="ai-close" onClick={onClose} aria-label="Close assistant">
@@ -6457,7 +6472,7 @@ function AiAssistant({
           <textarea
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Ask Velora AI about company operations..."
+            placeholder="Ask the AI COO what management should focus on..."
             maxLength={1500}
             rows={3}
           />
@@ -6693,7 +6708,7 @@ function App() {
             <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
             <button className="theme-toggle ai-button" onClick={() => setAiOpen(true)}>
               <Sparkles size={17} />
-              <span>AI Assistant</span>
+              <span>AI COO</span>
             </button>
             <button className="theme-toggle command-button" onClick={() => setCommandOpen(true)}>
               <Command size={17} />
@@ -6724,6 +6739,7 @@ function App() {
         {permissions.canViewPage(activePage) ? (
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'AI COO' && <AiCooCommandCenter userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onOpenChat={() => setAiOpen(true)} />}
             {activePage === 'Digital Twin' && <DigitalTwin vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Time Machine' && <TimeMachine userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} procurementTimelines={procurementTimelines} shipmentEvents={shipmentEvents} vehicleEvents={vehicleEvents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Strategic War Room' && <StrategicWarRoom userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} logisticsPartners={logisticsPartners} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onScenariosChange={setStrategicScenarios} />}

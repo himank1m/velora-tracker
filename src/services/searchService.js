@@ -116,6 +116,13 @@ export function buildSearchIndex({
       'Forecast revenue, profit, inventory, procurement, shipments, customers, and business risk',
       ['scenario', 'forecast', 'simulation', 'future', 'supplier failure', 'market expansion', 'strategy comparison'],
     ),
+    searchDocument(
+      'AI COO',
+      'AI COO',
+      'AI COO Command Center',
+      'Daily briefing, company priorities, risks, opportunities, recommendations, and operational scores',
+      ['chief operating officer', 'management focus', 'priority board', 'executive briefing', 'customer score', 'supplier score'],
+    ),
     searchDocument('Report', 'Reports', 'Business reports', 'Revenue, profit, freight, and inventory exports'),
     searchDocument('Audit', 'Audit Logs', 'Audit logs', 'Operational record activity'),
   ];
