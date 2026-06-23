@@ -1,8 +1,8 @@
 {
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1",
+    "dev": "node ./node_modules/vite/bin/vite.js --host 127.0.0.1",
+    "build": "node ./node_modules/vite/bin/vite.js build",
+    "preview": "node ./node_modules/vite/bin/vite.js preview --host 127.0.0.1",
     "cap:sync": "npm run build && cap sync",
     "cap:add:android": "npm run build && cap add android",
     "android": "npm run build && cap sync android && cap open android",
@@ -16,16 +16,23 @@
     "@capacitor/cli": "^7.0.0",
     "@capacitor/core": "^7.0.0",
     "@supabase/supabase-js": "^2.108.0",
-    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-react": "6.0.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.17.0",
-    "react": "latest",
-    "react-dom": "latest",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "recharts": "^3.8.1",
-    "vite": "latest"
+    "vite": "8.0.16"
   },
   "devDependencies": {
-    "@playwright/test": "latest"
+    "@playwright/test": "1.61.0"
+  },
+  "name": "velora-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "22.x",
+    "npm": ">=10"
   }
 }
