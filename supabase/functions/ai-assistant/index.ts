@@ -17,19 +17,19 @@ const roles = [
 type Role = typeof roles[number];
 
 const allowedSections: Record<Role, string[]> = {
-  CEO: ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary'],
-  'Company Manager': ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary'],
-  'Logistics Manager': ['dashboard', 'orders', 'shipments', 'enterpriseSummary'],
-  'Inventory Manager': ['dashboard', 'inventory', 'enterpriseSummary'],
-  'Finance Manager': ['dashboard', 'inventory', 'shipments', 'reports', 'enterpriseSummary'],
+  CEO: ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom'],
+  'Company Manager': ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom'],
+  'Logistics Manager': ['dashboard', 'orders', 'shipments', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom'],
+  'Inventory Manager': ['dashboard', 'inventory', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom'],
+  'Finance Manager': ['dashboard', 'inventory', 'shipments', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom'],
 };
 
 const allowedActionModules: Record<Role, string[]> = {
-  CEO: ['Command Center', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
-  'Company Manager': ['Command Center', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
-  'Logistics Manager': ['Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-  'Inventory Manager': ['Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-  'Finance Manager': ['Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  CEO: ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  'Company Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  'Logistics Manager': ['Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+  'Inventory Manager': ['Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+  'Finance Manager': ['Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
 };
 
 const allowedEnterpriseSummarySections: Record<Role, string[]> = {
@@ -228,6 +228,8 @@ Deno.serve(async (request) => {
       'Give concise, practical operational summaries with clear priorities and suggested next steps.',
       'Use Indian rupees and the Indian number system when discussing financial values.',
       'Do not invent missing records, metrics, dates, customers, or statuses.',
+      'Treat Strategic War Room outputs as hypothetical projections based on assumptions, never as guaranteed outcomes or live records.',
+      'When comparing strategies, distinguish highest profit, lowest risk, and best risk-adjusted outcome.',
       'Never claim that you changed, deleted, approved, sent, or updated a record.',
       'You may call propose_app_action for a concrete next step. Destructive proposals must set destructive to true.',
       'Always provide a useful text response even when proposing actions.',
@@ -272,7 +274,7 @@ Deno.serve(async (request) => {
                       },
                       module: {
                         type: 'string',
-                        enum: ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center'],
+                        enum: ['Command Center', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center'],
                       },
                       title: { type: 'string' },
                       description: { type: 'string' },

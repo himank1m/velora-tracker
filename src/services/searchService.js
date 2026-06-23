@@ -109,6 +109,13 @@ export function buildSearchIndex({
       'Point-in-time company state, comparisons, decision replay, and historical analytics',
       ['history', 'snapshot', 'compare dates', 'historical health', 'timeline', 'decision replay'],
     ),
+    searchDocument(
+      'Strategy',
+      'Strategic War Room',
+      'Strategic War Room and future simulations',
+      'Forecast revenue, profit, inventory, procurement, shipments, customers, and business risk',
+      ['scenario', 'forecast', 'simulation', 'future', 'supplier failure', 'market expansion', 'strategy comparison'],
+    ),
     searchDocument('Report', 'Reports', 'Business reports', 'Revenue, profit, freight, and inventory exports'),
     searchDocument('Audit', 'Audit Logs', 'Audit logs', 'Operational record activity'),
   ];

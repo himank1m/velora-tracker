@@ -508,6 +508,47 @@ Historical behavior:
 - The AI assistant receives a permission-filtered 30-day historical summary
   suitable for future questions about changes, delays, customers, and suppliers.
 
+## Velora OS Strategic War Room
+
+The Strategic War Room is a deterministic future simulation environment built
+on the permission-scoped Velora operating baseline. It projects commercial,
+inventory, procurement, shipment, customer, payment, and supplier outcomes
+without modifying any live company record.
+
+The module works immediately in local simulation mode. To save scenarios across
+devices, run this additive migration in the Supabase SQL Editor:
+
+```text
+supabase/phase6-strategic-war-room.sql
+```
+
+The migration creates only `public.strategic_scenarios`. Saved strategies are
+isolated by authenticated user and current RBAC role. Changing roles does not
+grant access to simulations created under a former role.
+
+War Room capabilities:
+
+- Monthly, quarterly, and annual projections.
+- Sales, procurement, freight, logistics, payment, supplier, market, customer,
+  vehicle category, and inventory-buffer assumptions.
+- Revenue, expense, profit, outstanding-payment, procurement, freight,
+  inventory, shipment, customer, delivery, and composite-risk forecasts.
+- Growth, market-entry, freight-shock, supplier-failure, and payment-stress
+  presets.
+- Side-by-side comparison of up to three saved strategies.
+- AI-ready baseline and scenario context for strategic questions.
+
+After adding or changing the strategic AI context, redeploy the existing secure
+Edge Function:
+
+```powershell
+supabase functions deploy ai-assistant
+```
+
+All outputs are planning estimates based on current records and explicit
+assumptions. They are not guaranteed financial outcomes and are never
+automatically applied to operational modules.
+
 ## Safety Notes
 
 - The website remains a normal Vite React app.
