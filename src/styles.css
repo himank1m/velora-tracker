@@ -3255,3 +3255,325 @@ tbody tr:hover {
     width: 100%;
   }
 }
+
+/* Phase 3 executive dashboard */
+.executive-dashboard {
+  min-width: 0;
+}
+
+.executive-hero {
+  align-items: end;
+  display: grid;
+  gap: 28px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.executive-hero-score {
+  align-items: center;
+  backdrop-filter: blur(14px);
+  background: rgba(7, 12, 22, .72);
+  border: 1px solid rgba(147, 197, 253, .26);
+  border-radius: 20px;
+  display: grid;
+  justify-items: center;
+  min-width: 150px;
+  padding: 17px 22px;
+}
+
+.executive-hero-score span,
+.executive-hero-score small {
+  color: #bfdbfe;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.executive-hero-score strong {
+  color: #fff;
+  font-size: 42px;
+  line-height: 1;
+  margin: 7px 0 5px;
+}
+
+.executive-kpis {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.executive-kpis .metric {
+  grid-template-columns: 38px minmax(0, 1fr);
+  min-height: 112px;
+  padding: 16px;
+}
+
+.executive-kpis .metric-icon {
+  border-radius: 12px;
+  height: 38px;
+  width: 38px;
+}
+
+.executive-kpis .metric strong {
+  font-size: clamp(15px, 1.05vw, 21px);
+}
+
+.executive-primary-grid,
+.executive-decision-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, .8fr);
+}
+
+.executive-primary-grid > *,
+.executive-decision-grid > *,
+.executive-analytics-grid > * {
+  min-width: 0;
+}
+
+.executive-trend-card {
+  min-height: 410px;
+}
+
+.company-health-card {
+  align-content: start;
+  display: grid;
+  gap: 22px;
+}
+
+.health-score {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 22px;
+  font-weight: 900;
+  height: 58px;
+  justify-content: center;
+  width: 58px;
+}
+
+.health-healthy { color: #4ade80; }
+.health-watch { color: #fbbf24; }
+.health-risk { color: #f87171; }
+
+.health-factor-list {
+  display: grid;
+  gap: 17px;
+}
+
+.health-factor-list > div,
+.health-factor-list > div > span {
+  display: grid;
+  gap: 8px;
+}
+
+.health-factor-list > div > span {
+  align-items: center;
+  grid-template-columns: 1fr auto;
+}
+
+.health-factor-list b,
+.health-factor-list strong {
+  font-size: 12px;
+}
+
+.health-factor-list b { color: var(--muted); }
+.health-factor-list strong { color: var(--ink); }
+
+.health-factor-list i,
+.executive-ranking-row i {
+  background: rgba(148, 163, 184, .12);
+  border-radius: 999px;
+  display: block;
+  height: 7px;
+  overflow: hidden;
+}
+
+.health-factor-list em {
+  background: linear-gradient(90deg, #3b82f6, #22c55e);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.health-caption {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.executive-analytics-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.customer-growth-card,
+.shipment-status-card {
+  grid-column: span 3;
+}
+
+.executive-ranking-card {
+  grid-column: span 2;
+}
+
+.executive-ranking-list {
+  display: grid;
+  gap: 11px;
+  margin-top: 20px;
+}
+
+.executive-ranking-row {
+  align-items: center;
+  display: grid;
+  gap: 11px;
+  grid-template-columns: 25px minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.executive-ranking-row > span {
+  align-items: center;
+  background: var(--blue-soft);
+  border-radius: 8px;
+  color: #93c5fd;
+  display: flex;
+  font-size: 11px;
+  font-weight: 900;
+  height: 25px;
+  justify-content: center;
+}
+
+.executive-ranking-row > div {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.executive-ranking-row strong {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.executive-ranking-row i {
+  height: 5px;
+}
+
+.executive-ranking-row i::before {
+  content: none;
+}
+
+.executive-ranking-row i {
+  background: linear-gradient(90deg, rgba(59, 130, 246, .28), rgba(59, 130, 246, .08));
+}
+
+.executive-ranking-row b {
+  color: #bfdbfe;
+  font-size: 11px;
+  max-width: 110px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.executive-alert-card .alert-list,
+.recommendation-list {
+  display: grid;
+  gap: 11px;
+  margin-top: 18px;
+}
+
+.recommendation-list > button {
+  align-items: center;
+  background: rgba(148, 163, 184, .055);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--ink);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 12px;
+  text-align: left;
+}
+
+.recommendation-list > button:hover {
+  background: rgba(96, 165, 250, .08);
+  border-color: rgba(96, 165, 250, .3);
+  transform: translateY(-1px);
+}
+
+.recommendation-list span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.recommendation-list strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.recommendation-list small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.executive-activity-card,
+.executive-report-center {
+  grid-column: auto;
+}
+
+.executive-activity-card .activity-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.executive-report-links {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 20px;
+}
+
+.executive-report-links button {
+  align-items: center;
+  background: rgba(148, 163, 184, .055);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  color: var(--ink);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto 1fr auto;
+  padding: 14px;
+  text-align: left;
+}
+
+.executive-report-links button:hover {
+  background: var(--blue-soft);
+  border-color: rgba(96, 165, 250, .3);
+}
+
+@media (max-width: 1500px) {
+  .executive-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1180px) {
+  .executive-primary-grid,
+  .executive-decision-grid { grid-template-columns: 1fr; }
+  .executive-analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customer-growth-card,
+  .shipment-status-card,
+  .executive-ranking-card { grid-column: span 1; }
+  .executive-report-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .executive-hero { grid-template-columns: 1fr; }
+  .executive-hero-score { justify-self: start; }
+  .executive-kpis,
+  .executive-analytics-grid { grid-template-columns: 1fr; }
+  .executive-activity-card .activity-list,
+  .executive-report-links { grid-template-columns: 1fr; }
+  .executive-primary-grid,
+  .executive-decision-grid { grid-template-columns: minmax(0, 1fr); }
+  .executive-ranking-row { grid-template-columns: 25px minmax(0, 1fr); }
+  .executive-ranking-row b { grid-column: 2; max-width: none; text-align: left; }
+}

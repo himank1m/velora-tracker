@@ -516,7 +516,16 @@ function daysUntil(value) {
   return Math.ceil((date - new Date()) / 86400000);
 }
 
-function createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests = [], suppliers = [] }) {
+function createAlerts({
+  vehicles,
+  orders,
+  customers,
+  shipments,
+  orderTimelines,
+  procurementRequests = [],
+  suppliers = [],
+  financeRecords = [],
+}) {
   const alerts = [];
 
   shipments.forEach((shipment) => {
@@ -676,6 +685,25 @@ function createAlerts({ vehicles, orders, customers, shipments, orderTimelines, 
       resolved: false,
       created_at: supplier.createdAt,
     });
+  });
+
+  financeRecords.forEach((record) => {
+    const outstanding = numberValue(record.amountPending);
+    const overdue = record.paymentStatus === 'Overdue'
+      || (record.dueDate && record.dueDate < today && outstanding > 0);
+    if (overdue) {
+      alerts.push({
+        id: `payment-overdue-${record.id}`,
+        alert_type: 'Overdue Payment',
+        severity: outstanding > 1000000 ? 'Critical' : 'High',
+        title: 'Payment collection is overdue',
+        message: `${money.format(outstanding)} remains outstanding${record.dueDate ? ` since ${new Date(record.dueDate).toLocaleDateString()}` : ''}.`,
+        linked_module: 'Finance',
+        linked_record_id: record.id,
+        resolved: false,
+        created_at: record.updatedAt || record.createdAt,
+      });
+    }
   });
 
   return alerts.sort((a, b) => {
@@ -4098,222 +4126,249 @@ function LogisticsPartnerForm({ value, onChange, onSubmit, editingId, onCancel }
   );
 }
 
-function Dashboard({ vehicles, orders, customers, shipments, procurementRequests, suppliers, orderTimelines, setActivePage, error, authError, healthEvents }) {
-  const totals = useMemo(() => {
-    const activeOrders = orders.filter((order) => order.status !== 'Completed').length;
-    const completedOrders = orders.filter((order) => order.status === 'Completed').length;
-    return {
-      inventory: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.quantity), 0),
-      activeOrders,
-      completedOrders,
-      pendingOrders: activeOrders,
-      delayedOrders: delayedOrderCount(orders),
-      revenue: orders.reduce((sum, order) => sum + orderRevenue(order), 0),
-      profit: orders.reduce((sum, order) => sum + orderProfit(order), 0),
-      shipments: shipments.length,
-      activeShipments: shipments.filter((shipment) => shipment.status !== 'Delivered').length,
-      deliveredShipments: shipments.filter((shipment) => shipment.status === 'Delivered').length,
-      freightCost: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
-      inventoryValue: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
-      activeProcurements: procurementRequests.filter((request) => request.status !== 'Added To Inventory').length,
-      procurementValue: procurementRequests.reduce((sum, request) => sum + procurementValue(request), 0),
-      incomingInventory: procurementRequests.filter((request) => request.status !== 'Added To Inventory').reduce((sum, request) => sum + numberValue(request.quantity), 0),
-    };
-  }, [vehicles, orders, shipments, procurementRequests]);
 
-  const recentOrders = orders.slice(0, 4);
-  const revenueTrend = trendByMonth(orders, 'orderDate', orderRevenue);
-  const profitTrend = trendByMonth(orders, 'orderDate', orderProfit);
-  const shipmentBreakdown = countByStatus(shipments);
-  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
-  const auditLogs = useMemo(() => buildAuditLogs({ vehicles, orders, customers, shipments }).slice(0, 5), [vehicles, orders, customers, shipments]);
-  const recentActivity = [
-    ...orders.slice(0, 3).map((order) => ({ label: `Order ${order.orderNumber} moved to ${order.status}`, meta: order.customerName })),
-    ...shipments.slice(0, 3).map((shipment) => ({ label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry })),
-  ].slice(0, 5);
+function clampScore(value) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
 
+function rankExecutiveData(values, formatter = (value) => value) {
+  return Object.entries(values)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5)
+    .map(([label, value]) => ({ label, value, displayValue: formatter(value) }));
+}
+
+function buildExecutiveAnalytics({
+  vehicles = [],
+  orders = [],
+  customers = [],
+  shipments = [],
+  procurementRequests = [],
+  suppliers = [],
+  financeRecords = [],
+  documents = [],
+}) {
+  const finance = financeRecords.map(calculateFinanceRecord);
+  const financeRevenue = finance.reduce((sum, record) => sum + numberValue(record.totalSaleAmount), 0);
+  const financeProfit = finance.reduce((sum, record) => sum + numberValue(record.netProfit), 0);
+  const orderRevenueTotal = orders.reduce((sum, order) => sum + orderRevenue(order), 0);
+  const orderProfitTotal = orders.reduce((sum, order) => sum + orderProfit(order), 0);
+  const revenue = finance.length ? financeRevenue : orderRevenueTotal;
+  const profit = finance.length ? financeProfit : orderProfitTotal;
+  const outstandingPayments = finance.reduce((sum, record) => sum + numberValue(record.amountPending), 0);
+  const amountPaid = finance.reduce((sum, record) => sum + numberValue(record.amountPaid), 0);
+  const activeShipments = shipments.filter((shipment) => !['Delivered', 'Cancelled'].includes(shipment.status));
+  const delayedShipments = activeShipments.filter((shipment) => (
+    shipment.status === 'Delayed' || (shipment.eta && shipment.eta < today)
+  ));
+  const deliveredShipments = shipments.filter((shipment) => shipment.status === 'Delivered');
+  const completedProcurements = procurementRequests.filter((request) => (
+    ['Arrived', 'Received', 'Added To Inventory'].includes(request.status)
+  ));
+  const delayedProcurements = procurementRequests.filter((request) => {
+    if (['Arrived', 'Received', 'Added To Inventory', 'Cancelled'].includes(request.status)) return false;
+    if (request.status === 'Delayed') return true;
+    const reference = request.expectedDeliveryDate || request.createdAt;
+    return reference && Math.floor((new Date() - new Date(reference)) / 86400000) > 14;
+  });
+
+  const profitability = revenue ? clampScore(50 + (profit / revenue) * 250) : 50;
+  const deliveryPerformance = shipments.length
+    ? clampScore((deliveredShipments.length / shipments.length) * 100 - delayedShipments.length * 8)
+    : 100;
+  const paymentCollection = financeRevenue ? clampScore((amountPaid / financeRevenue) * 100) : 100;
+  const procurementEfficiency = procurementRequests.length
+    ? clampScore((completedProcurements.length / procurementRequests.length) * 100 - delayedProcurements.length * 8)
+    : 100;
+  const healthScore = clampScore(
+    profitability * 0.3
+      + deliveryPerformance * 0.25
+      + paymentCollection * 0.25
+      + procurementEfficiency * 0.2,
+  );
+
+  const customerRevenue = orders.reduce((result, order) => {
+    const key = textValue(order.customerName) || 'Unassigned customer';
+    result[key] = (result[key] || 0) + orderRevenue(order);
+    return result;
+  }, {});
+  const supplierValue = procurementRequests.reduce((result, request) => {
+    const key = textValue(request.supplierName) || 'Unassigned supplier';
+    result[key] = (result[key] || 0) + procurementValue(request);
+    return result;
+  }, {});
+  const modelSales = orders.reduce((result, order) => {
+    const key = textValue(order.vehicle) || 'Unspecified vehicle';
+    result[key] = (result[key] || 0) + Math.max(numberValue(order.quantity), 1);
+    return result;
+  }, {});
+
+  const activities = [
+    ...orders.map((order) => ({ type: 'Order', label: `Order ${order.orderNumber} is ${order.status}`, meta: order.customerName, time: order.createdAt || order.orderDate })),
+    ...shipments.map((shipment) => ({ type: 'Shipment', label: `Shipment ${shipment.shipmentId} is ${shipment.status}`, meta: shipment.destinationCountry, time: shipment.createdAt || shipment.eta })),
+    ...procurementRequests.map((request) => ({ type: 'Procurement', label: `${request.procurementId} is ${request.status}`, meta: `${request.vehicleBrand} ${request.vehicleModel}`.trim(), time: request.createdAt })),
+    ...finance.map((record) => ({ type: 'Finance', label: `${record.paymentStatus} finance record`, meta: money.format(record.amountPending || record.totalSaleAmount), time: record.updatedAt || record.createdAt })),
+    ...documents.map((document) => ({ type: 'Document', label: document.fileName || 'Business document', meta: document.category || document.linkedModule || 'Document Vault', time: document.uploadedAt })),
+  ].sort((left, right) => new Date(right.time || 0) - new Date(left.time || 0));
+
+  const recommendations = [];
+  const lowStock = vehicles.filter((vehicle) => numberValue(vehicle.quantity) <= 1);
+  if (lowStock.length) recommendations.push({ title: `Reorder ${lowStock.length} low-stock vehicle${lowStock.length === 1 ? '' : 's'}`, detail: 'Protect sales continuity by opening procurement requests for depleted models.', page: 'Inventory', severity: 'High' });
+  if (outstandingPayments > 0) recommendations.push({ title: `Follow up ${money.format(outstandingPayments)} in outstanding payments`, detail: 'Prioritize overdue accounts and confirm collection dates with customers.', page: 'Finance', severity: 'High' });
+  if (delayedShipments.length) recommendations.push({ title: `Review ${delayedShipments.length} delayed shipment${delayedShipments.length === 1 ? '' : 's'}`, detail: 'Confirm revised ETAs, customs status, and customer communication.', page: 'Shipments', severity: 'Critical' });
+  if (delayedProcurements.length) recommendations.push({ title: `Investigate ${delayedProcurements.length} procurement delay${delayedProcurements.length === 1 ? '' : 's'}`, detail: 'Escalate supplier follow-up and validate incoming inventory dates.', page: 'Procurement', severity: 'Medium' });
+  const weakSuppliers = suppliers.filter((supplier) => numberValue(supplier.onTimeDeliveryRate) > 0 && numberValue(supplier.onTimeDeliveryRate) < 75);
+  if (weakSuppliers.length) recommendations.push({ title: `Review ${weakSuppliers.length} underperforming supplier${weakSuppliers.length === 1 ? '' : 's'}`, detail: 'Compare on-time performance before approving the next procurement order.', page: 'Procurement', severity: 'Medium' });
+
+  return {
+    revenue,
+    profit,
+    outstandingPayments,
+    activeOrders: orders.filter((order) => order.status !== 'Completed').length,
+    activeShipments: activeShipments.length,
+    delayedShipments: delayedShipments.length,
+    inventoryValue: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
+    revenueTrend: trendByMonth(orders, 'orderDate', orderRevenue),
+    profitTrend: trendByMonth(orders, 'orderDate', orderProfit),
+    customerGrowth: trendByMonth(customers, 'createdAt', () => 1),
+    topCustomers: rankExecutiveData(customerRevenue, money.format),
+    topSuppliers: rankExecutiveData(supplierValue, money.format),
+    topModels: rankExecutiveData(modelSales, (value) => `${formatIndianNumber(value)} units`),
+    health: { score: healthScore, profitability, deliveryPerformance, paymentCollection, procurementEfficiency },
+    activities,
+    recommendations,
+  };
+}
+
+function ExecutiveRanking({ title, eyebrow, items, emptyLabel }) {
+  const maximum = Math.max(...items.map((item) => item.value), 1);
   return (
-    <section className="page-stack">
-      <div className="hero premium-hero">
-        <div>
-          <p className="eyebrow">Velora Motors Ltd.</p>
-          <h1>Operations Command Center</h1>
-          <p>Enterprise dealership operations, order workflow, freight visibility, critical alerts, and financial performance in one secure workspace.</p>
-        </div>
-      </div>
-      <div className="metrics-grid enterprise-metrics">
-        <Metric label="Revenue" value={money.format(totals.revenue)} tone="accent" icon={BarChart3} />
-        <Metric label="Profit" value={money.format(totals.profit)} tone="success" icon={Activity} />
-        <Metric label="Inventory value" value={money.format(totals.inventoryValue)} icon={Boxes} />
-        <Metric label="Active orders" value={totals.activeOrders} icon={ClipboardList} />
-        <Metric label="Active shipments" value={totals.activeShipments} icon={Truck} />
-        <Metric label="Delivered orders" value={totals.completedOrders} tone="success" icon={PackageCheck} />
-        <Metric label="Delivered shipments" value={totals.deliveredShipments} tone="success" icon={Truck} />
-        <Metric label="Freight cost" value={money.format(totals.freightCost)} tone="danger" icon={Gauge} />
-        <Metric label="Active procurements" value={totals.activeProcurements} icon={ClipboardList} />
-        <Metric label="Procurement value" value={money.format(totals.procurementValue)} tone="accent" icon={BarChart3} />
-        <Metric label="Incoming inventory" value={totals.incomingInventory} tone="success" icon={Warehouse} />
-      </div>
-      <div className="dashboard-grid">
-        <section className="chart-card wide">
-          <div className="card-heading">
-            <div>
-              <p className="eyebrow">Revenue trend</p>
-              <h2>Monthly revenue</h2>
-            </div>
+    <section className="chart-card executive-ranking-card">
+      <div className="card-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div></div>
+      <div className="executive-ranking-list">
+        {items.map((item, index) => (
+          <div className="executive-ranking-row" key={item.label}>
+            <span>{index + 1}</span>
+            <div><strong>{item.label}</strong><i style={{ width: `${Math.max((item.value / maximum) * 100, 4)}%` }} /></div>
+            <b>{item.displayValue}</b>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={revenueTrend}>
-              <defs>
-                <linearGradient id="revenue" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.55} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-              <XAxis dataKey="month" stroke="var(--muted)" />
-              <YAxis stroke="var(--muted)" />
-              <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
-              <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="url(#revenue)" strokeWidth={3} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </section>
-        <section className="chart-card wide">
-          <div className="card-heading">
-            <div>
-              <p className="eyebrow">Profit trend</p>
-              <h2>Monthly profit</h2>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={profitTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
-              <XAxis dataKey="month" stroke="var(--muted)" />
-              <YAxis stroke="var(--muted)" />
-              <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
-              <Area type="monotone" dataKey="value" stroke="#22c55e" fill="#22c55e33" strokeWidth={3} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </section>
-        <section className="chart-card dashboard-half-card shipment-breakdown-card">
-          <div className="card-heading">
-            <div>
-              <p className="eyebrow">Shipments</p>
-              <h2>Status breakdown</h2>
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie data={shipmentBreakdown} dataKey="value" nameKey="name" innerRadius={56} outerRadius={92} paddingAngle={4}>
-                {shipmentBreakdown.map((entry, index) => (
-                  <Cell key={entry.name} fill={['#3b82f6', '#22c55e', '#f59e0b', '#38bdf8', '#ef4444'][index % 5]} />
-                ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </section>
-        <section className="chart-card dashboard-half-card alert-watchlist-card">
-          <div className="card-heading alert-heading">
-            <div>
-              <p className="eyebrow">Critical alerts</p>
-              <h2>Priority watchlist</h2>
-            </div>
-            <button className="mini view-all-button" onClick={() => setActivePage('Alerts Center')}>View all</button>
-          </div>
-          <div className="alert-list compact">
-            {alerts.slice(0, 4).map((alert) => (
-              <div className="alert-row" key={alert.id}>
-                <AlertBadge severity={alert.severity} />
-                <div>
-                  <strong>{alert.title}</strong>
-                  <small>{alert.message}</small>
-                </div>
-              </div>
-            ))}
-            {!alerts.length && <EmptyState label="No critical alerts right now." icon={Bell} />}
-          </div>
-        </section>
-        <section className="activity-card audit-feed-card">
-          <div className="card-heading">
-            <div>
-              <p className="eyebrow">Recent activity</p>
-              <h2>Operations pulse</h2>
-            </div>
-          </div>
-          <div className="activity-list">
-            {recentActivity.map((item, index) => (
-              <div className="activity-item" key={`${item.label}-${index}`}>
-                <span><Activity size={16} /></span>
-                <div>
-                  <strong>{item.label}</strong>
-                  <small>{item.meta}</small>
-                </div>
-              </div>
-            ))}
-            {!recentActivity.length && <EmptyState label="No recent activity yet." icon={Activity} />}
-          </div>
-        </section>
-        <section className="activity-card audit-feed-card">
-          <div className="card-heading">
-            <div>
-              <p className="eyebrow">Recent audit logs</p>
-              <h2>Governance feed</h2>
-            </div>
-            <button className="mini open-logs-button" onClick={() => setActivePage('Audit Logs')}>Open logs</button>
-          </div>
-          <div className="activity-list">
-            {auditLogs.map((item, index) => (
-              <div className="activity-item" key={`${item.label}-${index}`}>
-                <span><ShieldCheck size={16} /></span>
-                <div>
-                  <strong>{item.label}</strong>
-                  <small>{item.meta || 'Velora record'}</small>
-                </div>
-              </div>
-            ))}
-            {!auditLogs.length && <EmptyState label="No audit logs yet." icon={ShieldCheck} />}
-          </div>
-        </section>
-        <DepartmentShortcuts setActivePage={setActivePage} alerts={alerts} totals={totals} />
-        <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} healthEvents={healthEvents} />
-      </div>
-      <div className="section-heading compact-heading">
-        <div>
-          <p className="eyebrow">Live pipeline</p>
-          <h2>Recent orders</h2>
-        </div>
-      </div>
-      <div className="table-shell">
-        <table>
-          <thead>
-            <tr>
-              <th>Order Number</th>
-              <th>Customer</th>
-              <th>Vehicle</th>
-              <th>Revenue</th>
-              <th>Profit</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentOrders.map((order) => (
-              <tr key={order.id}>
-                <td>{order.orderNumber}</td>
-                <td>{order.customerName}</td>
-                <td>{order.vehicle}</td>
-                <td>{money.format(orderRevenue(order))}</td>
-                <td>{money.format(orderProfit(order))}</td>
-                <td><StatusBadge status={order.status} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        ))}
+        {!items.length && <EmptyState label={emptyLabel} icon={BarChart3} />}
       </div>
     </section>
   );
 }
 
+function CompanyHealthScore({ health }) {
+  const tone = health.score >= 80 ? 'healthy' : health.score >= 60 ? 'watch' : 'risk';
+  const factors = [
+    ['Profitability', health.profitability],
+    ['Delivery performance', health.deliveryPerformance],
+    ['Payment collection', health.paymentCollection],
+    ['Procurement efficiency', health.procurementEfficiency],
+  ];
+  return (
+    <section className="chart-card company-health-card">
+      <div className="card-heading"><div><p className="eyebrow">Company health</p><h2>Operating score</h2></div><span className={`health-score health-${tone}`}>{health.score}</span></div>
+      <div className="health-factor-list">
+        {factors.map(([label, value]) => <div key={label}><span><b>{label}</b><strong>{value}/100</strong></span><i><em style={{ width: `${value}%` }} /></i></div>)}
+      </div>
+      <p className="health-caption">Weighted across profitability, delivery reliability, collections, and procurement execution.</p>
+    </section>
+  );
+}
+
+function Dashboard({ vehicles, orders, customers, shipments, procurementRequests, suppliers, financeRecords, documents, orderTimelines, setActivePage, error, authError, healthEvents, canViewFinancials = true }) {
+  const analytics = useMemo(() => buildExecutiveAnalytics({
+    vehicles, orders, customers, shipments, procurementRequests, suppliers, financeRecords, documents,
+  }), [vehicles, orders, customers, shipments, procurementRequests, suppliers, financeRecords, documents]);
+  const alerts = useMemo(() => createAlerts({
+    vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords,
+  }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords]);
+  const shipmentBreakdown = countByStatus(shipments);
+  const recentOrders = orders.slice(0, 5);
+  const visibleRecommendations = analytics.recommendations.filter((item) => canViewFinancials || item.page !== 'Finance');
+
+  return (
+    <section className="page-stack executive-dashboard">
+      <div className="hero premium-hero executive-hero">
+        <div>
+          <p className="eyebrow">Velora Motors Ltd.</p>
+          <h1>Executive Command Center</h1>
+          <p>Company performance, operating risk, cash collection, and management priorities in one decision-ready workspace.</p>
+        </div>
+        <div className="executive-hero-score"><span>Company health</span><strong>{analytics.health.score}</strong><small>out of 100</small></div>
+      </div>
+
+      <div className="metrics-grid executive-kpis">
+        {canViewFinancials && <Metric label="Revenue" value={money.format(analytics.revenue)} tone="accent" icon={BarChart3} />}
+        {canViewFinancials && <Metric label="Profit" value={money.format(analytics.profit)} tone="success" icon={Activity} />}
+        <Metric label="Active orders" value={analytics.activeOrders} icon={ClipboardList} />
+        <Metric label="Active shipments" value={analytics.activeShipments} icon={Truck} />
+        <Metric label="Delayed shipments" value={analytics.delayedShipments} tone={analytics.delayedShipments ? 'danger' : 'success'} icon={AlertTriangle} />
+        {canViewFinancials && <Metric label="Outstanding payments" value={money.format(analytics.outstandingPayments)} tone={analytics.outstandingPayments ? 'danger' : 'success'} icon={CircleDollarSign} />}
+        {canViewFinancials && <Metric label="Inventory value" value={money.format(analytics.inventoryValue)} icon={Boxes} />}
+      </div>
+
+      <div className="executive-primary-grid">
+        {canViewFinancials && (
+          <section className="chart-card executive-trend-card">
+            <div className="card-heading"><div><p className="eyebrow">Financial performance</p><h2>Revenue and profit trend</h2></div></div>
+            {analytics.revenueTrend.length || analytics.profitTrend.length ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={analytics.revenueTrend.map((item) => ({ ...item, revenue: item.value, profit: analytics.profitTrend.find((profit) => profit.month === item.month)?.value || 0 }))}>
+                  <defs><linearGradient id="executiveRevenue" x1="0" x2="0" y1="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} /><stop offset="95%" stopColor="#3b82f6" stopOpacity={0} /></linearGradient></defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" />
+                  <XAxis dataKey="month" stroke="var(--muted)" /><YAxis stroke="var(--muted)" />
+                  <Tooltip formatter={(value) => money.format(value)} contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} />
+                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#executiveRevenue)" strokeWidth={3} />
+                  <Area type="monotone" dataKey="profit" stroke="#22c55e" fill="transparent" strokeWidth={3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <EmptyState label="Revenue and profit trends will appear after orders are recorded." icon={BarChart3} />}
+          </section>
+        )}
+        <CompanyHealthScore health={analytics.health} />
+      </div>
+
+      <div className="dashboard-grid executive-analytics-grid">
+        <section className="chart-card customer-growth-card">
+          <div className="card-heading"><div><p className="eyebrow">Customer analytics</p><h2>Customer growth</h2></div></div>
+          {analytics.customerGrowth.length ? <ResponsiveContainer width="100%" height={230}><AreaChart data={analytics.customerGrowth}><CartesianGrid strokeDasharray="3 3" stroke="var(--chart-grid)" /><XAxis dataKey="month" stroke="var(--muted)" /><YAxis allowDecimals={false} stroke="var(--muted)" /><Tooltip contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} /><Area type="monotone" dataKey="value" stroke="#38bdf8" fill="#38bdf833" strokeWidth={3} /></AreaChart></ResponsiveContainer> : <EmptyState label="Customer growth will appear as records are added." icon={Users} />}
+        </section>
+        <section className="chart-card shipment-status-card">
+          <div className="card-heading"><div><p className="eyebrow">Logistics analytics</p><h2>Shipment status</h2></div></div>
+          {shipmentBreakdown.length ? <ResponsiveContainer width="100%" height={230}><PieChart><Pie data={shipmentBreakdown} dataKey="value" nameKey="name" innerRadius={52} outerRadius={82} paddingAngle={4}>{shipmentBreakdown.map((entry, index) => <Cell key={entry.name} fill={['#3b82f6', '#22c55e', '#f59e0b', '#38bdf8', '#ef4444'][index % 5]} />)}</Pie><Tooltip contentStyle={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 12 }} /></PieChart></ResponsiveContainer> : <EmptyState label="Shipment status appears when logistics records are added." icon={Truck} />}
+        </section>
+        <ExecutiveRanking eyebrow="Commercial" title="Top customers" items={analytics.topCustomers} emptyLabel="Customer rankings need order data." />
+        <ExecutiveRanking eyebrow="Procurement" title="Top suppliers" items={analytics.topSuppliers} emptyLabel="Supplier rankings need procurement data." />
+        <ExecutiveRanking eyebrow="Product demand" title="Top vehicle models" items={analytics.topModels} emptyLabel="Vehicle rankings need order data." />
+      </div>
+
+      <div className="executive-decision-grid">
+        <section className="chart-card executive-alert-card">
+          <div className="card-heading"><div><p className="eyebrow">Alert Center</p><h2>Priority risks</h2></div><button className="mini" onClick={() => setActivePage('Alerts Center')}>View all</button></div>
+          <div className="alert-list compact">{alerts.slice(0, 5).map((alert) => <div className="alert-row" key={alert.id}><AlertBadge severity={alert.severity} /><div><strong>{alert.title}</strong><small>{alert.message}</small></div></div>)}{!alerts.length && <EmptyState label="No operating risks need attention." icon={ShieldCheck} />}</div>
+        </section>
+        <section className="chart-card recommendation-card">
+          <div className="card-heading"><div><p className="eyebrow">Decision support</p><h2>Recommended actions</h2></div></div>
+          <div className="recommendation-list">{visibleRecommendations.slice(0, 5).map((item) => <button key={item.title} onClick={() => setActivePage(item.page)}><AlertBadge severity={item.severity} /><span><strong>{item.title}</strong><small>{item.detail}</small></span><ChevronRight size={17} /></button>)}{!visibleRecommendations.length && <EmptyState label="No immediate management actions are required." icon={PackageCheck} />}</div>
+        </section>
+      </div>
+
+      <section className="activity-card executive-activity-card">
+        <div className="card-heading"><div><p className="eyebrow">Global activity</p><h2>Company-wide operating feed</h2></div></div>
+        <div className="activity-list">{analytics.activities.slice(0, 10).map((item, index) => <div className="activity-item" key={`${item.type}-${item.label}-${index}`}><span><Activity size={16} /></span><div><strong>{item.label}</strong><small>{item.type} - {item.meta || 'Velora record'}{item.time ? ` - ${new Date(item.time).toLocaleString()}` : ''}</small></div></div>)}{!analytics.activities.length && <EmptyState label="Company activity will appear as teams update records." icon={Activity} />}</div>
+      </section>
+
+      {canViewFinancials && <section className="chart-card executive-report-center"><div className="card-heading"><div><p className="eyebrow">Report Center</p><h2>Management exports</h2></div><button onClick={() => setActivePage('Reports')}>Open all reports</button></div><div className="executive-report-links">{['Revenue report', 'Profit report', 'Customer report', 'Shipment report'].map((label) => <button key={label} onClick={() => setActivePage('Reports')}><FileText size={18} /><span>{label}</span><Download size={16} /></button>)}</div></section>}
+
+      <div className="section-heading compact-heading"><div><p className="eyebrow">Live pipeline</p><h2>Recent orders</h2></div></div>
+      <div className="table-shell"><table><thead><tr><th>Order Number</th><th>Customer</th><th>Vehicle</th>{canViewFinancials && <th>Revenue</th>}{canViewFinancials && <th>Profit</th>}<th>Status</th></tr></thead><tbody>{recentOrders.map((order) => <tr key={order.id}><td>{order.orderNumber}</td><td>{order.customerName}</td><td>{order.vehicle}</td>{canViewFinancials && <td>{money.format(orderRevenue(order))}</td>}{canViewFinancials && <td>{money.format(orderProfit(order))}</td>}<td><StatusBadge status={order.status} /></td></tr>)}</tbody></table>{!recentOrders.length && <EmptyState label="Recent orders will appear here." icon={ClipboardList} />}</div>
+      <SystemHealthPanel vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} error={error} authError={authError} healthEvents={healthEvents} />
+    </section>
+  );
+}
 function Inventory({ vehicles, vehicleEvents = {}, saveVehicle, deleteVehicle, canEdit, canDelete }) {
   const confirm = useConfirm();
   const [query, setQuery] = useState('');
@@ -5872,6 +5927,24 @@ function Reports({ vehicles, orders, customers, shipments, procurementRequests, 
 
   const reports = [
     {
+      title: 'Revenue Report',
+      slug: 'velora-revenue-report',
+      summary: `${filteredOrders.length} orders, ${money.format(totals.revenue)} revenue`,
+      columns: [
+        { key: 'orderNumber', label: 'Order Number' },
+        { key: 'orderDate', label: 'Order Date' },
+        { key: 'customerName', label: 'Customer' },
+        { key: 'vehicle', label: 'Vehicle' },
+        { key: 'quantity', label: 'Quantity' },
+        { key: 'revenue', label: 'Revenue' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: filteredOrders.map((order) => ({
+        ...order,
+        revenue: money.format(orderRevenue(order)),
+      })),
+    },
+    {
       title: 'Inventory Report',
       slug: 'velora-inventory-report',
       summary: `${filteredVehicles.length} vehicles, ${filteredVehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.quantity), 0)} units`,
@@ -6402,7 +6475,7 @@ function App() {
     addCustomerNote,
     deleteCustomerNote,
   } = useSupabaseRecords(user, profileLoading ? null : permissions);
-  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers]);
+  const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords]);
   const searchIndexData = useMemo(
     () => buildSearchIndex({
       vehicles,
@@ -6561,7 +6634,7 @@ function App() {
         )}
         {permissions.canViewPage(activePage) ? (
           <>
-            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} />}
+            {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} orders={orders} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} vehicleEvents={vehicleEvents} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
