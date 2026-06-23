@@ -241,8 +241,8 @@ function buildFlow(data) {
   ];
 }
 
-function buildBottlenecks(data) {
-  const now = new Date();
+function buildBottlenecks(data, asOfDate = new Date()) {
+  const now = dateValue(asOfDate) || new Date();
   const delayedProcurements = data.procurementRequests.filter((item) => {
     if (terminalProcurementStatuses.has(item.status)) return false;
     const reference = dateValue(item.expectedDeliveryDate || item.createdAt);
@@ -557,7 +557,8 @@ function buildVehicleLifecycle(data) {
   ];
 }
 
-function buildHealth(data) {
+function buildHealth(data, asOfDate = new Date()) {
+  const referenceDate = dateValue(asOfDate) || new Date();
   const revenue = data.financeRecords.length
     ? data.financeRecords.reduce((sum, item) => sum + numberValue(item.totalSaleAmount), 0)
     : data.orders.reduce((sum, item) => sum + orderRevenue(item), 0);
@@ -567,7 +568,7 @@ function buildHealth(data) {
   const completedProcurements = data.procurementRequests.filter((item) => terminalProcurementStatuses.has(item.status)).length;
   const activeCustomers = data.customers.filter((item) => {
     const created = dateValue(item.createdAt);
-    return !created || (new Date() - created) / 86400000 <= 90;
+    return !created || (referenceDate - created) / 86400000 <= 90;
   }).length;
 
   return {
@@ -605,7 +606,8 @@ export function getDigitalTwinFilterOptions(data) {
   };
 }
 
-export function buildDigitalTwin(data, filters = {}) {
+export function buildDigitalTwin(data, filters = {}, options = {}) {
+  const asOfDate = options.asOfDate || new Date();
   const scoped = filterData({
     vehicles: data.vehicles || [],
     orders: data.orders || [],
@@ -618,14 +620,14 @@ export function buildDigitalTwin(data, filters = {}) {
   }, filters);
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: (dateValue(asOfDate) || new Date()).toISOString(),
     filters,
     counts: Object.fromEntries(Object.entries(scoped).map(([key, rows]) => [key, rows.length])),
     flow: buildFlow(scoped),
     map: buildMap(scoped),
     graph: buildRelationshipGraph(scoped),
-    bottlenecks: buildBottlenecks(scoped),
-    health: buildHealth(scoped),
+    bottlenecks: buildBottlenecks(scoped, asOfDate),
+    health: buildHealth(scoped, asOfDate),
     activity: buildActivity(scoped),
     vehicleLifecycle: buildVehicleLifecycle(scoped),
   };

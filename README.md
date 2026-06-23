@@ -474,6 +474,40 @@ public/app-icon.svg
 
 Use `resources/icon.svg` and `resources/splash.svg` as source files when generating native Android launcher and splash assets.
 
+## Velora OS Time Machine
+
+Time Machine reconstructs the company state for a selected date from existing
+orders, inventory, customers, shipments, procurement, finance, and workflow
+events. It works immediately in compatibility mode and labels dates before the
+first exact snapshot as reconstructed estimates.
+
+To enable exact, permission-scoped daily snapshots, run this safe additive
+migration in the Supabase SQL Editor:
+
+```text
+supabase/phase5-time-machine.sql
+```
+
+The migration creates only `public.company_snapshots`. It does not alter,
+delete, rename, or duplicate any operational table. One compact snapshot is
+stored per authenticated user, day, and role scope, so each role's history
+contains only the data that role was permitted to load. RLS also prevents a
+user who changes roles from reading snapshots created under a former, broader
+role. Time Machine captures today's
+snapshot when an authenticated user opens the module.
+
+Historical behavior:
+
+- Exact snapshots are preferred when one exists on or before the selected date.
+- Older dates are reconstructed from record timestamps and workflow events.
+- Compare mode calculates revenue, profit, inventory, shipment, customer, and
+  health movement between two dates.
+- Decision Replay links metric changes to the relevant company timeline.
+- Digital Twin History Mode loads the reconstructed state into the existing
+  operational twin.
+- The AI assistant receives a permission-filtered 30-day historical summary
+  suitable for future questions about changes, delays, customers, and suppliers.
+
 ## Safety Notes
 
 - The website remains a normal Vite React app.

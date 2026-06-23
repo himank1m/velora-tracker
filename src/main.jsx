@@ -26,6 +26,7 @@ import {
   FolderLock,
   Gauge,
   Globe2,
+  History,
   Laptop,
   LayoutDashboard,
   Menu,
@@ -60,6 +61,7 @@ import {
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import DigitalTwin from './components/DigitalTwin';
+import TimeMachine from './components/TimeMachine';
 import {
   getHealthEvents,
   installGlobalHealthListeners,
@@ -68,6 +70,7 @@ import {
 } from './lib/appHealth';
 import { buildSearchIndex, searchIndex } from './services/searchService';
 import { buildDigitalTwinAiContext } from './services/digitalTwinService';
+import { buildTimeMachineAiContext } from './services/timeMachineService';
 import {
   buildEnterpriseSummary,
   calculateFinanceRecord,
@@ -300,9 +303,9 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Digital Twin', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Digital Twin', 'Time Machine', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
-  { label: 'Command', pages: ['Command Center', 'Digital Twin'] },
+  { label: 'Command', pages: ['Command Center', 'Digital Twin', 'Time Machine'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center'] },
@@ -312,6 +315,7 @@ const navGroups = [
 const navIcons = {
   'Command Center': LayoutDashboard,
   'Digital Twin': Globe2,
+  'Time Machine': History,
   Procurement: ClipboardList,
   Inventory: Boxes,
   Orders: ClipboardList,
@@ -1603,9 +1607,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages,
-    'Logistics Manager': ['Command Center', 'Digital Twin', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Command Center', 'Digital Twin', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-    'Finance Manager': ['Command Center', 'Digital Twin', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+    'Logistics Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+    'Finance Manager': ['Command Center', 'Digital Twin', 'Time Machine', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2079,32 +2083,32 @@ function useSupabaseRecords(user, permissions) {
     try {
       const readAll = permissions.isExecutive || permissions.role === 'Finance Manager';
       const emptyQuery = Promise.resolve({ data: [], error: null });
-      const needsTwin = permissions.canViewPage('Digital Twin');
+      const needsCompanyModel = permissions.canViewPage('Digital Twin') || permissions.canViewPage('Time Machine');
       const needsVehicles = permissions.canViewPage('Inventory')
         || permissions.canViewPage('Orders')
         || permissions.canViewPage('Quotes')
-        || (needsTwin && (permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'));
+        || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'));
       const needsOrders = permissions.canViewPage('Orders')
         || permissions.canViewPage('Timeline')
         || permissions.canViewPage('Shipments')
         || permissions.canViewPage('Finance')
-        || (needsTwin && (permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'));
+        || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'));
       const needsQuotes = permissions.canViewPage('Quotes');
       const needsCustomers = permissions.canViewPage('Customers')
         || permissions.canViewPage('Orders')
         || permissions.canViewPage('Quotes')
         || permissions.canViewPage('Finance')
-        || (needsTwin && permissions.isExecutive);
+        || (needsCompanyModel && permissions.isExecutive);
       const needsShipments = permissions.canViewPage('Shipments')
         || permissions.canViewPage('Finance')
-        || (needsTwin && (permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'));
-      const needsTimeline = permissions.canViewPage('Timeline') || permissions.canViewPage('Orders');
+        || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'));
+      const needsTimeline = permissions.canViewPage('Timeline') || permissions.canViewPage('Orders') || permissions.canViewPage('Time Machine');
       const needsProcurement = permissions.canViewPage('Procurement')
         || permissions.canViewPage('Finance')
-        || (needsTwin && (permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'));
+        || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'));
       const needsFinance = permissions.canViewPage('Finance')
-        || (needsTwin && (permissions.isExecutive || permissions.role === 'Finance Manager'));
-      const needsDocuments = permissions.canViewPage('Documents') || needsTwin;
+        || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Finance Manager'));
+      const needsDocuments = permissions.canViewPage('Documents') || needsCompanyModel;
 
       const vehicleQuery = !needsVehicles ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
@@ -3028,6 +3032,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const dialogRef = useRef(null);
   const actions = useMemo(() => [
     { label: 'Open Digital Twin', page: 'Digital Twin', icon: Globe2 },
+    { label: 'Open Time Machine', page: 'Time Machine', icon: History },
     { label: 'Open Procurement', page: 'Procurement', icon: ClipboardList },
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
@@ -6222,6 +6227,10 @@ function AiAssistant({
   documents,
   alerts,
   enterpriseSummary,
+  orderTimelines,
+  procurementTimelines,
+  shipmentEvents,
+  vehicleEvents,
 }) {
   const confirm = useConfirm();
   const [question, setQuestion] = useState('');
@@ -6255,6 +6264,21 @@ function AiAssistant({
       financeRecords: permissions.canViewFinancials() ? financeRecords : [],
       documents,
     }),
+    timeMachine: buildTimeMachineAiContext({
+      vehicles,
+      orders,
+      customers,
+      shipments,
+      procurementRequests,
+      suppliers,
+      financeRecords: permissions.canViewFinancials() ? financeRecords : [],
+      documents,
+    }, {
+      orderTimelines,
+      procurementTimelines,
+      shipmentEvents,
+      vehicleEvents,
+    }),
   }), [
     permissions,
     vehicles,
@@ -6267,6 +6291,10 @@ function AiAssistant({
     documents,
     alerts,
     enterpriseSummary,
+    orderTimelines,
+    procurementTimelines,
+    shipmentEvents,
+    vehicleEvents,
   ]);
 
   async function askAssistant(prompt) {
@@ -6674,6 +6702,7 @@ function App() {
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Digital Twin' && <DigitalTwin vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Time Machine' && <TimeMachine userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} procurementTimelines={procurementTimelines} shipmentEvents={shipmentEvents} vehicleEvents={vehicleEvents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} orders={orders} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} vehicleEvents={vehicleEvents} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
@@ -6707,6 +6736,10 @@ function App() {
         documents={documents}
         alerts={alerts}
         enterpriseSummary={enterpriseSummary}
+        orderTimelines={orderTimelines}
+        procurementTimelines={procurementTimelines}
+        shipmentEvents={shipmentEvents}
+        vehicleEvents={vehicleEvents}
       />
     </div>
   );

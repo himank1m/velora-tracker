@@ -102,6 +102,13 @@ export function buildSearchIndex({
       'Live operation flow, world map, relationships, bottlenecks, and vehicle lifecycle',
       ['company map', 'relationship graph', 'operations', 'health', 'activity'],
     ),
+    searchDocument(
+      'Time Machine',
+      'Time Machine',
+      'Company history and Time Machine',
+      'Point-in-time company state, comparisons, decision replay, and historical analytics',
+      ['history', 'snapshot', 'compare dates', 'historical health', 'timeline', 'decision replay'],
+    ),
     searchDocument('Report', 'Reports', 'Business reports', 'Revenue, profit, freight, and inventory exports'),
     searchDocument('Audit', 'Audit Logs', 'Audit logs', 'Operational record activity'),
   ];

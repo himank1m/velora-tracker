@@ -483,6 +483,8 @@ export default function DigitalTwin({
   documents,
   onNavigate,
   canViewFinancials,
+  asOfDate = null,
+  historyMode = false,
 }) {
   const [filters, setFilters] = useState(initialFilters);
   const [selected, setSelected] = useState(null);
@@ -507,18 +509,23 @@ export default function DigitalTwin({
     canViewFinancials,
   ]);
   const options = useMemo(() => getDigitalTwinFilterOptions(data), [data]);
-  const twin = useMemo(() => buildDigitalTwin(data, filters), [data, filters]);
+  const twin = useMemo(
+    () => buildDigitalTwin(data, filters, { asOfDate: asOfDate || undefined }),
+    [data, filters, asOfDate],
+  );
 
   return (
     <section className="page-stack digital-twin-page">
       <header className="twin-hero">
         <div>
-          <p className="eyebrow">Velora OS Digital Company Twin</p>
-          <h1>The company, alive</h1>
-          <p>Follow every vehicle, relationship, route, delay, and commercial movement through one connected operational model.</p>
+          <p className="eyebrow">{historyMode ? 'Velora OS Historical Digital Twin' : 'Velora OS Digital Company Twin'}</p>
+          <h1>{historyMode ? `Company state on ${new Date(`${asOfDate}T12:00:00`).toLocaleDateString('en-IN')}` : 'The company, alive'}</h1>
+          <p>{historyMode
+            ? 'Explore the operational flow, relationships, routes, and bottlenecks reconstructed for this point in company history.'
+            : 'Follow every vehicle, relationship, route, delay, and commercial movement through one connected operational model.'}</p>
         </div>
         <div className="twin-live-summary">
-          <span><i /> Live model</span>
+          <span><i /> {historyMode ? 'Historical model' : 'Live model'}</span>
           <strong>{twin.graph.nodes.length + twin.map.points.length}</strong>
           <small>active visual entities</small>
         </div>
