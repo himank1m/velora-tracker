@@ -95,6 +95,13 @@ export function buildSearchIndex({
       `${item.category} - ${item.linkedModule || 'General'}`,
       [item.linkedRecordId, item.notes],
     )),
+    searchDocument(
+      'Digital Twin',
+      'Digital Twin',
+      'Digital Company Twin',
+      'Live operation flow, world map, relationships, bottlenecks, and vehicle lifecycle',
+      ['company map', 'relationship graph', 'operations', 'health', 'activity'],
+    ),
     searchDocument('Report', 'Reports', 'Business reports', 'Revenue, profit, freight, and inventory exports'),
     searchDocument('Audit', 'Audit Logs', 'Audit logs', 'Operational record activity'),
   ];

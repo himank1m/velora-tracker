@@ -25,6 +25,7 @@ import {
   FileText,
   FolderLock,
   Gauge,
+  Globe2,
   Laptop,
   LayoutDashboard,
   Menu,
@@ -58,6 +59,7 @@ import {
 } from 'recharts';
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import DigitalTwin from './components/DigitalTwin';
 import {
   getHealthEvents,
   installGlobalHealthListeners,
@@ -65,6 +67,7 @@ import {
   subscribeToHealthEvents,
 } from './lib/appHealth';
 import { buildSearchIndex, searchIndex } from './services/searchService';
+import { buildDigitalTwinAiContext } from './services/digitalTwinService';
 import {
   buildEnterpriseSummary,
   calculateFinanceRecord,
@@ -297,9 +300,9 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Digital Twin', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
-  { label: 'Command', pages: ['Command Center'] },
+  { label: 'Command', pages: ['Command Center', 'Digital Twin'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center'] },
@@ -308,6 +311,7 @@ const navGroups = [
 ];
 const navIcons = {
   'Command Center': LayoutDashboard,
+  'Digital Twin': Globe2,
   Procurement: ClipboardList,
   Inventory: Boxes,
   Orders: ClipboardList,
@@ -1599,9 +1603,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages,
-    'Logistics Manager': ['Command Center', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Command Center', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-    'Finance Manager': ['Command Center', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+    'Logistics Manager': ['Command Center', 'Digital Twin', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Command Center', 'Digital Twin', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+    'Finance Manager': ['Command Center', 'Digital Twin', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2075,15 +2079,32 @@ function useSupabaseRecords(user, permissions) {
     try {
       const readAll = permissions.isExecutive || permissions.role === 'Finance Manager';
       const emptyQuery = Promise.resolve({ data: [], error: null });
-      const needsVehicles = permissions.canViewPage('Inventory') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes');
-      const needsOrders = permissions.canViewPage('Orders') || permissions.canViewPage('Timeline') || permissions.canViewPage('Shipments') || permissions.canViewPage('Finance');
+      const needsTwin = permissions.canViewPage('Digital Twin');
+      const needsVehicles = permissions.canViewPage('Inventory')
+        || permissions.canViewPage('Orders')
+        || permissions.canViewPage('Quotes')
+        || (needsTwin && (permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'));
+      const needsOrders = permissions.canViewPage('Orders')
+        || permissions.canViewPage('Timeline')
+        || permissions.canViewPage('Shipments')
+        || permissions.canViewPage('Finance')
+        || (needsTwin && (permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'));
       const needsQuotes = permissions.canViewPage('Quotes');
-      const needsCustomers = permissions.canViewPage('Customers') || permissions.canViewPage('Orders') || permissions.canViewPage('Quotes') || permissions.canViewPage('Finance');
-      const needsShipments = permissions.canViewPage('Shipments') || permissions.canViewPage('Finance');
+      const needsCustomers = permissions.canViewPage('Customers')
+        || permissions.canViewPage('Orders')
+        || permissions.canViewPage('Quotes')
+        || permissions.canViewPage('Finance')
+        || (needsTwin && permissions.isExecutive);
+      const needsShipments = permissions.canViewPage('Shipments')
+        || permissions.canViewPage('Finance')
+        || (needsTwin && (permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'));
       const needsTimeline = permissions.canViewPage('Timeline') || permissions.canViewPage('Orders');
-      const needsProcurement = permissions.canViewPage('Procurement') || permissions.canViewPage('Finance');
-      const needsFinance = permissions.canViewPage('Finance');
-      const needsDocuments = permissions.canViewPage('Documents');
+      const needsProcurement = permissions.canViewPage('Procurement')
+        || permissions.canViewPage('Finance')
+        || (needsTwin && (permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'));
+      const needsFinance = permissions.canViewPage('Finance')
+        || (needsTwin && (permissions.isExecutive || permissions.role === 'Finance Manager'));
+      const needsDocuments = permissions.canViewPage('Documents') || needsTwin;
 
       const vehicleQuery = !needsVehicles ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
@@ -3006,6 +3027,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dialogRef = useRef(null);
   const actions = useMemo(() => [
+    { label: 'Open Digital Twin', page: 'Digital Twin', icon: Globe2 },
     { label: 'Open Procurement', page: 'Procurement', icon: ClipboardList },
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
@@ -6195,6 +6217,9 @@ function AiAssistant({
   customers,
   shipments,
   procurementRequests,
+  suppliers,
+  financeRecords,
+  documents,
   alerts,
   enterpriseSummary,
 }) {
@@ -6220,6 +6245,16 @@ function AiAssistant({
       alerts,
     }),
     enterpriseSummary,
+    digitalTwin: buildDigitalTwinAiContext({
+      vehicles,
+      orders,
+      customers,
+      shipments,
+      procurementRequests,
+      suppliers,
+      financeRecords: permissions.canViewFinancials() ? financeRecords : [],
+      documents,
+    }),
   }), [
     permissions,
     vehicles,
@@ -6227,6 +6262,9 @@ function AiAssistant({
     customers,
     shipments,
     procurementRequests,
+    suppliers,
+    financeRecords,
+    documents,
     alerts,
     enterpriseSummary,
   ]);
@@ -6635,6 +6673,7 @@ function App() {
         {permissions.canViewPage(activePage) ? (
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Digital Twin' && <DigitalTwin vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} orders={orders} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} vehicleEvents={vehicleEvents} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
@@ -6663,6 +6702,9 @@ function App() {
         customers={customers}
         shipments={shipments}
         procurementRequests={procurementRequests}
+        suppliers={suppliers}
+        financeRecords={financeRecords}
+        documents={documents}
         alerts={alerts}
         enterpriseSummary={enterpriseSummary}
       />
