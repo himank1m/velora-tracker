@@ -21,6 +21,7 @@ import {
   Contact,
   CircleDollarSign,
   Building2,
+  Database,
   Download,
   ExternalLink,
   FileText,
@@ -66,6 +67,14 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 import AiCooCommandCenter from './components/AiCooCommandCenter';
 import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
+import {
+  BackupRecoveryCenter,
+  DocumentationCenter,
+  LaunchReadinessDashboard,
+  NotificationCenter,
+  SettingsCenter,
+  UserRoleManagement,
+} from './components/LaunchReadinessSuite';
 import StrategicWarRoom from './components/StrategicWarRoom';
 import TimeMachine from './components/TimeMachine';
 import useEcosystemWorkspace from './hooks/useEcosystemWorkspace';
@@ -81,6 +90,7 @@ import { buildTimeMachineAiContext } from './services/timeMachineService';
 import { buildStrategicAiContext } from './services/strategicSimulationService';
 import { buildAiCooContext } from './services/aiCooService';
 import { buildEcosystemAiContext } from './services/ecosystemService';
+import { buildNotificationFeed, buildSecurityChecklist } from './services/readinessService';
 import {
   buildEnterpriseSummary,
   calculateFinanceRecord,
@@ -313,14 +323,14 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Documentation', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
-  { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center'] },
-  { label: 'Knowledge', pages: ['Documents'] },
-  { label: 'System', pages: ['Audit Logs'] },
+  { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
+  { label: 'Knowledge', pages: ['Documents', 'Documentation'] },
+  { label: 'System', pages: ['Backup & Recovery', 'Settings', 'User Management', 'Launch Readiness', 'Audit Logs'] },
 ];
 const navIcons = {
   'Command Center': LayoutDashboard,
@@ -340,6 +350,12 @@ const navIcons = {
   Timeline: TimelineIcon,
   Reports: FileText,
   'Alerts Center': Bell,
+  Notifications: Bell,
+  'Backup & Recovery': Database,
+  Settings: Gauge,
+  'User Management': Users,
+  Documentation: FileText,
+  'Launch Readiness': ShieldCheck,
   'Audit Logs': ShieldCheck,
 };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1619,10 +1635,10 @@ function createPermissions(role) {
   const isExecutive = normalizedRole === 'CEO' || normalizedRole === 'Company Manager';
   const allowedPagesByRole = {
     CEO: pages,
-    'Company Manager': pages,
-    'Logistics Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-    'Finance Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+    'Company Manager': pages.filter((page) => page !== 'User Management'),
+    'Logistics Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Documentation'],
+    'Inventory Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Documentation'],
+    'Finance Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Documentation'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -1656,6 +1672,12 @@ function createPermissions(role) {
     },
     canViewReports() {
       return isExecutive || normalizedRole === 'Finance Manager';
+    },
+    canViewBackupCenter() {
+      return isExecutive || normalizedRole === 'Finance Manager';
+    },
+    canViewLaunchReadiness() {
+      return isExecutive;
     },
     canManageFinance() {
       return isExecutive || normalizedRole === 'Finance Manager';
@@ -3068,6 +3090,12 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Open Finance', page: 'Finance', icon: CircleDollarSign },
     { label: 'Open Document Vault', page: 'Documents', icon: FolderLock },
     { label: 'Open Reports', page: 'Reports', icon: FileText },
+    { label: 'Open Notifications', page: 'Notifications', icon: Bell },
+    { label: 'Open Backup Center', page: 'Backup & Recovery', icon: Database },
+    { label: 'Open Settings', page: 'Settings', icon: Gauge },
+    { label: 'Open User Management', page: 'User Management', icon: Users },
+    { label: 'Open Documentation', page: 'Documentation', icon: FileText },
+    { label: 'Open Launch Readiness', page: 'Launch Readiness', icon: ShieldCheck },
     { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
     { label: 'Open Command Center', page: 'Command Center', icon: LayoutDashboard },
   ].filter((action) => allowedPages.includes(action.page)), [allowedPages]);
@@ -6618,6 +6646,33 @@ function App() {
     ecosystem.ready,
   );
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords]);
+  const notificationFeed = useMemo(() => buildNotificationFeed({
+    alerts,
+    orders,
+    shipments,
+    procurementRequests,
+    financeRecords: permissions.canViewFinancials() ? financeRecords : [],
+    healthEvents,
+  }), [alerts, financeRecords, healthEvents, orders, permissions, procurementRequests, shipments]);
+  const securityChecklist = useMemo(() => buildSecurityChecklist({
+    isSupabaseConfigured,
+    user,
+    role: permissions.role,
+    phase2Ready,
+    ecosystemReady: ecosystem.ready,
+    canViewFinancials: permissions.canViewFinancials(),
+  }), [ecosystem.ready, permissions, phase2Ready, user]);
+  const recordCounts = useMemo(() => ({
+    vehicles: vehicles.length,
+    orders: orders.length,
+    quotes: quotes.length,
+    customers: customers.length,
+    shipments: shipments.length,
+    procurement: procurementRequests.length,
+    suppliers: suppliers.length,
+    finance: permissions.canViewFinancials() ? financeRecords.length : 0,
+    documents: documents.length,
+  }), [customers.length, documents.length, financeRecords.length, orders.length, permissions, procurementRequests.length, quotes.length, shipments.length, suppliers.length, vehicles.length]);
   const searchIndexData = useMemo(
     () => buildSearchIndex({
       vehicles,
@@ -6807,6 +6862,12 @@ function App() {
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
             {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} />}
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
+            {activePage === 'Notifications' && <NotificationCenter alerts={alerts} orders={orders} shipments={shipments} procurementRequests={procurementRequests} financeRecords={permissions.canViewFinancials() ? financeRecords : []} healthEvents={healthEvents} onNavigate={goToPage} />}
+            {activePage === 'Backup & Recovery' && <BackupRecoveryCenter company={ecosystem.currentCompany} user={user} role={permissions.role} canViewFinancials={permissions.canViewFinancials()} vehicles={vehicles} orders={orders} quotes={quotes} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} alerts={alerts} />}
+            {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} company={ecosystem.currentCompany} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
+            {activePage === 'User Management' && <UserRoleManagement currentUser={user} permissions={permissions} />}
+            {activePage === 'Documentation' && <DocumentationCenter />}
+            {activePage === 'Launch Readiness' && <LaunchReadinessDashboard isSupabaseConfigured={isSupabaseConfigured} phase2Ready={phase2Ready} ecosystemReady={ecosystem.ready} authError={authError} dataError={error} healthEvents={healthEvents} documents={documents} counts={recordCounts} notifications={notificationFeed} securityChecklist={securityChecklist} />}
             {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
           </>
         ) : (

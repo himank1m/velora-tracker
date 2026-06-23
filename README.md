@@ -637,6 +637,50 @@ Redeploy the AI COO function after installing this phase:
 supabase functions deploy ai-assistant
 ```
 
+## Velora OS Launch Readiness
+
+Phase 9 hardens Velora OS for serious usage without removing existing features
+or changing operational business logic.
+
+New in-app centers:
+
+- Backup & Recovery: JSON and CSV exports for authorized records, plus restore
+  preparation warnings. Restore writes are intentionally not implemented.
+- Settings: company profile, theme, INR currency setting, notification
+  preferences, and AI response style foundation.
+- Notifications: role-aware operational inbox for AI COO alerts, shipment
+  delays, payment reminders, procurement risks, and system events.
+- User Management: CEO-only profile and role management with exclusive CEO and
+  Company Manager safeguards.
+- Documentation: in-app module, admin, AI COO, and data safety guide.
+- Launch Readiness: build, environment, database, storage, security, monitoring,
+  and operational readiness checklist.
+
+Optional persistence migration:
+
+```text
+supabase/phase9-launch-readiness.sql
+```
+
+The migration is safe and additive. It creates:
+
+- `user_preferences`
+- `system_notifications`
+- `backup_exports`
+- `launch_audit_checks`
+
+It does not drop, truncate, rename, or delete existing data. The current UI works
+without this migration by using generated notifications and local preferences,
+but the migration prepares production persistence and audit trails.
+
+Recommended launch workflow:
+
+1. Run all pending Supabase migrations through Phase 9.
+2. Confirm Vercel has `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+3. Redeploy `ai-assistant` if AI COO context changed.
+4. Open Launch Readiness and clear any action-needed checks.
+5. Export a JSON backup before major production data operations.
+
 ## Safety Notes
 
 - The website remains a normal Vite React app.
