@@ -68,7 +68,7 @@ export function buildEcosystemTimeline({ events = [], transactions = [], relatio
       id: `transaction-${transaction.id}`,
       type: transaction.transactionType || 'Transaction',
       title: `${companyName(transaction.sourceCompanyId)} to ${companyName(transaction.targetCompanyId)}`,
-      detail: `${transaction.status} · ${transaction.transactionNumber || 'Inter-company activity'}`,
+      detail: `${transaction.status} - ${transaction.transactionNumber || 'Inter-company activity'}`,
       date: transaction.transactionDate || transaction.createdAt,
       companyId: transaction.sourceCompanyId,
     })),
@@ -271,4 +271,3 @@ export function buildEcosystemAiContext(input) {
     recentActivity: intelligence.timeline.slice(0, 12),
   }
 }
-

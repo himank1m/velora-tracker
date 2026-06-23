@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Activity,
   ArrowRight,
+  BarChart3,
   Building2,
   CheckCircle2,
   ChevronRight,
