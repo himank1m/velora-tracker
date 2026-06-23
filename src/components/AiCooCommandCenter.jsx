@@ -227,6 +227,7 @@ function PerformanceScores({ scores }) {
 export default function AiCooCommandCenter({
   userId,
   role,
+  companyId,
   vehicles,
   orders,
   customers,
@@ -272,11 +273,13 @@ export default function AiCooCommandCenter({
         if (!cancelled) setTaskState({ loading: false, available: false, error: '' });
         return;
       }
-      const { data, error } = await supabase
+      let query = supabase
         .from('ai_coo_tasks')
         .select('*')
         .eq('created_by', userId)
-        .eq('access_scope', role)
+        .eq('access_scope', role);
+      if (companyId) query = query.eq('company_id', companyId);
+      const { data, error } = await query
         .neq('status', 'Dismissed')
         .order('rank', { ascending: true })
         .limit(100);
@@ -292,7 +295,7 @@ export default function AiCooCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [role, userId]);
+  }, [companyId, role, userId]);
 
   useEffect(() => {
     if (!taskState.available || !supabase || !userId || !intelligence.tasks.length) return;
@@ -313,11 +316,12 @@ export default function AiCooCommandCenter({
         generated_on: generatedOn,
         access_scope: role,
         created_by: userId,
+        ...(companyId ? { company_id: companyId } : {}),
         updated_at: new Date().toISOString(),
       }));
       const { data, error } = await supabase
         .from('ai_coo_tasks')
-        .upsert(payload, { onConflict: 'created_by,access_scope,source_key' })
+        .upsert(payload, { onConflict: companyId ? 'company_id,created_by,access_scope,source_key' : 'created_by,access_scope,source_key' })
         .select('*');
       if (!cancelled && !error && data) {
         const synced = data.map(taskFromRow);
@@ -332,7 +336,7 @@ export default function AiCooCommandCenter({
     return () => {
       cancelled = true;
     };
-  }, [intelligence.tasks, role, taskState.available, userId]);
+  }, [companyId, intelligence.tasks, role, taskState.available, userId]);
 
   const updateTaskStatus = async (task, status) => {
     setPersistedTasks((current) => {
@@ -342,12 +346,13 @@ export default function AiCooCommandCenter({
         : [...current, { ...task, status }];
     });
     if (taskState.available && supabase) {
-      const { error } = await supabase
+      let query = supabase
         .from('ai_coo_tasks')
         .update({ status, updated_at: new Date().toISOString() })
         .eq('created_by', userId)
-        .eq('access_scope', role)
-        .eq('source_key', task.sourceKey);
+        .eq('access_scope', role);
+      if (companyId) query = query.eq('company_id', companyId);
+      const { error } = await query.eq('source_key', task.sourceKey);
       if (error) setTaskState((current) => ({ ...current, error: error.message }));
     }
   };

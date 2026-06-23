@@ -593,6 +593,50 @@ AI COO safety policy:
 - No procurement, payment, shipment, customer, supplier, order, or inventory
   action is executed autonomously.
 
+## Velora OS Business Ecosystem
+
+The Business Ecosystem layer introduces a scalable multi-company workspace
+without replacing or deleting the existing Velora Motors records.
+
+Install the additive migration:
+
+```text
+supabase/phase8-business-ecosystem.sql
+```
+
+The migration:
+
+- Creates `companies`, `company_memberships`, `ecosystem_relationships`,
+  `intercompany_transactions`, and `company_events`.
+- Seeds Velora Motors as the primary company.
+- Assigns all existing profiles and operational records to Velora Motors.
+- Adds a `company_id` boundary to existing operational and intelligence tables.
+- Adds restrictive tenant RLS underneath existing role policies.
+- Preserves every existing record and table name.
+- Prepares memberships for future supplier, customer, logistics, and partner
+  portal accounts.
+
+After installation, the company switcher scopes Inventory, Orders, Quotes,
+Customers, Shipments, Procurement, Suppliers, Finance, Documents, timelines,
+Time Machine snapshots, Strategic War Room scenarios, and AI COO tasks to the
+selected company. Before installation, Velora continues in its original
+single-company compatibility mode.
+
+The Ecosystem Center provides:
+
+- Cross-company revenue, profit, company, relationship, and health indicators.
+- A visual network of companies, suppliers, customers, and logistics partners.
+- Relationship scoring and strategic network analysis.
+- Explicit inter-company transaction tracking.
+- Ecosystem-wide company comparisons and timeline activity.
+- AI COO ecosystem context for company, relationship, risk, and value questions.
+
+Redeploy the AI COO function after installing this phase:
+
+```powershell
+supabase functions deploy ai-assistant
+```
+
 ## Safety Notes
 
 - The website remains a normal Vite React app.

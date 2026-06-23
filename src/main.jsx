@@ -20,6 +20,7 @@ import {
   Command,
   Contact,
   CircleDollarSign,
+  Building2,
   Download,
   ExternalLink,
   FileText,
@@ -31,6 +32,7 @@ import {
   LayoutDashboard,
   Menu,
   Moon,
+  Network,
   PackageCheck,
   Plus,
   Search,
@@ -63,8 +65,10 @@ import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseC
 import AppErrorBoundary from './components/AppErrorBoundary';
 import AiCooCommandCenter from './components/AiCooCommandCenter';
 import DigitalTwin from './components/DigitalTwin';
+import EcosystemCenter from './components/EcosystemCenter';
 import StrategicWarRoom from './components/StrategicWarRoom';
 import TimeMachine from './components/TimeMachine';
+import useEcosystemWorkspace from './hooks/useEcosystemWorkspace';
 import {
   getHealthEvents,
   installGlobalHealthListeners,
@@ -76,6 +80,7 @@ import { buildDigitalTwinAiContext } from './services/digitalTwinService';
 import { buildTimeMachineAiContext } from './services/timeMachineService';
 import { buildStrategicAiContext } from './services/strategicSimulationService';
 import { buildAiCooContext } from './services/aiCooService';
+import { buildEcosystemAiContext } from './services/ecosystemService';
 import {
   buildEnterpriseSummary,
   calculateFinanceRecord,
@@ -308,9 +313,9 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
+const pages = ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Audit Logs'];
 const navGroups = [
-  { label: 'Command', pages: ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
+  { label: 'Command', pages: ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center'] },
@@ -319,6 +324,7 @@ const navGroups = [
 ];
 const navIcons = {
   'Command Center': LayoutDashboard,
+  Ecosystem: Network,
   'AI COO': Bot,
   'Digital Twin': Globe2,
   'Time Machine': History,
@@ -1614,9 +1620,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages,
-    'Logistics Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-    'Inventory Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-    'Finance Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+    'Logistics Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+    'Inventory Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+    'Finance Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -1982,7 +1988,7 @@ function useUserProfile(user) {
   return { profile, profileLoading, profileError };
 }
 
-function useSupabaseRecords(user, permissions) {
+function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady) {
   const [vehicles, setVehicles] = useState([]);
   const [orders, setOrders] = useState([]);
   const [quotes, setQuotes] = useState([]);
@@ -2003,6 +2009,12 @@ function useSupabaseRecords(user, permissions) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const scopeQuery = (query) => ecosystemReady && currentCompanyId
+    ? query.eq('company_id', currentCompanyId)
+    : query;
+  const scopeRow = (row) => ecosystemReady && currentCompanyId
+    ? { ...row, company_id: currentCompanyId }
+    : row;
 
   async function runRequest(request, operation = 'database request') {
     const { data, error: requestError } = await request;
@@ -2123,57 +2135,57 @@ function useSupabaseRecords(user, permissions) {
 
       const vehicleQuery = !needsVehicles ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-          ? supabase.from('vehicles').select('*').order('created_at', { ascending: false })
-          : supabase.from('vehicles').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('vehicles').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('vehicles').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const orderQuery = !needsOrders ? emptyQuery
         : readAll || permissions.role === 'Logistics Manager'
-          ? supabase.from('orders').select('*').order('created_at', { ascending: false })
-          : supabase.from('orders').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('orders').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('orders').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const quoteQuery = !needsQuotes ? emptyQuery
         : readAll
-          ? supabase.from('quotes').select('*').order('created_at', { ascending: false })
-          : supabase.from('quotes').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('quotes').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('quotes').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const customerQuery = !needsCustomers ? emptyQuery
         : readAll
-          ? supabase.from('customers').select('*').order('created_at', { ascending: false })
-          : supabase.from('customers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('customers').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('customers').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const shipmentQuery = !needsShipments ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
-          ? supabase.from('shipments').select('*').order('created_at', { ascending: false })
-          : supabase.from('shipments').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('shipments').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('shipments').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const logisticsPartnerQuery = !needsShipments ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Logistics Manager' || permissions.role === 'Finance Manager'
-          ? supabase.from('logistics_partners').select('*').order('created_at', { ascending: false })
-          : supabase.from('logistics_partners').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('logistics_partners').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('logistics_partners').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const timelineQuery = !needsTimeline ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Logistics Manager'
-          ? supabase.from('order_timeline_events').select('*').order('created_at', { ascending: true })
-          : supabase.from('order_timeline_events').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+          ? scopeQuery(supabase.from('order_timeline_events').select('*')).order('created_at', { ascending: true })
+          : scopeQuery(supabase.from('order_timeline_events').select('*').eq('created_by', user.id)).order('created_at', { ascending: true });
       const procurementQuery = !needsProcurement ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-          ? supabase.from('procurement_requests').select('*').order('created_at', { ascending: false })
-          : supabase.from('procurement_requests').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('procurement_requests').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('procurement_requests').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const supplierQuery = !needsProcurement ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-          ? supabase.from('suppliers').select('*').order('created_at', { ascending: false })
-          : supabase.from('suppliers').select('*').eq('created_by', user.id).order('created_at', { ascending: false });
+          ? scopeQuery(supabase.from('suppliers').select('*')).order('created_at', { ascending: false })
+          : scopeQuery(supabase.from('suppliers').select('*').eq('created_by', user.id)).order('created_at', { ascending: false });
       const procurementTimelineQuery = !needsProcurement ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
-          ? supabase.from('procurement_timeline').select('*').order('created_at', { ascending: true })
-          : supabase.from('procurement_timeline').select('*').eq('created_by', user.id).order('created_at', { ascending: true });
+          ? scopeQuery(supabase.from('procurement_timeline').select('*')).order('created_at', { ascending: true })
+          : scopeQuery(supabase.from('procurement_timeline').select('*').eq('created_by', user.id)).order('created_at', { ascending: true });
       const financeQuery = needsFinance
-        ? supabase.from('finance_records').select('*').order('created_at', { ascending: false })
+        ? scopeQuery(supabase.from('finance_records').select('*')).order('created_at', { ascending: false })
         : supabase.from('finance_records').select('id').limit(1);
       const documentQuery = !needsDocuments ? emptyQuery
-        : supabase.from('documents').select('*').order('uploaded_at', { ascending: false });
+        : scopeQuery(supabase.from('documents').select('*')).order('uploaded_at', { ascending: false });
       const vehicleEventQuery = !needsVehicles ? emptyQuery
-        : supabase.from('vehicle_lifecycle_events').select('*').order('created_at', { ascending: true });
+        : scopeQuery(supabase.from('vehicle_lifecycle_events').select('*')).order('created_at', { ascending: true });
       const shipmentEventQuery = !needsShipments ? emptyQuery
-        : supabase.from('shipment_events').select('*').order('created_at', { ascending: true });
+        : scopeQuery(supabase.from('shipment_events').select('*')).order('created_at', { ascending: true });
       const customerContactQuery = !needsCustomers ? emptyQuery
-        : supabase.from('customer_contacts').select('*').order('created_at', { ascending: true });
+        : scopeQuery(supabase.from('customer_contacts').select('*')).order('created_at', { ascending: true });
       const customerNoteQuery = !needsCustomers ? emptyQuery
-        : supabase.from('customer_notes').select('*').order('created_at', { ascending: false });
+        : scopeQuery(supabase.from('customer_notes').select('*')).order('created_at', { ascending: false });
 
       const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows, financeResult, documentResult, vehicleEventResult, shipmentEventResult, customerContactResult, customerNoteResult] = await Promise.all([
         runRequest(vehicleQuery, 'load vehicles'),
@@ -2221,14 +2233,14 @@ function useSupabaseRecords(user, permissions) {
 
   useEffect(() => {
     loadRecords();
-  }, [user?.id, permissions?.role]);
+  }, [user?.id, permissions?.role, currentCompanyId, ecosystemReady]);
 
   async function saveVehicle(vehicle, editingId) {
     if (!permissions?.canManageInventory()) throw new Error('Your role cannot manage inventory.');
     const previous = vehicles.find((item) => item.id === editingId);
     const query = editingId
-      ? supabase.from('vehicles').update(toVehicleRow(vehicle, null, phase2Ready)).eq('id', editingId).select().single()
-      : supabase.from('vehicles').insert(toVehicleRow(vehicle, user.id, phase2Ready)).select().single();
+      ? scopeQuery(supabase.from('vehicles').update(toVehicleRow(vehicle, null, phase2Ready)).eq('id', editingId)).select().single()
+      : supabase.from('vehicles').insert(scopeRow(toVehicleRow(vehicle, user.id, phase2Ready))).select().single();
     const saved = fromVehicleRow(await runRequest(query));
     setVehicles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
     if (phase2Ready && (!editingId || previous?.lifecycleStatus !== saved.lifecycleStatus)) {
@@ -2239,7 +2251,7 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteVehicle(id) {
     if (!permissions?.canDeleteRecords('Inventory')) throw new Error('Your role cannot delete inventory records.');
-    await runRequest(supabase.from('vehicles').delete().eq('id', id));
+    await runRequest(scopeQuery(supabase.from('vehicles').delete().eq('id', id)));
     setVehicles((current) => current.filter((item) => item.id !== id));
   }
 
@@ -2250,8 +2262,8 @@ function useSupabaseRecords(user, permissions) {
       orderNumber: order.orderNumber || nextOrderNumber(orders),
     };
     const query = editingId
-      ? supabase.from('orders').update(toOrderRow(orderToSave)).eq('id', editingId).select().single()
-      : supabase.from('orders').insert(toOrderRow(orderToSave, user.id)).select().single();
+      ? scopeQuery(supabase.from('orders').update(toOrderRow(orderToSave)).eq('id', editingId)).select().single()
+      : supabase.from('orders').insert(scopeRow(toOrderRow(orderToSave, user.id))).select().single();
     const saved = fromOrderRow(await runRequest(query));
     setOrders((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
 
@@ -2264,7 +2276,7 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteOrder(id) {
     if (!permissions?.canDeleteRecords('Orders')) throw new Error('Your role cannot delete orders.');
-    await runRequest(supabase.from('orders').delete().eq('id', id));
+    await runRequest(scopeQuery(supabase.from('orders').delete().eq('id', id)));
     setOrders((current) => current.filter((item) => item.id !== id));
   }
 
@@ -2275,21 +2287,21 @@ function useSupabaseRecords(user, permissions) {
       quoteId: quote.quoteId || nextQuoteId(quotes),
     };
     const query = editingId
-      ? supabase.from('quotes').update(toQuoteRow(quoteToSave)).eq('quote_id', editingId).select().single()
-      : supabase.from('quotes').insert(toQuoteRow(quoteToSave, user.id)).select().single();
+      ? scopeQuery(supabase.from('quotes').update(toQuoteRow(quoteToSave)).eq('quote_id', editingId)).select().single()
+      : supabase.from('quotes').insert(scopeRow(toQuoteRow(quoteToSave, user.id))).select().single();
     const saved = fromQuoteRow(await runRequest(query));
     setQuotes((current) => editingId ? current.map((item) => item.quoteId === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteQuote(id) {
     if (!permissions?.canDeleteRecords('Quotes')) throw new Error('Your role cannot delete quotes.');
-    await runRequest(supabase.from('quotes').delete().eq('quote_id', id));
+    await runRequest(scopeQuery(supabase.from('quotes').delete().eq('quote_id', id)));
     setQuotes((current) => current.filter((item) => item.quoteId !== id));
   }
 
   async function updateOrderStatus(id, status) {
     if (!permissions?.canManageOrders()) throw new Error('Your role cannot update order status.');
-    const saved = fromOrderRow(await runRequest(supabase.from('orders').update({ status }).eq('id', id).select().single()));
+    const saved = fromOrderRow(await runRequest(scopeQuery(supabase.from('orders').update({ status }).eq('id', id)).select().single()));
     setOrders((current) => current.map((item) => item.id === id ? saved : item));
     await addOrderTimelineEvent(id, status, `Status changed to ${status}.`);
   }
@@ -2298,7 +2310,7 @@ function useSupabaseRecords(user, permissions) {
     const saved = fromTimelineRow(await runRequest(
       supabase
         .from('order_timeline_events')
-        .insert(toTimelineRow({ orderId, status, note }, user.id))
+        .insert(scopeRow(toTimelineRow({ orderId, status, note }, user.id)))
         .select()
         .single()
     ));
@@ -2318,15 +2330,15 @@ function useSupabaseRecords(user, permissions) {
   async function saveCustomer(customer, editingId) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customers.');
     const query = editingId
-      ? supabase.from('customers').update(toCustomerRow(customer, null, phase2Ready)).eq('id', editingId).select().single()
-      : supabase.from('customers').insert(toCustomerRow(customer, user.id, phase2Ready)).select().single();
+      ? scopeQuery(supabase.from('customers').update(toCustomerRow(customer, null, phase2Ready)).eq('id', editingId)).select().single()
+      : supabase.from('customers').insert(scopeRow(toCustomerRow(customer, user.id, phase2Ready))).select().single();
     const saved = fromCustomerRow(await runRequest(query));
     setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteCustomer(id) {
     if (!permissions?.canDeleteRecords('Customers')) throw new Error('Your role cannot delete customers.');
-    await runRequest(supabase.from('customers').delete().eq('id', id));
+    await runRequest(scopeQuery(supabase.from('customers').delete().eq('id', id)));
     setCustomers((current) => current.filter((item) => item.id !== id));
   }
 
@@ -2335,8 +2347,8 @@ function useSupabaseRecords(user, permissions) {
     const linkedCustomer = customers.find((customer) => sameText(customer.name, shipment.customerName));
     const shipmentToSave = { ...shipment, customerId: shipment.customerId || linkedCustomer?.id || '' };
     const query = editingId
-      ? supabase.from('shipments').update(toShipmentRow(shipmentToSave, null, phase2Ready)).eq('shipment_id', editingId).select().single()
-      : supabase.from('shipments').insert(toShipmentRow(shipmentToSave, user.id, phase2Ready)).select().single();
+      ? scopeQuery(supabase.from('shipments').update(toShipmentRow(shipmentToSave, null, phase2Ready)).eq('shipment_id', editingId)).select().single()
+      : supabase.from('shipments').insert(scopeRow(toShipmentRow(shipmentToSave, user.id, phase2Ready))).select().single();
     const saved = fromShipmentRow(await runRequest(query));
     const previous = shipments.find((item) => item.shipmentId === editingId);
     setShipments((current) => editingId ? current.map((item) => item.shipmentId === editingId ? saved : item) : [saved, ...current]);
@@ -2348,22 +2360,22 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteShipment(id) {
     if (!permissions?.canDeleteRecords('Shipments')) throw new Error('Your role cannot delete shipments.');
-    await runRequest(supabase.from('shipments').delete().eq('shipment_id', id));
+    await runRequest(scopeQuery(supabase.from('shipments').delete().eq('shipment_id', id)));
     setShipments((current) => current.filter((item) => item.shipmentId !== id));
   }
 
   async function saveLogisticsPartner(partner, editingId) {
     if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage logistics partners.');
     const query = editingId
-      ? supabase.from('logistics_partners').update(toLogisticsPartnerRow(partner)).eq('id', editingId).select().single()
-      : supabase.from('logistics_partners').insert(toLogisticsPartnerRow(partner, user.id)).select().single();
+      ? scopeQuery(supabase.from('logistics_partners').update(toLogisticsPartnerRow(partner)).eq('id', editingId)).select().single()
+      : supabase.from('logistics_partners').insert(scopeRow(toLogisticsPartnerRow(partner, user.id))).select().single();
     const saved = fromLogisticsPartnerRow(await runRequest(query));
     setLogisticsPartners((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteLogisticsPartner(id) {
     if (!permissions?.canDeleteRecords('Shipments')) throw new Error('Your role cannot delete logistics partners.');
-    await runRequest(supabase.from('logistics_partners').delete().eq('id', id));
+    await runRequest(scopeQuery(supabase.from('logistics_partners').delete().eq('id', id)));
     setLogisticsPartners((current) => current.filter((item) => item.id !== id));
   }
 
@@ -2406,7 +2418,7 @@ function useSupabaseRecords(user, permissions) {
     const saved = fromProcurementTimelineRow(await runRequest(
       supabase
         .from('procurement_timeline')
-        .insert(toProcurementTimelineRow({ procurementId, status, note }, user.id))
+        .insert(scopeRow(toProcurementTimelineRow({ procurementId, status, note }, user.id)))
         .select()
         .single()
     ));
@@ -2425,8 +2437,8 @@ function useSupabaseRecords(user, permissions) {
     };
     const previous = procurementRequests.find((item) => item.procurementId === editingId);
     const query = editingId
-      ? supabase.from('procurement_requests').update(toProcurementRow(requestToSave, null, phase2Ready)).eq('procurement_id', editingId).select().single()
-      : supabase.from('procurement_requests').insert(toProcurementRow(requestToSave, user.id, phase2Ready)).select().single();
+      ? scopeQuery(supabase.from('procurement_requests').update(toProcurementRow(requestToSave, null, phase2Ready)).eq('procurement_id', editingId)).select().single()
+      : supabase.from('procurement_requests').insert(scopeRow(toProcurementRow(requestToSave, user.id, phase2Ready))).select().single();
     const saved = fromProcurementRow(await runRequest(query));
     setProcurementRequests((current) => editingId ? current.map((item) => item.procurementId === editingId ? saved : item) : [saved, ...current]);
 
@@ -2444,7 +2456,7 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteProcurementRequest(id) {
     if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete procurement records.');
-    await runRequest(supabase.from('procurement_requests').delete().eq('procurement_id', id));
+    await runRequest(scopeQuery(supabase.from('procurement_requests').delete().eq('procurement_id', id)));
     setProcurementRequests((current) => current.filter((item) => item.procurementId !== id));
   }
 
@@ -2456,15 +2468,15 @@ function useSupabaseRecords(user, permissions) {
   async function saveSupplier(supplier, editingId) {
     if (!permissions?.canManageProcurement()) throw new Error('Your role cannot manage suppliers.');
     const query = editingId
-      ? supabase.from('suppliers').update(toSupplierRow(supplier, null, phase2Ready)).eq('id', editingId).select().single()
-      : supabase.from('suppliers').insert(toSupplierRow(supplier, user.id, phase2Ready)).select().single();
+      ? scopeQuery(supabase.from('suppliers').update(toSupplierRow(supplier, null, phase2Ready)).eq('id', editingId)).select().single()
+      : supabase.from('suppliers').insert(scopeRow(toSupplierRow(supplier, user.id, phase2Ready))).select().single();
     const saved = fromSupplierRow(await runRequest(query));
     setSuppliers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
   }
 
   async function deleteSupplier(id) {
     if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete suppliers.');
-    await runRequest(supabase.from('suppliers').delete().eq('id', id));
+    await runRequest(scopeQuery(supabase.from('suppliers').delete().eq('id', id)));
     setSuppliers((current) => current.filter((item) => item.id !== id));
   }
 
@@ -2473,7 +2485,7 @@ function useSupabaseRecords(user, permissions) {
     const saved = fromOperationalEvent(await runRequest(
       supabase
         .from('vehicle_lifecycle_events')
-        .insert({ vehicle_id: vehicleId, status, note, created_by: user.id })
+        .insert(scopeRow({ vehicle_id: vehicleId, status, note, created_by: user.id }))
         .select()
         .single(),
       'add vehicle lifecycle event',
@@ -2489,7 +2501,7 @@ function useSupabaseRecords(user, permissions) {
     const saved = fromOperationalEvent(await runRequest(
       supabase
         .from('shipment_events')
-        .insert({ shipment_id: shipmentId, status, note, created_by: user.id })
+        .insert(scopeRow({ shipment_id: shipmentId, status, note, created_by: user.id }))
         .select()
         .single(),
       'add shipment event',
@@ -2504,8 +2516,8 @@ function useSupabaseRecords(user, permissions) {
     if (!permissions?.canManageFinance()) throw new Error('Your role cannot manage finance records.');
     if (!phase2Ready) throw new Error('Install the Phase 2 Supabase migration before creating finance records.');
     const query = editingId
-      ? supabase.from('finance_records').update(toFinanceRow(record)).eq('id', editingId).select().single()
-      : supabase.from('finance_records').insert(toFinanceRow(record, user.id)).select().single();
+      ? scopeQuery(supabase.from('finance_records').update(toFinanceRow(record)).eq('id', editingId)).select().single()
+      : supabase.from('finance_records').insert(scopeRow(toFinanceRow(record, user.id))).select().single();
     const saved = fromFinanceRow(await runRequest(query, 'save finance record'));
     setFinanceRecords((current) => editingId
       ? current.map((item) => item.id === editingId ? saved : item)
@@ -2515,7 +2527,7 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteFinanceRecord(id) {
     if (!permissions?.canManageFinance()) throw new Error('Your role cannot delete finance records.');
-    await runRequest(supabase.from('finance_records').delete().eq('id', id), 'delete finance record');
+    await runRequest(scopeQuery(supabase.from('finance_records').delete().eq('id', id)), 'delete finance record');
     setFinanceRecords((current) => current.filter((item) => item.id !== id));
   }
 
@@ -2529,14 +2541,14 @@ function useSupabaseRecords(user, permissions) {
     if (file.size > 10 * 1024 * 1024) throw new Error('Documents must be 10 MB or smaller.');
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-    const storagePath = `${user.id}/${Date.now()}-${safeName}`;
+    const storagePath = `${ecosystemReady && currentCompanyId ? `${currentCompanyId}/` : ''}${user.id}/${Date.now()}-${safeName}`;
     await runRequest(
       supabase.storage.from('velora-documents').upload(storagePath, file, { upsert: false }),
       'upload document file',
     );
     try {
       const saved = fromDocumentRow(await runRequest(
-        supabase.from('documents').insert({
+        supabase.from('documents').insert(scopeRow({
           file_name: file.name,
           file_type: file.type,
           file_size: file.size,
@@ -2546,7 +2558,7 @@ function useSupabaseRecords(user, permissions) {
           storage_path: storagePath,
           notes: documentInput.notes,
           uploaded_by: user.id,
-        }).select().single(),
+        })).select().single(),
         'save document metadata',
       ));
       setDocuments((current) => [saved, ...current]);
@@ -2575,14 +2587,14 @@ function useSupabaseRecords(user, permissions) {
     const documentRecord = documents.find((item) => item.id === id);
     if (!documentRecord) return;
     await runRequest(supabase.storage.from('velora-documents').remove([documentRecord.storagePath]), 'delete document file');
-    await runRequest(supabase.from('documents').delete().eq('id', id), 'delete document metadata');
+    await runRequest(scopeQuery(supabase.from('documents').delete().eq('id', id)), 'delete document metadata');
     setDocuments((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveCustomerContact(contact) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customer contacts.');
     const saved = fromCustomerContactRow(await runRequest(
-      supabase.from('customer_contacts').insert({
+      supabase.from('customer_contacts').insert(scopeRow({
         customer_id: contact.customerId,
         full_name: contact.fullName,
         job_title: contact.jobTitle,
@@ -2590,7 +2602,7 @@ function useSupabaseRecords(user, permissions) {
         phone: contact.phone,
         is_primary: Boolean(contact.isPrimary),
         created_by: user.id,
-      }).select().single(),
+      })).select().single(),
       'save customer contact',
     ));
     setCustomerContacts((current) => [...current, saved]);
@@ -2599,14 +2611,14 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteCustomerContact(id) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot delete customer contacts.');
-    await runRequest(supabase.from('customer_contacts').delete().eq('id', id), 'delete customer contact');
+    await runRequest(scopeQuery(supabase.from('customer_contacts').delete().eq('id', id)), 'delete customer contact');
     setCustomerContacts((current) => current.filter((item) => item.id !== id));
   }
 
   async function addCustomerNote(customerId, note) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot add customer notes.');
     const saved = fromCustomerNoteRow(await runRequest(
-      supabase.from('customer_notes').insert({ customer_id: customerId, note, created_by: user.id }).select().single(),
+      supabase.from('customer_notes').insert(scopeRow({ customer_id: customerId, note, created_by: user.id })).select().single(),
       'add customer note',
     ));
     setCustomerNotes((current) => [saved, ...current]);
@@ -2615,7 +2627,7 @@ function useSupabaseRecords(user, permissions) {
 
   async function deleteCustomerNote(id) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot delete customer notes.');
-    await runRequest(supabase.from('customer_notes').delete().eq('id', id), 'delete customer note');
+    await runRequest(scopeQuery(supabase.from('customer_notes').delete().eq('id', id)), 'delete customer note');
     setCustomerNotes((current) => current.filter((item) => item.id !== id));
   }
 
@@ -3042,6 +3054,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dialogRef = useRef(null);
   const actions = useMemo(() => [
+    { label: 'Open Ecosystem', page: 'Ecosystem', icon: Network },
     { label: 'Open AI COO', page: 'AI COO', icon: Bot },
     { label: 'Open Digital Twin', page: 'Digital Twin', icon: Globe2 },
     { label: 'Open Time Machine', page: 'Time Machine', icon: History },
@@ -6246,6 +6259,7 @@ function AiAssistant({
   vehicleEvents,
   logisticsPartners,
   strategicScenarios,
+  ecosystem,
 }) {
   const confirm = useConfirm();
   const [question, setQuestion] = useState('');
@@ -6314,6 +6328,23 @@ function AiAssistant({
       financeRecords: permissions.canViewFinancials() ? financeRecords : [],
       canViewFinancials: permissions.canViewFinancials(),
     }),
+    ecosystem: buildEcosystemAiContext({
+      companies: ecosystem.companies,
+      relationships: ecosystem.relationships,
+      transactions: ecosystem.transactions,
+      events: ecosystem.events,
+      currentCompanyId: ecosystem.currentCompanyId,
+      operational: {
+        vehicles,
+        orders,
+        customers,
+        shipments,
+        logisticsPartners,
+        procurementRequests,
+        suppliers,
+        financeRecords: permissions.canViewFinancials() ? financeRecords : [],
+      },
+    }),
   }), [
     permissions,
     vehicles,
@@ -6332,6 +6363,7 @@ function AiAssistant({
     vehicleEvents,
     logisticsPartners,
     strategicScenarios,
+    ecosystem,
   ]);
 
   async function askAssistant(prompt) {
@@ -6528,6 +6560,7 @@ function App() {
   const { user, authLoading, authError, signOut } = useAuthSession();
   const { profile, profileLoading, profileError } = useUserProfile(user);
   const permissions = useMemo(() => createPermissions(profile?.role), [profile?.role]);
+  const ecosystem = useEcosystemWorkspace(user, profile?.role);
   const {
     vehicles,
     orders,
@@ -6578,7 +6611,12 @@ function App() {
     deleteCustomerContact,
     addCustomerNote,
     deleteCustomerNote,
-  } = useSupabaseRecords(user, profileLoading ? null : permissions);
+  } = useSupabaseRecords(
+    user,
+    profileLoading || ecosystem.loading ? null : permissions,
+    ecosystem.currentCompanyId,
+    ecosystem.ready,
+  );
   const alerts = useMemo(() => createAlerts({ vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords }), [vehicles, orders, customers, shipments, orderTimelines, procurementRequests, suppliers, financeRecords]);
   const searchIndexData = useMemo(
     () => buildSearchIndex({
@@ -6640,6 +6678,10 @@ function App() {
     return <ScreenLoader label="Preparing your Velora workspace..." />;
   }
 
+  if (ecosystem.loading) {
+    return <ScreenLoader label="Resolving your company workspace..." />;
+  }
+
   function goToPage(page) {
     setActivePage(permissions.canViewPage(page) ? page : permissions.allowedPages[0]);
     setMobileNavOpen(false);
@@ -6649,10 +6691,10 @@ function App() {
     <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand-mark">
-          <span>VM</span>
+          <span>{ecosystem.currentCompany.name.slice(0, 2).toUpperCase()}</span>
           <div>
-            <strong>Velora Motors</strong>
-            <small>Enterprise Operations</small>
+            <strong>{ecosystem.currentCompany.name}</strong>
+            <small>Velora OS Ecosystem</small>
           </div>
         </div>
         <button className="mobile-close" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">
@@ -6701,10 +6743,20 @@ function App() {
             <Menu size={20} />
           </button>
           <div className="page-title">
-            <p className="breadcrumb">Velora Motors / {activePage}</p>
+            <p className="breadcrumb">{ecosystem.currentCompany.name} / {activePage}</p>
             <h1>{activePage}</h1>
           </div>
           <div className="topbar-actions">
+            <label className="company-switcher">
+              <Building2 size={16} />
+              <select
+                aria-label="Current company"
+                value={ecosystem.currentCompanyId}
+                onChange={(event) => ecosystem.setCurrentCompanyId(event.target.value)}
+              >
+                {ecosystem.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+              </select>
+            </label>
             <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
             <button className="theme-toggle ai-button" onClick={() => setAiOpen(true)}>
               <Sparkles size={17} />
@@ -6739,10 +6791,11 @@ function App() {
         {permissions.canViewPage(activePage) ? (
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} canViewFinancials={permissions.canViewFinancials()} />}
-            {activePage === 'AI COO' && <AiCooCommandCenter userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onOpenChat={() => setAiOpen(true)} />}
+            {activePage === 'Ecosystem' && <EcosystemCenter companies={ecosystem.companies} relationships={ecosystem.relationships} transactions={ecosystem.transactions} events={ecosystem.events} currentCompany={ecosystem.currentCompany} ready={ecosystem.ready} saveCompany={ecosystem.saveCompany} saveRelationship={ecosystem.saveRelationship} saveTransaction={ecosystem.saveTransaction} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} logisticsPartners={logisticsPartners} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} canManage={permissions.isExecutive} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'AI COO' && <AiCooCommandCenter userId={user.id} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onOpenChat={() => setAiOpen(true)} />}
             {activePage === 'Digital Twin' && <DigitalTwin vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
-            {activePage === 'Time Machine' && <TimeMachine userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} procurementTimelines={procurementTimelines} shipmentEvents={shipmentEvents} vehicleEvents={vehicleEvents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
-            {activePage === 'Strategic War Room' && <StrategicWarRoom userId={user.id} role={permissions.role} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} logisticsPartners={logisticsPartners} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onScenariosChange={setStrategicScenarios} />}
+            {activePage === 'Time Machine' && <TimeMachine userId={user.id} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} procurementTimelines={procurementTimelines} shipmentEvents={shipmentEvents} vehicleEvents={vehicleEvents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Strategic War Room' && <StrategicWarRoom userId={user.id} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} logisticsPartners={logisticsPartners} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onScenariosChange={setStrategicScenarios} />}
             {activePage === 'Procurement' && <Procurement procurementRequests={procurementRequests} suppliers={suppliers} orders={orders} procurementTimelines={procurementTimelines} saveProcurementRequest={saveProcurementRequest} deleteProcurementRequest={deleteProcurementRequest} addProcurementTimelineNote={addProcurementTimelineNote} saveSupplier={saveSupplier} deleteSupplier={deleteSupplier} canEdit={permissions.canManageProcurement()} canDelete={permissions.canDeleteRecords('Procurement')} />}
             {activePage === 'Inventory' && <Inventory vehicles={vehicles} vehicleEvents={vehicleEvents} saveVehicle={saveVehicle} deleteVehicle={deleteVehicle} canEdit={permissions.canManageInventory()} canDelete={permissions.canDeleteRecords('Inventory')} />}
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
@@ -6782,6 +6835,7 @@ function App() {
         vehicleEvents={vehicleEvents}
         logisticsPartners={logisticsPartners}
         strategicScenarios={strategicScenarios}
+        ecosystem={ecosystem}
       />
     </div>
   );

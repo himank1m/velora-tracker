@@ -300,6 +300,7 @@ function StrategyComparison({ scenarios, selectedIds, onToggle }) {
 export default function StrategicWarRoom({
   userId,
   role,
+  companyId,
   vehicles,
   orders,
   customers,
@@ -355,11 +356,13 @@ export default function StrategicWarRoom({
         if (!cancelled) setScenarioState({ loading: false, available: false, error: '' });
         return;
       }
-      const { data, error } = await supabase
+      let query = supabase
         .from('strategic_scenarios')
         .select('*')
         .eq('created_by', userId)
-        .eq('access_scope', role)
+        .eq('access_scope', role);
+      if (companyId) query = query.eq('company_id', companyId);
+      const { data, error } = await query
         .neq('status', 'Archived')
         .order('updated_at', { ascending: false })
         .limit(50);
@@ -379,7 +382,7 @@ export default function StrategicWarRoom({
     return () => {
       cancelled = true;
     };
-  }, [role, userId]);
+  }, [companyId, role, userId]);
 
   const updateAssumption = (field, value) => {
     setDraft((current) => ({
@@ -417,6 +420,7 @@ export default function StrategicWarRoom({
       status: 'Active',
       access_scope: role,
       created_by: userId,
+      ...(companyId ? { company_id: companyId } : {}),
       updated_at: new Date().toISOString(),
     };
     const query = draft.id
@@ -437,10 +441,12 @@ export default function StrategicWarRoom({
     setSavedScenarios((current) => current.filter((item) => item.id !== scenario.id));
     setSelectedIds((current) => current.filter((id) => id !== scenario.id));
     if (scenarioState.available && supabase && scenario.id) {
-      const { error } = await supabase
+      let query = supabase
         .from('strategic_scenarios')
         .update({ status: 'Archived', updated_at: new Date().toISOString() })
         .eq('id', scenario.id);
+      if (companyId) query = query.eq('company_id', companyId);
+      const { error } = await query;
       if (error) setScenarioState((current) => ({ ...current, error: error.message }));
     }
   };

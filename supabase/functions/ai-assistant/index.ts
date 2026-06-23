@@ -17,19 +17,19 @@ const roles = [
 type Role = typeof roles[number];
 
 const allowedSections: Record<Role, string[]> = {
-  CEO: ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo'],
-  'Company Manager': ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo'],
-  'Logistics Manager': ['dashboard', 'orders', 'shipments', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo'],
-  'Inventory Manager': ['dashboard', 'inventory', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo'],
-  'Finance Manager': ['dashboard', 'inventory', 'shipments', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo'],
+  CEO: ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo', 'ecosystem'],
+  'Company Manager': ['dashboard', 'orders', 'inventory', 'shipments', 'customers', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo', 'ecosystem'],
+  'Logistics Manager': ['dashboard', 'orders', 'shipments', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo', 'ecosystem'],
+  'Inventory Manager': ['dashboard', 'inventory', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo', 'ecosystem'],
+  'Finance Manager': ['dashboard', 'inventory', 'shipments', 'reports', 'enterpriseSummary', 'digitalTwin', 'timeMachine', 'strategicWarRoom', 'aiCoo', 'ecosystem'],
 };
 
 const allowedActionModules: Record<Role, string[]> = {
-  CEO: ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
-  'Company Manager': ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
-  'Logistics Manager': ['AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
-  'Inventory Manager': ['AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
-  'Finance Manager': ['AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  CEO: ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  'Company Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Orders', 'Inventory', 'Shipments', 'Customers', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
+  'Logistics Manager': ['Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center'],
+  'Inventory Manager': ['Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center'],
+  'Finance Manager': ['Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center'],
 };
 
 const allowedEnterpriseSummarySections: Record<Role, string[]> = {
@@ -228,6 +228,7 @@ Deno.serve(async (request) => {
       'Give concise, practical operational summaries with clear priorities and suggested next steps.',
       'Lead with what requires attention, why it matters, expected impact, and the recommended management decision.',
       'Use the deterministic aiCoo evidence and performance scores as the primary source for risks, opportunities, priorities, and recommendations.',
+      'Use ecosystem context for company comparisons, critical relationships, cross-company risks, and network value questions.',
       'Use Indian rupees and the Indian number system when discussing financial values.',
       'Do not invent missing records, metrics, dates, customers, or statuses.',
       'Treat Strategic War Room outputs as hypothetical projections based on assumptions, never as guaranteed outcomes or live records.',
@@ -276,7 +277,7 @@ Deno.serve(async (request) => {
                       },
                       module: {
                         type: 'string',
-                        enum: ['Command Center', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center'],
+                        enum: ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Timeline', 'Reports', 'Alerts Center'],
                       },
                       title: { type: 'string' },
                       description: { type: 'string' },

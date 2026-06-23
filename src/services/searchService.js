@@ -123,6 +123,13 @@ export function buildSearchIndex({
       'Daily briefing, company priorities, risks, opportunities, recommendations, and operational scores',
       ['chief operating officer', 'management focus', 'priority board', 'executive briefing', 'customer score', 'supplier score'],
     ),
+    searchDocument(
+      'Ecosystem',
+      'Ecosystem',
+      'Business Ecosystem Center',
+      'Companies, network relationships, inter-company operations, ecosystem health, and cross-company analytics',
+      ['company switcher', 'multi-company', 'business network', 'partnership', 'intercompany', 'tenant'],
+    ),
     searchDocument('Report', 'Reports', 'Business reports', 'Revenue, profit, freight, and inventory exports'),
     searchDocument('Audit', 'Audit Logs', 'Audit logs', 'Operational record activity'),
   ];

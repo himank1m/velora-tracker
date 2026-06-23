@@ -213,6 +213,7 @@ function TimelineList({ events, selectedDate, onNavigate }) {
 export default function TimeMachine({
   userId,
   role,
+  companyId,
   vehicles,
   orders,
   customers,
@@ -276,11 +277,13 @@ export default function TimeMachine({
         if (!cancelled) setSnapshotState({ loading: false, available: false, error: '' });
         return;
       }
-      const { data: rows, error } = await supabase
+      let query = supabase
         .from('company_snapshots')
         .select('id, snapshot_date, schema_version, state, metrics, record_counts, created_at')
         .eq('created_by', userId)
-        .eq('access_scope', role)
+        .eq('access_scope', role);
+      if (companyId) query = query.eq('company_id', companyId);
+      const { data: rows, error } = await query
         .order('snapshot_date', { ascending: false })
         .limit(400);
       if (cancelled) return;
@@ -299,7 +302,7 @@ export default function TimeMachine({
     return () => {
       cancelled = true;
     };
-  }, [role, userId]);
+  }, [companyId, role, userId]);
 
   const liveSnapshot = useMemo(() => createCompanySnapshot(data, new Date()), [data]);
   const liveSnapshotKey = useMemo(
@@ -313,17 +316,19 @@ export default function TimeMachine({
     capturedStateRef.current = liveSnapshotKey;
     let cancelled = false;
     async function captureToday() {
+      const payload = {
+        snapshot_date: liveSnapshot.snapshotDate,
+        schema_version: liveSnapshot.schemaVersion,
+        state: liveSnapshot.state,
+        metrics: liveSnapshot.metrics,
+        record_counts: liveSnapshot.recordCounts,
+        created_by: userId,
+        access_scope: role,
+        ...(companyId ? { company_id: companyId } : {}),
+      };
       const { data: row, error } = await supabase
         .from('company_snapshots')
-        .upsert({
-          snapshot_date: liveSnapshot.snapshotDate,
-          schema_version: liveSnapshot.schemaVersion,
-          state: liveSnapshot.state,
-          metrics: liveSnapshot.metrics,
-          record_counts: liveSnapshot.recordCounts,
-          created_by: userId,
-          access_scope: role,
-        }, { onConflict: 'created_by,snapshot_date,access_scope' })
+        .upsert(payload, { onConflict: companyId ? 'company_id,created_by,snapshot_date,access_scope' : 'created_by,snapshot_date,access_scope' })
         .select('id, snapshot_date, schema_version, state, metrics, record_counts, created_at')
         .single();
       if (!cancelled && error) {
@@ -339,7 +344,7 @@ export default function TimeMachine({
     return () => {
       cancelled = true;
     };
-  }, [liveSnapshot, liveSnapshotKey, role, snapshotState.available, userId]);
+  }, [companyId, liveSnapshot, liveSnapshotKey, role, snapshotState.available, userId]);
 
   const earliestDate = useMemo(() => {
     const dates = [
