@@ -161,7 +161,7 @@ function TwinFilters({ filters, options, onChange, onReset }) {
       </select>
       <input aria-label="Start date" type="date" value={filters.startDate} onChange={(event) => set('startDate', event.target.value)} />
       <input aria-label="End date" type="date" value={filters.endDate} onChange={(event) => set('endDate', event.target.value)} />
-      <button className="secondary" onClick={onReset}>Reset</button>
+      <button className="twin-reset-button" type="button" onClick={onReset}>Reset</button>
     </section>
   );
 }
@@ -540,8 +540,6 @@ export default function DigitalTwin({
           <DetailPanel item={selected} onNavigate={onNavigate} />
         </aside>
       </div>
-
-      <RelationshipGraph graph={twin.graph} selected={selected} onSelect={setSelected} />
 
       <div className="twin-insight-grid">
         <BottleneckPanel bottlenecks={twin.bottlenecks} onNavigate={onNavigate} canViewFinancials={canViewFinancials} />

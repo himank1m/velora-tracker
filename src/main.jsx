@@ -72,7 +72,6 @@ import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
 import {
   BackupRecoveryCenter,
-  DocumentationCenter,
   LaunchReadinessDashboard,
   NotificationCenter,
   SettingsCenter,
@@ -335,13 +334,13 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Documentation', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
-  { label: 'Knowledge', pages: ['Documents', 'Documentation', 'Release Notes'] },
+  { label: 'Knowledge', pages: ['Documents', 'Release Notes'] },
   { label: 'System', pages: ['Backup & Recovery', 'Settings', 'User Management', 'Launch Readiness', 'Audit Logs'] },
 ];
 const navIcons = {
@@ -369,7 +368,6 @@ const navIcons = {
   'Backup & Recovery': Database,
   Settings: Gauge,
   'User Management': Users,
-  Documentation: FileText,
   'Release Notes': Clock,
   'Launch Readiness': ShieldCheck,
   'Audit Logs': ShieldCheck,
@@ -881,6 +879,14 @@ function csvValue(row, keys, fallback = '') {
 function normalizeCsvStatus(value, allowed, fallback) {
   const text = String(value || '').trim().toLowerCase();
   return allowed.find((status) => status.toLowerCase() === text) || fallback;
+}
+
+function csvBoolean(value, fallback = false) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (!text) return fallback;
+  if (['true', 'yes', 'y', '1', 'active'].includes(text)) return true;
+  if (['false', 'no', 'n', '0', 'inactive'].includes(text)) return false;
+  return fallback;
 }
 
 function isUuid(value) {
@@ -1652,9 +1658,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages.filter((page) => page !== 'User Management'),
-    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Documentation', 'Release Notes'],
-    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Documentation', 'Release Notes'],
-    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Documentation', 'Release Notes'],
+    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2329,6 +2335,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       : supabase.from('quotes').insert(scopeRow(toQuoteRow(quoteToSave, user.id))).select().single();
     const saved = fromQuoteRow(await runRequest(query));
     setQuotes((current) => editingId ? current.map((item) => item.quoteId === editingId ? saved : item) : [saved, ...current]);
+    return saved;
   }
 
   async function deleteQuote(id) {
@@ -2372,6 +2379,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       : supabase.from('customers').insert(scopeRow(toCustomerRow(customer, user.id, phase2Ready))).select().single();
     const saved = fromCustomerRow(await runRequest(query));
     setCustomers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
   }
 
   async function deleteCustomer(id) {
@@ -2409,6 +2417,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       : supabase.from('logistics_partners').insert(scopeRow(toLogisticsPartnerRow(partner, user.id))).select().single();
     const saved = fromLogisticsPartnerRow(await runRequest(query));
     setLogisticsPartners((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
   }
 
   async function deleteLogisticsPartner(id) {
@@ -2490,6 +2499,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     if (inventoryStatuses.includes(saved.status) && !inventoryStatuses.includes(previous?.status)) {
       await syncProcurementToInventory(saved);
     }
+    return saved;
   }
 
   async function deleteProcurementRequest(id) {
@@ -2510,6 +2520,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       : supabase.from('suppliers').insert(scopeRow(toSupplierRow(supplier, user.id, phase2Ready))).select().single();
     const saved = fromSupplierRow(await runRequest(query));
     setSuppliers((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
   }
 
   async function deleteSupplier(id) {
@@ -3113,7 +3124,6 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Open Backup Center', page: 'Backup & Recovery', icon: Database },
     { label: 'Open Settings', page: 'Settings', icon: Gauge },
     { label: 'Open User Management', page: 'User Management', icon: Users },
-    { label: 'Open Documentation', page: 'Documentation', icon: FileText },
     { label: 'Open Release Notes', page: 'Release Notes', icon: Clock },
     { label: 'Open Launch Readiness', page: 'Launch Readiness', icon: ShieldCheck },
     { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
@@ -4518,6 +4528,45 @@ function Inventory({ vehicles, vehicleEvents = {}, saveVehicle, deleteVehicle, c
     if (approved) await deleteVehicle(vehicle.id);
   }
 
+  async function importVehicles(rows) {
+    let imported = 0;
+    const workingVehicles = [...vehicles];
+    for (const row of rows) {
+      const requestedId = csvValue(row, ['vehicle_id', 'inventory_id', 'id']);
+      const vehicle = {
+        ...blankVehicle,
+        id: requestedId || nextDisplayId(workingVehicles, 'id'),
+        brand: csvValue(row, 'brand'),
+        model: csvValue(row, 'model'),
+        category: csvValue(row, 'category'),
+        quantity: Math.max(numberValue(csvValue(row, 'quantity', 1)), 0),
+        purchasePrice: numberValue(csvValue(row, ['purchase_price', 'purchase_cost', 'buy_price'])),
+        sellingPrice: numberValue(csvValue(row, ['selling_price', 'sale_price', 'listed_price'])),
+        status: normalizeCsvStatus(csvValue(row, 'status'), vehicleStatuses, 'Available'),
+        lifecycleStatus: normalizeCsvStatus(csvValue(row, ['lifecycle_status', 'lifecycle']), vehicleLifecycleStatuses, 'In Inventory'),
+        variant: csvValue(row, 'variant'),
+        vin: csvValue(row, 'vin'),
+        engineNumber: csvValue(row, ['engine_number', 'engine_no']),
+        color: csvValue(row, 'color'),
+        modelYear: csvValue(row, ['model_year', 'year']),
+        supplierId: csvValue(row, ['supplier_id', 'supplier']),
+        linkedProcurementId: csvValue(row, ['linked_procurement_id', 'procurement_id']),
+        linkedOrderId: csvValue(row, ['linked_order_id', 'order_id']),
+        linkedShipmentId: csvValue(row, ['linked_shipment_id', 'shipment_id']),
+        arrivalDate: csvValue(row, ['arrival_date', 'received_date']),
+        deliveryDate: csvValue(row, ['delivery_date', 'sold_date']),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+        locationName: csvValue(row, ['location_name', 'location'], 'Seoul HQ'),
+        department: csvValue(row, 'department', 'Inventory'),
+      };
+      if (!vehicle.id || !vehicle.brand || !vehicle.model) continue;
+      const saved = await saveVehicle(vehicle, '');
+      workingVehicles.push(saved || vehicle);
+      imported += 1;
+    }
+    return imported;
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Inventory" title="Vehicle stock" description="Track available, reserved, and sold vehicles across Velora locations.">
@@ -4537,6 +4586,14 @@ function Inventory({ vehicles, vehicleEvents = {}, saveVehicle, deleteVehicle, c
         </div>
       </PageHeader>
       {canEdit && <VehicleForm value={form} onChange={setForm} onSubmit={submitVehicle} editingId={editingId} onCancel={() => { setForm(newVehicleForm); setEditingId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import inventory"
+          description="Bulk-create vehicle inventory records from a CSV file, including lifecycle, location, VIN, supplier, and linked operation fields."
+          sampleHeaders="vehicle_id,brand,model,category,quantity,purchase_price,selling_price,status,lifecycle_status,variant,vin,engine_number,color,model_year,supplier_id,linked_procurement_id,linked_order_id,linked_shipment_id,arrival_date,delivery_date,location_name,department,notes"
+          onImport={importVehicles}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -4687,6 +4744,69 @@ function Procurement({ procurementRequests, suppliers, orders, procurementTimeli
     if (approved) await deleteSupplier(supplier.id);
   }
 
+  async function importProcurements(rows) {
+    let imported = 0;
+    const workingRequests = [...procurementRequests];
+    for (const row of rows) {
+      const supplierName = csvValue(row, ['supplier_name', 'supplier']);
+      const supplier = suppliers.find((item) => sameText(item.supplierName, supplierName));
+      const orderReference = csvValue(row, ['linked_order_id', 'order_id', 'order_number']);
+      const linkedOrder = orders.find((order) => order.id === orderReference || order.orderNumber === orderReference);
+      const request = {
+        ...blankProcurementRequest,
+        procurementId: csvValue(row, ['procurement_id', 'request_id']) || nextProcurementId(workingRequests),
+        vehicleBrand: csvValue(row, ['vehicle_brand', 'brand']),
+        vehicleModel: csvValue(row, ['vehicle_model', 'model']),
+        quantity: Math.max(numberValue(csvValue(row, 'quantity', 1)), 1),
+        supplierName,
+        supplierId: csvValue(row, 'supplier_id', supplier?.id || ''),
+        supplierCountry: csvValue(row, ['supplier_country', 'country'], supplier?.country || ''),
+        estimatedPurchaseCost: numberValue(csvValue(row, ['estimated_purchase_cost', 'purchase_cost', 'unit_purchase_cost'])),
+        estimatedFreightCost: numberValue(csvValue(row, ['estimated_freight_cost', 'freight_cost'])),
+        itemType: csvValue(row, ['item_type', 'type'], 'Vehicle'),
+        unitBuyPrice: numberValue(csvValue(row, ['unit_buy_price', 'unit_price'])),
+        approvedPurchaseAmount: numberValue(csvValue(row, ['approved_purchase_amount', 'approved_amount'])),
+        currency: csvValue(row, 'currency', 'INR'),
+        linkedOrderId: linkedOrder?.id || (isUuid(orderReference) ? orderReference : ''),
+        expectedDeliveryDate: csvValue(row, ['expected_delivery_date', 'expected_date']),
+        actualDeliveryDate: csvValue(row, ['actual_delivery_date', 'arrival_date']),
+        paymentStatus: normalizeCsvStatus(csvValue(row, 'payment_status'), paymentStatuses, 'Unpaid'),
+        priority: normalizeCsvStatus(csvValue(row, 'priority'), procurementPriorities, 'Medium'),
+        requestedBy: csvValue(row, ['requested_by', 'requester']),
+        status: normalizeCsvStatus(csvValue(row, 'status'), procurementStatuses, 'Requested'),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+      };
+      if (!request.vehicleBrand || !request.vehicleModel) continue;
+      const saved = await saveProcurementRequest(request, '');
+      workingRequests.push(saved || request);
+      imported += 1;
+    }
+    return imported;
+  }
+
+  async function importSuppliers(rows) {
+    let imported = 0;
+    for (const row of rows) {
+      const supplier = {
+        ...blankSupplier,
+        supplierName: csvValue(row, ['supplier_name', 'supplier', 'name']),
+        country: csvValue(row, 'country'),
+        contactPerson: csvValue(row, ['contact_person', 'contact']),
+        phone: csvValue(row, ['phone', 'phone_number', 'mobile']),
+        email: csvValue(row, ['email', 'email_address']),
+        rating: csvValue(row, 'rating'),
+        onTimeDeliveryRate: csvValue(row, ['on_time_delivery_rate', 'on_time_rate']),
+        totalOrders: numberValue(csvValue(row, ['total_orders', 'orders'])),
+        lastActivityAt: csvValue(row, ['last_activity_at', 'last_activity_date']),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+      };
+      if (!supplier.supplierName) continue;
+      await saveSupplier(supplier, '');
+      imported += 1;
+    }
+    return imported;
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Procurement" title="Vehicle acquisition" description="Track sourcing, supplier negotiation, purchase progress, and incoming inventory before stock entry.">
@@ -4722,6 +4842,14 @@ function Procurement({ procurementRequests, suppliers, orders, procurementTimeli
         <Metric label="Incoming inventory" value={totals.incomingInventory} tone="success" icon={Warehouse} />
       </div>
       {canEdit && <ProcurementRequestForm value={requestForm} onChange={setRequestForm} onSubmit={submitRequest} editingId={editingRequestId} suppliers={suppliers} orders={orders} onCancel={() => { setRequestForm(newRequestForm); setEditingRequestId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import procurement"
+          description="Bulk-create procurement requests from CSV, including supplier, linked order, payment, priority, and delivery fields."
+          sampleHeaders="procurement_id,vehicle_brand,vehicle_model,quantity,supplier_name,supplier_id,supplier_country,estimated_purchase_cost,estimated_freight_cost,item_type,unit_buy_price,approved_purchase_amount,currency,linked_order_id,expected_delivery_date,actual_delivery_date,payment_status,priority,requested_by,status,notes"
+          onImport={importProcurements}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -4814,6 +4942,14 @@ function Procurement({ procurementRequests, suppliers, orders, procurementTimeli
         ]} />
       </div>
       {canEdit && <SupplierForm value={supplierForm} onChange={setSupplierForm} onSubmit={submitSupplier} editingId={editingSupplierId} onCancel={() => { setSupplierForm(blankSupplier); setEditingSupplierId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import suppliers"
+          description="Bulk-create supplier records with contacts, rating, delivery history, and notes."
+          sampleHeaders="supplier_name,country,contact_person,phone,email,rating,on_time_delivery_rate,total_orders,last_activity_at,notes"
+          onImport={importSuppliers}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -4922,6 +5058,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
         sellingPrice: numberValue(sellingPrice),
         status: normalizeCsvStatus(csvValue(row, 'status'), orderStatuses, 'Inquiry'),
         locationName: csvValue(row, ['location_name', 'location'], 'Seoul HQ'),
+        department: csvValue(row, 'department', 'Sales'),
       };
       if (!order.customerName || !order.vehicle) continue;
       const saved = await saveOrder(order, '');
@@ -4958,7 +5095,7 @@ function Orders({ orders, saveOrder, deleteOrder, updateOrderStatus, vehicles, c
         <CsvImportPanel
           title="Import orders"
           description="Bulk-create order records from a CSV file. Missing prices can be filled from inventory when vehicle names match."
-          sampleHeaders="order_number,customer_name,vehicle,quantity,order_date,purchase_cost,selling_price,status,location_name"
+          sampleHeaders="order_number,customer_name,vehicle,quantity,order_date,purchase_cost,selling_price,status,location_name,department"
           onImport={importOrders}
         />
       )}
@@ -5070,6 +5207,39 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
     if (approved) await deleteQuote(quote.quoteId);
   }
 
+  async function importQuotes(rows) {
+    let imported = 0;
+    const workingQuotes = [...quotes];
+    for (const row of rows) {
+      const vehicleName = csvValue(row, 'vehicle');
+      const quantity = Math.max(numberValue(csvValue(row, 'quantity', 1)), 1);
+      const inventoryVehicle = vehicles.find((vehicle) => `${vehicle.brand} ${vehicle.model}`.trim().toLowerCase() === vehicleName.trim().toLowerCase());
+      const purchaseCost = csvValue(row, ['purchase_cost', 'purchase_price'])
+        || (inventoryVehicle ? inventoryVehicle.purchasePrice * quantity : 0);
+      const sellingPrice = csvValue(row, ['selling_price', 'quoted_price', 'quote_price'])
+        || (inventoryVehicle ? inventoryVehicle.sellingPrice * quantity : 0);
+      const quote = {
+        ...blankQuote,
+        quoteId: csvValue(row, ['quote_id', 'quote_number']) || nextQuoteId(workingQuotes),
+        customerName: csvValue(row, ['customer_name', 'customer']),
+        vehicle: vehicleName,
+        quantity,
+        validUntil: csvValue(row, ['valid_until', 'expiry_date'], today),
+        purchaseCost: numberValue(purchaseCost),
+        sellingPrice: numberValue(sellingPrice),
+        status: normalizeCsvStatus(csvValue(row, 'status'), quoteStatuses, 'Draft'),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+        locationName: csvValue(row, ['location_name', 'location'], 'Seoul HQ'),
+        department: csvValue(row, 'department', 'Finance'),
+      };
+      if (!quote.customerName || !quote.vehicle) continue;
+      const saved = await saveQuote(quote, '');
+      workingQuotes.push(saved || quote);
+      imported += 1;
+    }
+    return imported;
+  }
+
   useEffect(() => {
     if (!editingId) setForm(newQuoteForm);
   }, [newQuoteForm, editingId]);
@@ -5099,6 +5269,14 @@ function Quotes({ quotes, saveQuote, deleteQuote, vehicles, customers, canEdit, 
         </div>
       </PageHeader>
       {canEdit && <QuoteForm value={form} onChange={setForm} onSubmit={submitQuote} editingId={editingId} vehicleOptions={vehicles} customerOptions={customers} onCancel={() => { setForm(newQuoteForm); setEditingId(''); }} />}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import quotes"
+          description="Bulk-create customer quotation records from CSV. Missing prices can be filled from matching inventory vehicles."
+          sampleHeaders="quote_id,customer_name,vehicle,quantity,valid_until,purchase_cost,selling_price,status,location_name,department,notes"
+          onImport={importQuotes}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -5207,7 +5385,17 @@ function Customers({
         name: csvValue(row, ['customer_name', 'name', 'customer']),
         phone: csvValue(row, ['phone', 'phone_number', 'mobile']),
         email: csvValue(row, ['email', 'email_address']),
-        location: csvValue(row, ['country_city', 'country', 'city', 'location']),
+        location: csvValue(row, ['country_city', 'location'], [csvValue(row, 'country'), csvValue(row, 'city')].filter(Boolean).join(' / ')),
+        customerType: csvValue(row, ['customer_type', 'type'], 'Company'),
+        country: csvValue(row, 'country'),
+        city: csvValue(row, 'city'),
+        contactPerson: csvValue(row, ['contact_person', 'primary_contact', 'contact']),
+        address: csvValue(row, 'address'),
+        preferredVehicleTypes: csvValue(row, ['preferred_vehicle_types', 'preferred_vehicles', 'vehicle_preferences']),
+        preferredShippingMethod: csvValue(row, ['preferred_shipping_method', 'shipping_method']),
+        customerRating: csvValue(row, ['customer_rating', 'rating'], 'B'),
+        paymentReliabilityScore: numberValue(csvValue(row, ['payment_reliability_score', 'reliability_score'], 75)),
+        active: csvBoolean(csvValue(row, 'active'), true),
         notes: csvValue(row, ['notes', 'note', 'remarks']),
         department: csvValue(row, 'department', 'Sales'),
       };
@@ -5286,7 +5474,7 @@ function Customers({
         <CsvImportPanel
           title="Import customers"
           description="Bulk-create customer records from a CSV file. Customer IDs are generated automatically when omitted or already in use."
-          sampleHeaders="customer_id,customer_name,phone,email,country_city,notes,department"
+          sampleHeaders="customer_id,customer_name,phone,email,country,city,location,customer_type,contact_person,address,preferred_vehicle_types,preferred_shipping_method,customer_rating,payment_reliability_score,active,notes,department"
           onImport={importCustomers}
         />
       )}
@@ -5476,22 +5664,54 @@ function Shipments({ shipments, shipmentEvents = {}, saveShipment, deleteShipmen
         ...blankShipment,
         shipmentId: csvValue(row, ['shipment_id', 'shipment_number']) || nextDisplayId(workingShipments, 'shipmentId'),
         linkedOrderId: linkedOrder?.id || (isUuid(orderReference) ? orderReference : ''),
+        customerId: csvValue(row, ['customer_id'], ''),
         customerName: csvValue(row, ['customer_name', 'customer'], linkedOrder?.customerName || ''),
         vehicle: csvValue(row, 'vehicle', linkedOrder?.vehicle || ''),
         quantity: Math.max(numberValue(csvValue(row, 'quantity', linkedOrder?.quantity || 1)), 1),
         destinationCountry: csvValue(row, ['destination_country', 'destination']),
+        destinationCity: csvValue(row, ['destination_city', 'destination_port_city']),
+        originCountry: csvValue(row, ['origin_country', 'origin']),
+        originCity: csvValue(row, ['origin_city']),
         portOfDeparture: csvValue(row, ['port_of_departure', 'departure_port']),
         portOfArrival: csvValue(row, ['port_of_arrival', 'arrival_port']),
         shippingCompany: csvValue(row, ['shipping_company', 'carrier']),
+        carrierId: csvValue(row, ['carrier_id', 'logistics_partner_id']),
+        shippingMode: csvValue(row, ['shipping_mode', 'mode'], 'Sea'),
         freightCost: numberValue(csvValue(row, ['freight_cost', 'freight'])),
         eta: csvValue(row, 'eta', today),
+        actualDeliveryDate: csvValue(row, ['actual_delivery_date', 'delivered_date']),
+        customsStatus: csvValue(row, ['customs_status', 'customs'], 'Not Started'),
+        delayReason: csvValue(row, ['delay_reason', 'delay_notes']),
+        trackingReference: csvValue(row, ['tracking_reference', 'tracking_number', 'tracking']),
+        deliveryProofPath: csvValue(row, ['delivery_proof_path', 'delivery_proof']),
         status: normalizeCsvStatus(csvValue(row, 'status'), shipmentStatuses, 'Preparing'),
         notes: csvValue(row, 'notes'),
         locationName: csvValue(row, ['location_name', 'location'], 'Port Operations Office'),
+        department: csvValue(row, 'department', 'Logistics'),
       };
       if (!shipment.shipmentId || !shipment.customerName || !shipment.vehicle || !shipment.destinationCountry) continue;
       const saved = await saveShipment(shipment, '');
       workingShipments.push(saved || shipment);
+      imported += 1;
+    }
+    return imported;
+  }
+
+  async function importLogisticsPartners(rows) {
+    let imported = 0;
+    for (const row of rows) {
+      const partner = {
+        ...blankLogisticsPartner,
+        partnerName: csvValue(row, ['partner_name', 'logistics_partner', 'shipping_company', 'carrier', 'name']),
+        country: csvValue(row, 'country'),
+        contactPerson: csvValue(row, ['contact_person', 'contact']),
+        phone: csvValue(row, ['phone', 'phone_number', 'mobile']),
+        email: csvValue(row, ['email', 'email_address']),
+        serviceType: csvValue(row, ['service_type', 'service']),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+      };
+      if (!partner.partnerName) continue;
+      await saveLogisticsPartner?.(partner, '');
       imported += 1;
     }
     return imported;
@@ -5556,7 +5776,7 @@ function Shipments({ shipments, shipmentEvents = {}, saveShipment, deleteShipmen
         <CsvImportPanel
           title="Import shipments"
           description="Bulk-create shipment records from a CSV file. Use order_number or linked_order_id to connect shipments to orders."
-          sampleHeaders="shipment_id,order_number,customer_name,vehicle,quantity,destination_country,port_of_departure,port_of_arrival,shipping_company,freight_cost,eta,status,notes"
+          sampleHeaders="shipment_id,order_number,customer_id,customer_name,vehicle,quantity,origin_country,origin_city,destination_country,destination_city,port_of_departure,port_of_arrival,shipping_company,carrier_id,shipping_mode,freight_cost,eta,actual_delivery_date,customs_status,delay_reason,tracking_reference,status,location_name,department,notes"
           onImport={importShipments}
         />
       )}
@@ -5647,6 +5867,14 @@ function Shipments({ shipments, shipmentEvents = {}, saveShipment, deleteShipmen
         ]} />
       </div>
       {canEdit && <LogisticsPartnerForm value={partnerForm} onChange={setPartnerForm} onSubmit={submitPartner} editingId={editingPartnerId} onCancel={() => { setPartnerForm(blankLogisticsPartner); setEditingPartnerId(''); }} />}
+      {canEdit && saveLogisticsPartner && (
+        <CsvImportPanel
+          title="Import logistics partners"
+          description="Bulk-create logistics partner records for carriers, freight forwarders, customs brokers, and port contacts."
+          sampleHeaders="partner_name,country,contact_person,phone,email,service_type,notes"
+          onImport={importLogisticsPartners}
+        />
+      )}
       <div className="table-shell">
         <table>
           <thead>
@@ -5789,6 +6017,38 @@ function Finance({ financeRecords, orders, customers, shipments, procurementRequ
     if (approved) await deleteFinanceRecord(record.id);
   }
 
+  async function importFinanceRecords(rows) {
+    let imported = 0;
+    for (const row of rows) {
+      const orderReference = csvValue(row, ['order_id', 'order_number']);
+      const order = orders.find((item) => item.id === orderReference || item.orderNumber === orderReference);
+      const customerReference = csvValue(row, ['customer_id', 'customer_name', 'customer']);
+      const customer = customers.find((item) => item.id === customerReference || sameText(item.name, customerReference));
+      const projected = order ? projectOrderFinance(order, shipments, procurementRequests) : {};
+      const record = calculateFinanceRecord({
+        ...blankFinanceRecord,
+        ...projected,
+        orderId: order?.id || (isUuid(orderReference) ? orderReference : ''),
+        customerId: customer?.id || (isUuid(customerReference) ? customerReference : ''),
+        totalSaleAmount: numberValue(csvValue(row, ['total_sale_amount', 'revenue', 'sale_amount'], projected.totalSaleAmount || 0)),
+        vehicleCost: numberValue(csvValue(row, ['vehicle_cost', 'purchase_cost'], projected.vehicleCost || 0)),
+        procurementCost: numberValue(csvValue(row, ['procurement_cost'], projected.procurementCost || 0)),
+        freightCost: numberValue(csvValue(row, ['freight_cost'], projected.freightCost || 0)),
+        taxDutyCost: numberValue(csvValue(row, ['tax_duty_cost', 'tax_cost', 'duty_cost'])),
+        otherCost: numberValue(csvValue(row, ['other_cost', 'misc_cost'])),
+        amountPaid: numberValue(csvValue(row, ['amount_paid', 'paid'])),
+        paymentStatus: normalizeCsvStatus(csvValue(row, 'payment_status'), paymentStatuses, 'Unpaid'),
+        invoiceStatus: normalizeCsvStatus(csvValue(row, 'invoice_status'), invoiceStatuses, 'Not Generated'),
+        dueDate: csvValue(row, ['due_date', 'payment_due_date']),
+        notes: csvValue(row, ['notes', 'note', 'remarks']),
+      });
+      if (!record.orderId && !record.customerId && !record.totalSaleAmount) continue;
+      await saveFinanceRecord(record, '');
+      imported += 1;
+    }
+    return imported;
+  }
+
   return (
     <section className="page-stack">
       <PageHeader eyebrow="Finance" title="Profit center" description="Consolidate real revenue, acquisition cost, freight, duties, payments, invoices, and net margin.">
@@ -5865,6 +6125,14 @@ function Finance({ financeRecords, orders, customers, shipments, procurementRequ
             {editingId && <button type="button" className="secondary" onClick={() => { setForm(blankFinanceRecord); setEditingId(''); }}>Cancel</button>}
           </div>
         </form>
+      )}
+      {canEdit && (
+        <CsvImportPanel
+          title="Import finance records"
+          description="Bulk-create profit center records. Use order_number/customer_name or UUID IDs to link records."
+          sampleHeaders="order_number,customer_name,total_sale_amount,vehicle_cost,procurement_cost,freight_cost,tax_duty_cost,other_cost,amount_paid,payment_status,invoice_status,due_date,notes"
+          onImport={importFinanceRecords}
+        />
       )}
       <div className="table-shell">
         <table>
@@ -6882,7 +7150,6 @@ function App() {
             {activePage === 'Backup & Recovery' && <BackupRecoveryCenter company={ecosystem.currentCompany} user={user} role={permissions.role} canViewFinancials={permissions.canViewFinancials()} vehicles={vehicles} orders={orders} quotes={quotes} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} alerts={alerts} />}
             {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} company={ecosystem.currentCompany} companies={ecosystem.companies} currentCompanyId={ecosystem.currentCompanyId} setCurrentCompanyId={ecosystem.setCurrentCompanyId} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
             {activePage === 'User Management' && <UserRoleManagement currentUser={user} permissions={permissions} />}
-            {activePage === 'Documentation' && <DocumentationCenter />}
             {activePage === 'Release Notes' && <ReleaseNotesCenter />}
             {activePage === 'Launch Readiness' && <LaunchReadinessDashboard isSupabaseConfigured={isSupabaseConfigured} phase2Ready={phase2Ready} ecosystemReady={ecosystem.ready} authError={authError} dataError={error} healthEvents={healthEvents} documents={documents} counts={recordCounts} notifications={notificationFeed} securityChecklist={securityChecklist} />}
             {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}

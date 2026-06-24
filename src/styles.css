@@ -453,11 +453,21 @@ main {
   background: transparent;
   border: 0;
   box-shadow: none;
+  outline: 0;
   padding: 7px 0;
 }
 
-.global-search input:focus {
+.global-search input:focus,
+.global-search input:focus-visible {
+  background: transparent;
+  border-color: transparent;
   box-shadow: none;
+  outline: 0;
+}
+
+.global-search:focus-within {
+  border-color: rgba(96, 165, 250, .82);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, .14), var(--shadow-soft);
 }
 
 kbd {
@@ -1767,7 +1777,19 @@ kbd {
 }
 
 .page-header {
-  align-items: center;
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(280px, 1fr) auto;
+}
+
+.page-header > div:first-child {
+  min-width: 0;
+}
+
+.page-header > :not(:first-child) {
+  align-self: start;
+  justify-self: end;
 }
 
 .page-description {
@@ -1799,6 +1821,7 @@ kbd {
 .section-heading h1 {
   font-size: clamp(24px, 2.2vw, 32px);
   font-weight: 850;
+  line-height: 1.12;
 }
 
 .activity-card {
@@ -3146,6 +3169,14 @@ tbody tr:hover {
   .crm-profile-grid {
     grid-template-columns: 1fr;
   }
+
+  .page-header {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header > :not(:first-child) {
+    justify-self: stretch;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3751,14 +3782,50 @@ tbody tr:hover {
   background: transparent;
   border: 0;
   min-width: 0;
+  outline: 0;
   padding-inline: 0;
   width: 100%;
+}
+
+.twin-search input:focus,
+.twin-search input:focus-visible {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  outline: 0;
+}
+
+.twin-search:focus-within {
+  border-color: rgba(96, 165, 250, .82);
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, .14);
 }
 
 .twin-filter-bar select,
 .twin-filter-bar input[type="date"] {
   min-width: 0;
   width: 100%;
+}
+
+.twin-reset-button {
+  align-items: center;
+  background: linear-gradient(135deg, rgba(59, 130, 246, .18), rgba(14, 165, 233, .1));
+  border: 1px solid rgba(96, 165, 250, .3);
+  border-radius: 12px;
+  color: #bfdbfe;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 42px;
+  min-width: 96px;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+
+.twin-reset-button:hover {
+  background: linear-gradient(135deg, rgba(59, 130, 246, .28), rgba(14, 165, 233, .16));
+  border-color: rgba(147, 197, 253, .5);
+  color: #eff6ff;
 }
 
 .twin-panel,
@@ -4415,6 +4482,12 @@ tbody tr:hover {
 :root[data-theme="light"] .twin-continent {
   fill: rgba(148, 163, 184, .5);
   stroke: rgba(37, 99, 235, .28);
+}
+
+:root[data-theme="light"] .twin-reset-button {
+  background: linear-gradient(135deg, rgba(37, 99, 235, .11), rgba(14, 165, 233, .08));
+  border-color: rgba(37, 99, 235, .22);
+  color: #1d4ed8;
 }
 
 @media (max-width: 1500px) {

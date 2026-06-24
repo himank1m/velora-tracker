@@ -5,8 +5,7 @@
 
 .launch-hero,
 .launch-panel,
-.launch-metric,
-.doc-grid article {
+.launch-metric {
   background:
     linear-gradient(180deg, rgba(30, 41, 59, .72), rgba(15, 23, 42, .58)),
     var(--panel);
@@ -16,21 +15,21 @@
 }
 
 .launch-hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
+  align-items: start;
+  display: grid;
+  column-gap: clamp(28px, 5vw, 72px);
+  row-gap: 8px;
+  grid-template-columns: minmax(0, .95fr) minmax(360px, 1.05fr);
   padding: 24px;
 }
 
 .launch-hero h1,
-.launch-panel h2,
-.doc-grid h2 {
+.launch-panel h2 {
   margin: 0;
 }
 
 .launch-hero p,
 .launch-panel-head p,
-.doc-grid p,
 .launch-empty p,
 .launch-metric p,
 .readiness-list p,
@@ -40,8 +39,43 @@
 }
 
 .launch-hero h1 {
-  font-size: clamp(28px, 4vw, 48px);
+  font-size: clamp(28px, 2.45vw, 40px);
   letter-spacing: -.03em;
+  line-height: 1.08;
+}
+
+.launch-hero > .eyebrow {
+  grid-column: 1;
+  margin: 0;
+}
+
+.launch-hero > h1 {
+  grid-column: 1;
+  max-width: 560px;
+}
+
+.launch-hero > p:not(.eyebrow) {
+  align-self: start;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  line-height: 1.55;
+  padding-top: 2px;
+}
+
+.launch-hero > div:first-child {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.launch-hero > div:first-child .eyebrow,
+.launch-hero > div:first-child h1,
+.launch-hero > div:first-child p {
+  margin: 0;
+}
+
+.launch-hero > div:first-child h1 {
+  max-width: 620px;
 }
 
 .launch-hero > p,
@@ -71,7 +105,6 @@
 }
 
 .launch-metric > span,
-.doc-grid article > svg,
 .launch-empty > svg {
   align-items: center;
   background: var(--blue-soft);
@@ -425,20 +458,13 @@
   z-index: 1;
 }
 
-.doc-grid {
-  display: grid;
-  gap: 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.doc-grid article {
-  display: grid;
-  gap: 12px;
-  padding: 20px;
-}
-
 .launch-hero.readiness {
   align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.launch-hero.readiness > div:first-child {
+  max-width: 760px;
 }
 
 .readiness-score {
@@ -499,14 +525,25 @@
   .launch-grid.three,
   .settings-company-switcher,
   .brand-preferences,
-  .invite-form,
-  .doc-grid {
+  .invite-form {
     grid-template-columns: 1fr;
   }
 
   .launch-hero,
   .launch-panel-head {
     flex-direction: column;
+  }
+
+  .launch-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .launch-hero > .eyebrow,
+  .launch-hero > h1,
+  .launch-hero > p:not(.eyebrow) {
+    grid-column: 1;
+    grid-row: auto;
+    max-width: 100%;
   }
 
   .readiness-score {
@@ -516,8 +553,7 @@
 
 @media (max-width: 640px) {
   .launch-hero,
-  .launch-panel,
-  .doc-grid article {
+  .launch-panel {
     border-radius: 18px;
     padding: 16px;
   }

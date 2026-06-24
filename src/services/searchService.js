@@ -180,13 +180,6 @@ export function buildSearchIndex({
       ['roles', 'permissions', 'profiles', 'access control'],
     ),
     searchDocument(
-      'Documentation',
-      'Documentation',
-      'Velora OS Documentation',
-      'Module guide, admin guide, AI COO guide, and data safety guide',
-      ['manual', 'help', 'admin guide', 'data safety', 'how velora works'],
-    ),
-    searchDocument(
       'Release',
       'Release Notes',
       'Release notes and changelog',

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Bell,
-  BookOpen,
   Brush,
   Building2,
   CheckCircle2,
@@ -543,37 +542,6 @@ export function UserRoleManagement({ currentUser, permissions }) {
           ))}
         </div>
       </Panel>
-    </div>
-  );
-}
-
-export function DocumentationCenter() {
-  const sections = [
-    ['Getting started', 'Sign in, complete company settings, confirm roles, review onboarding, and open Launch Readiness before operational rollout.'],
-    ['Modules guide', 'Command Center shows priorities. Operations modules manage records. Intelligence modules explain performance. System modules protect and prepare the platform.'],
-    ['AI COO guide', 'AI COO uses role-authorized context only. It recommends actions but does not execute destructive operations.'],
-    ['Digital Twin guide', 'Use the twin to inspect live operational flow, relationships, bottlenecks, and lifecycle signals.'],
-    ['Time Machine guide', 'Use historical snapshots to compare dates, replay decisions, and understand how the business changed.'],
-    ['Strategic War Room guide', 'Model future decisions across revenue, profit, freight, procurement, inventory, and risk before acting.'],
-    ['Admin and security guide', 'Keep roles accurate, run migrations in order, review launch readiness, and export backups before large operational changes.'],
-    ['Data safety guide', 'Never restore directly into production. Export, verify, test in staging, then use controlled SQL or import tooling.'],
-  ];
-  return (
-    <div className="launch-page">
-      <header className="launch-hero">
-        <p className="eyebrow">Documentation</p>
-        <h1>Velora OS knowledge center</h1>
-        <p>In-app operating manual for admins, managers, and teams using Velora OS in production.</p>
-      </header>
-      <div className="doc-grid">
-        {sections.map(([title, text]) => (
-          <article key={title}>
-            <BookOpen size={20} />
-            <h2>{title}</h2>
-            <p>{text}</p>
-          </article>
-        ))}
-      </div>
     </div>
   );
 }

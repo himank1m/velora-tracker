@@ -45,6 +45,35 @@ const recordCreatedAt = (record) =>
   record?.date ||
   null
 
+const firstRecordDate = (record, fields = []) =>
+  [...fields, 'createdAt', 'created_at', 'date']
+    .map((field) => record?.[field])
+    .find(Boolean) || null
+
+const recordIdentityValues = (record) =>
+  [
+    record?.id,
+    record?.orderId,
+    record?.order_id,
+    record?.orderNumber,
+    record?.order_number,
+    record?.shipmentId,
+    record?.shipment_id,
+    record?.procurementId,
+    record?.procurement_id,
+    record?.requestId,
+    record?.request_id,
+    record?.inventoryId,
+    record?.inventory_id,
+    record?.vehicleId,
+    record?.vehicle_id,
+    record?.quoteId,
+    record?.quote_id,
+    record?.vin,
+  ]
+    .filter((value) => value !== null && value !== undefined && value !== '')
+    .map((value) => String(value))
+
 const latestEventBefore = (events, target) =>
   events
     .filter((event) => occurredBy(event.createdAt || event.created_at || event.eventDate || event.event_date, target))
@@ -57,18 +86,31 @@ const latestEventBefore = (events, target) =>
 const eventList = (events) =>
   Array.isArray(events) ? events : Object.values(events || {}).flat()
 
-const eventMatches = (event, recordId, keys) =>
-  keys.some((key) => String(event?.[key] || '') === String(recordId || ''))
+const eventMatches = (event, record, keys) => {
+  const recordIds = recordIdentityValues(record)
+  if (!recordIds.length) return false
+  return keys.some((key) => {
+    const value = event?.[key]
+    return value !== null && value !== undefined && recordIds.includes(String(value))
+  })
+}
 
-const reconstructRecords = (records, events, target, eventKeys, statusKeys = ['status']) =>
-  (records || [])
-    .filter((record) => occurredBy(recordCreatedAt(record), target))
+const reconstructRecords = (records, events, target, eventKeys, options = {}) => {
+  const { statusKeys = ['status'], dateFields = [] } = options
+  return (records || [])
+    .filter((record) => occurredBy(firstRecordDate(record, dateFields), target))
     .map((record) => {
-      const related = eventList(events).filter((event) => eventMatches(event, record.id, eventKeys))
+      const related = eventList(events).filter((event) => eventMatches(event, record, eventKeys))
       const latest = latestEventBefore(related, target)
       const status = statusKeys.map((key) => latest?.[key]).find(Boolean)
       return status ? { ...record, status } : { ...record }
     })
+}
+
+const orderRevenue = (order) => number(order.totalRevenue) || number(order.sellingPrice)
+
+const orderProfit = (order) =>
+  number(order.totalProfit) || number(order.sellingPrice) - number(order.purchaseCost || order.purchasePrice)
 
 const cleanValue = (value) => {
   if (Array.isArray(value)) return value.map(cleanValue)
@@ -101,8 +143,8 @@ export const calculateHistoricalMetrics = (state = {}, asOfDate = new Date()) =>
   const customers = state.customers || []
   const finance = state.financeRecords || []
 
-  const revenue = orders.reduce((sum, order) => sum + number(order.totalRevenue), 0)
-  const profit = orders.reduce((sum, order) => sum + number(order.totalProfit), 0)
+  const revenue = orders.reduce((sum, order) => sum + orderRevenue(order), 0)
+  const profit = orders.reduce((sum, order) => sum + orderProfit(order), 0)
   const inventoryUnits = vehicles.reduce((sum, vehicle) => sum + number(vehicle.quantity), 0)
   const inventoryValue = vehicles.reduce(
     (sum, vehicle) => sum + number(vehicle.purchasePrice) * number(vehicle.quantity),
@@ -202,10 +244,11 @@ export const reconstructCompanyState = (data, targetDate, snapshots = [], timeli
 
   if (snapshot) {
     const exact = fromSnapshot(snapshot)
+    const metrics = calculateHistoricalMetrics(exact.state, target)
     return {
       ...exact,
       targetDate: targetKey,
-      metrics: snapshot.metrics || calculateHistoricalMetrics(exact.state, target),
+      metrics: Object.values(metrics).some((value) => Number(value) > 0) ? metrics : (snapshot.metrics || metrics),
     }
   }
 
@@ -216,15 +259,20 @@ export const reconstructCompanyState = (data, targetDate, snapshots = [], timeli
       'inventoryId',
       'inventory_id',
       'recordId',
-    ]),
-    orders: reconstructRecords(data.orders, timelines.orderTimelines, target, ['orderId', 'order_id', 'recordId']),
+    ], { dateFields: ['arrivalDate', 'arrival_date', 'createdAt', 'created_at'] }),
+    orders: reconstructRecords(data.orders, timelines.orderTimelines, target, ['orderId', 'order_id', 'recordId'], {
+      dateFields: ['orderDate', 'order_date', 'createdAt', 'created_at'],
+    }),
     customers: (data.customers || []).filter((record) => occurredBy(recordCreatedAt(record), target)),
-    shipments: reconstructRecords(data.shipments, timelines.shipmentEvents, target, ['shipmentId', 'shipment_id', 'recordId']),
+    shipments: reconstructRecords(data.shipments, timelines.shipmentEvents, target, ['shipmentId', 'shipment_id', 'recordId'], {
+      dateFields: ['createdAt', 'created_at', 'eta'],
+    }),
     procurementRequests: reconstructRecords(
       data.procurementRequests,
       timelines.procurementTimelines,
       target,
       ['procurementId', 'procurement_id', 'requestId', 'request_id', 'recordId'],
+      { dateFields: ['createdAt', 'created_at'] },
     ),
     suppliers: (data.suppliers || []).filter((record) => occurredBy(recordCreatedAt(record), target)),
     financeRecords: (data.financeRecords || []).filter((record) => occurredBy(recordCreatedAt(record), target)),
