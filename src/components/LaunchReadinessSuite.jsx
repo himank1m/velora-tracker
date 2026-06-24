@@ -29,6 +29,13 @@ import {
   downloadCsv,
   downloadJson,
 } from '../services/readinessService';
+import {
+  brandModes,
+  dashboardStyles,
+  densityOptions,
+  resolveTheme,
+  themePresets,
+} from '../services/themeService';
 import '../launch-readiness.css';
 
 const roles = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
@@ -60,6 +67,17 @@ function Panel({ eyebrow, title, description, children, action }) {
       </div>
       {children}
     </section>
+  );
+}
+
+function SparklinePreview() {
+  return (
+    <span className="theme-sparkline" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+      <i />
+    </span>
   );
 }
 
@@ -173,6 +191,9 @@ export function BackupRecoveryCenter({
 export function SettingsCenter({
   theme,
   setTheme,
+  appearance,
+  updateAppearance,
+  resetAppearance,
   company,
   companies = [],
   currentCompanyId,
@@ -198,13 +219,6 @@ export function SettingsCenter({
   const [branding, setBranding] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('velora-branding-preferences') || '{}');
-    } catch {
-      return {};
-    }
-  });
-  const [themeFoundation, setThemeFoundation] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('velora-theme-foundation') || '{}');
     } catch {
       return {};
     }
@@ -238,14 +252,8 @@ export function SettingsCenter({
     const next = { ...branding, [key]: value };
     setBranding(next);
     localStorage.setItem('velora-branding-preferences', JSON.stringify(next));
+    updateAppearance?.(key === 'accent' ? { accentColor: value } : { [key]: value });
     setNotice('Branding preferences saved locally.');
-  }
-
-  function updateThemeFoundation(key, value) {
-    const next = { ...themeFoundation, [key]: value };
-    setThemeFoundation(next);
-    localStorage.setItem('velora-theme-foundation', JSON.stringify(next));
-    setNotice('Theme foundation saved locally.');
   }
 
   function updateServerFoundation(key, value) {
@@ -261,6 +269,24 @@ export function SettingsCenter({
     await saveCompany({ id: company.id, ...profile });
     setNotice('Company profile saved.');
   }
+
+  function applyPreset(themeId) {
+    setTheme(themeId);
+    setNotice('Theme applied and saved.');
+  }
+
+  function updateAppearanceSetting(key, value) {
+    updateAppearance?.({ [key]: value });
+    setNotice('Appearance preferences saved.');
+  }
+
+  function resetThemeStudio() {
+    resetAppearance?.();
+    setNotice('Theme Studio reset to Velora defaults.');
+  }
+
+  const activePreset = resolveTheme(theme);
+  const activeAppearance = appearance || {};
 
   return (
     <div className="launch-page">
@@ -307,8 +333,21 @@ export function SettingsCenter({
             <label>
               <span>Theme</span>
               <select value={theme} onChange={(event) => setTheme(event.target.value)}>
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
+                {themePresets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>{preset.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Interface density</span>
+              <select value={activeAppearance.density || 'Comfortable'} onChange={(event) => updateAppearanceSetting('density', event.target.value)}>
+                {densityOptions.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>Dashboard style</span>
+              <select value={activeAppearance.dashboardStyle || 'Command Center'} onChange={(event) => updateAppearanceSetting('dashboardStyle', event.target.value)}>
+                {dashboardStyles.map((option) => <option key={option}>{option}</option>)}
               </select>
             </label>
             <label>
@@ -350,47 +389,65 @@ export function SettingsCenter({
         <div className="preference-list brand-preferences">
           <label>
             <span>Workspace display name</span>
-            <input value={branding.displayName || company?.name || ''} onChange={(event) => updateBranding('displayName', event.target.value)} />
+            <input value={activeAppearance.displayName || branding.displayName || company?.name || ''} onChange={(event) => updateBranding('displayName', event.target.value)} />
           </label>
           <label>
-            <span>Accent style</span>
-            <select value={branding.accent || 'Deep blue'} onChange={(event) => updateBranding('accent', event.target.value)}>
-              <option>Deep blue</option>
-              <option>Graphite</option>
-              <option>Executive slate</option>
-            </select>
+            <span>Custom accent color</span>
+            <input type="color" value={activeAppearance.accentColor || activePreset.tokens.accent} onChange={(event) => updateBranding('accent', event.target.value)} />
           </label>
           <label>
             <span>Logo mode</span>
-            <select value={branding.logoMode || 'Velora mark'} onChange={(event) => updateBranding('logoMode', event.target.value)}>
-              <option>Velora mark</option>
-              <option>Company initials</option>
-              <option>Text only</option>
+            <select value={activeAppearance.brandMode || branding.logoMode || 'Velora mark'} onChange={(event) => updateBranding('brandMode', event.target.value)}>
+              {brandModes.map((mode) => <option key={mode}>{mode}</option>)}
             </select>
+          </label>
+          <label>
+            <span>Logo URL foundation</span>
+            <input value={activeAppearance.logoUrl || ''} onChange={(event) => updateAppearanceSetting('logoUrl', event.target.value)} placeholder="Optional future hosted logo URL" />
           </label>
         </div>
       </Panel>
-      <div className="launch-grid two">
-        <Panel eyebrow="Theme" title="Theme settings foundation" description="Prepared for a future theme studio without changing the current Velora visual system.">
-          <div className="preference-list">
-            <label>
-              <span>Theme strategy</span>
-              <select value={themeFoundation.strategy || 'Velora default'} onChange={(event) => updateThemeFoundation('strategy', event.target.value)}>
-                <option>Velora default</option>
-                <option>Department accents</option>
-                <option>Company branded</option>
-              </select>
-            </label>
-            <label>
-              <span>Density preset</span>
-              <select value={themeFoundation.density || 'Balanced'} onChange={(event) => updateThemeFoundation('density', event.target.value)}>
-                <option>Comfortable</option>
-                <option>Balanced</option>
-                <option>Compact</option>
-              </select>
-            </label>
+      <Panel eyebrow="Theme Studio" title="Appearance control room" description="Preview, apply, and recover professional Velora OS themes without changing business data.">
+        <div className="theme-studio-toolbar">
+          <div>
+            <Brush size={20} />
+            <span>
+              <strong>{activePreset.name}</strong>
+              <small>{activePreset.description}</small>
+            </span>
           </div>
-        </Panel>
+          <button type="button" onClick={resetThemeStudio}><RefreshCw size={16} />Reset to default</button>
+        </div>
+        <div className="theme-preset-grid">
+          {themePresets.map((preset) => (
+            <article className={`theme-preset-card ${preset.id === activePreset.id ? 'active' : ''}`} key={preset.id}>
+              <div className="theme-preview-surface" style={{
+                '--preview-bg': preset.tokens.bg,
+                '--preview-panel': preset.tokens.panelSolid,
+                '--preview-ink': preset.tokens.ink,
+                '--preview-muted': preset.tokens.muted,
+                '--preview-accent': preset.id === activePreset.id ? activeAppearance.accentColor || preset.tokens.accent : preset.tokens.accent,
+              }}>
+                <div className="preview-kpi">
+                  <span>Revenue</span>
+                  <strong>₹82.4L</strong>
+                </div>
+                <button type="button">Primary</button>
+                <div className="preview-table-row"><span>Order 0007</span><em>Ready</em></div>
+                <div className="preview-ai-panel"><SparklinePreview /><span>AI COO insight</span></div>
+              </div>
+              <div className="theme-preset-meta">
+                <div>
+                  <h3>{preset.name}</h3>
+                  <p>{preset.description}</p>
+                </div>
+                <button type="button" onClick={() => applyPreset(preset.id)}>{preset.id === activePreset.id ? 'Applied' : 'Apply'}</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </Panel>
+      <div className="launch-grid two">
         <Panel eyebrow="Server" title="Server configuration foundation" description="Prepared for future multi-server deployment and environment routing.">
           <div className="preference-list">
             <label>

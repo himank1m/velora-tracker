@@ -105,6 +105,13 @@ import { buildAiCooContext } from './services/aiCooService';
 import { buildEcosystemAiContext } from './services/ecosystemService';
 import { buildNotificationFeed, buildSecurityChecklist } from './services/readinessService';
 import {
+  applyAppearanceTheme,
+  defaultAppearance,
+  loadAppearance,
+  normalizeAppearance,
+  saveAppearance,
+} from './services/themeService';
+import {
   buildEnterpriseSummary,
   calculateFinanceRecord,
   projectOrderFinance,
@@ -2289,15 +2296,32 @@ function useAuthSession() {
   return { session, user: session?.user || null, authLoading, authError, signOut };
 }
 
-function useTheme() {
-  const [theme, setTheme] = useState(() => window.localStorage.getItem('velora-theme') || 'dark');
+function useTheme(userId) {
+  const [appearance, setAppearance] = useState(() => loadAppearance(userId));
 
   useEffect(() => {
-    window.localStorage.setItem('velora-theme', theme);
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    setAppearance(loadAppearance(userId));
+  }, [userId]);
 
-  return [theme, setTheme];
+  useEffect(() => {
+    const safeAppearance = normalizeAppearance(appearance);
+    applyAppearanceTheme(safeAppearance);
+    saveAppearance(userId, safeAppearance);
+  }, [appearance, userId]);
+
+  function setTheme(themeId) {
+    setAppearance((current) => normalizeAppearance({ ...current, themeId }));
+  }
+
+  function updateAppearance(patch) {
+    setAppearance((current) => normalizeAppearance({ ...current, ...patch }));
+  }
+
+  function resetAppearance() {
+    setAppearance(defaultAppearance);
+  }
+
+  return [appearance.themeId, setTheme, appearance, updateAppearance, resetAppearance];
 }
 
 function useUserProfile(user) {
@@ -7348,6 +7372,7 @@ function AiAssistant({
   attendanceRecords,
   leaveRequests,
   performanceNotes,
+  appearance,
 }) {
   const confirm = useConfirm();
   const [question, setQuestion] = useState('');
@@ -7488,6 +7513,16 @@ function AiAssistant({
       leaveRequests: leaveRequests.slice(0, 30),
       performanceNotes: performanceNotes.slice(0, 20),
     },
+    settings: {
+      appearance: {
+        themeId: appearance?.themeId,
+        density: appearance?.density,
+        dashboardStyle: appearance?.dashboardStyle,
+        brandMode: appearance?.brandMode,
+        hasCustomAccent: Boolean(appearance?.accentColor),
+        hasLogoUrl: Boolean(appearance?.logoUrl),
+      },
+    },
   }), [
     permissions,
     vehicles,
@@ -7517,6 +7552,7 @@ function AiAssistant({
     attendanceRecords,
     leaveRequests,
     performanceNotes,
+    appearance,
   ]);
 
   async function askAssistant(prompt) {
@@ -7708,9 +7744,9 @@ function App() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [strategicScenarios, setStrategicScenarios] = useState([]);
-  const [theme, setTheme] = useTheme();
   const healthEvents = useHealthEvents();
   const { user, authLoading, authError, signOut } = useAuthSession();
+  const [theme, setTheme, appearance, updateAppearance, resetAppearance] = useTheme(user?.id);
   const { profile, profileLoading, profileError } = useUserProfile(user);
   const permissions = useMemo(() => createPermissions(profile?.role), [profile?.role]);
   const ecosystem = useEcosystemWorkspace(user, profile?.role);
@@ -7968,9 +8004,9 @@ function App() {
               <Command size={17} />
               <span>Commands</span>
             </button>
-            <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-              <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+            <button className="theme-toggle" onClick={() => setTheme(appearance.themeId === 'velora-light' ? 'velora-dark' : 'velora-light')}>
+              {appearance.themeId === 'velora-light' ? <Moon size={17} /> : <Sun size={17} />}
+              <span>{appearance.themeId === 'velora-light' ? 'Dark mode' : 'Light mode'}</span>
             </button>
           </div>
         </header>
@@ -8016,7 +8052,7 @@ function App() {
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
             {activePage === 'Notifications' && <NotificationCenter alerts={alerts} orders={orders} shipments={shipments} procurementRequests={procurementRequests} financeRecords={permissions.canViewFinancials() ? financeRecords : []} healthEvents={healthEvents} onNavigate={goToPage} />}
             {activePage === 'Backup & Recovery' && <BackupRecoveryCenter company={ecosystem.currentCompany} user={user} role={permissions.role} canViewFinancials={permissions.canViewFinancials()} vehicles={vehicles} orders={orders} quotes={quotes} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} alerts={alerts} />}
-            {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} company={ecosystem.currentCompany} companies={ecosystem.companies} currentCompanyId={ecosystem.currentCompanyId} setCurrentCompanyId={ecosystem.setCurrentCompanyId} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
+            {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} appearance={appearance} updateAppearance={updateAppearance} resetAppearance={resetAppearance} company={ecosystem.currentCompany} companies={ecosystem.companies} currentCompanyId={ecosystem.currentCompanyId} setCurrentCompanyId={ecosystem.setCurrentCompanyId} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
             {activePage === 'User Management' && <UserRoleManagement currentUser={user} permissions={permissions} />}
             {activePage === 'Release Notes' && <ReleaseNotesCenter />}
             {activePage === 'Launch Readiness' && <LaunchReadinessDashboard isSupabaseConfigured={isSupabaseConfigured} phase2Ready={phase2Ready} ecosystemReady={ecosystem.ready} authError={authError} dataError={error} healthEvents={healthEvents} documents={documents} counts={recordCounts} notifications={notificationFeed} securityChecklist={securityChecklist} />}
@@ -8059,6 +8095,7 @@ function App() {
         attendanceRecords={attendanceRecords}
         leaveRequests={leaveRequests}
         performanceNotes={performanceNotes}
+        appearance={appearance}
       />
     </div>
   );
