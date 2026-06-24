@@ -4329,6 +4329,7 @@ function buildExecutiveAnalytics({
     activeShipments: activeShipments.length,
     delayedShipments: delayedShipments.length,
     inventoryValue: vehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
+    freightCost: shipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
     revenueTrend: trendByMonth(orders, 'orderDate', orderRevenue),
     profitTrend: trendByMonth(orders, 'orderDate', orderProfit),
     customerGrowth: trendByMonth(customers, 'createdAt', () => 1),
@@ -4409,6 +4410,7 @@ function Dashboard({ vehicles, orders, customers, shipments, procurementRequests
         <Metric label="Delayed shipments" value={analytics.delayedShipments} tone={analytics.delayedShipments ? 'danger' : 'success'} icon={AlertTriangle} />
         {canViewFinancials && <Metric label="Outstanding payments" value={money.format(analytics.outstandingPayments)} tone={analytics.outstandingPayments ? 'danger' : 'success'} icon={CircleDollarSign} />}
         {canViewFinancials && <Metric label="Inventory value" value={money.format(analytics.inventoryValue)} icon={Boxes} />}
+        {canViewFinancials && <Metric label="Freight cost" value={money.format(analytics.freightCost)} icon={Truck} />}
       </div>
 
       <div className="executive-primary-grid">
@@ -4462,7 +4464,7 @@ function Dashboard({ vehicles, orders, customers, shipments, procurementRequests
         <div className="activity-list">{analytics.activities.slice(0, 10).map((item, index) => <div className="activity-item" key={`${item.type}-${item.label}-${index}`}><span><Activity size={16} /></span><div><strong>{item.label}</strong><small>{item.type} - {item.meta || 'Velora record'}{item.time ? ` - ${new Date(item.time).toLocaleString()}` : ''}</small></div></div>)}{!analytics.activities.length && <EmptyState label="Company activity will appear as teams update records." icon={Activity} />}</div>
       </section>
 
-      {canViewFinancials && <section className="chart-card executive-report-center"><div className="card-heading"><div><p className="eyebrow">Report Center</p><h2>Management exports</h2></div><button onClick={() => setActivePage('Reports')}>Open all reports</button></div><div className="executive-report-links">{['Revenue report', 'Profit report', 'Customer report', 'Shipment report'].map((label) => <button key={label} onClick={() => setActivePage('Reports')}><FileText size={18} /><span>{label}</span><Download size={16} /></button>)}</div></section>}
+      {canViewFinancials && <section className="chart-card executive-report-center"><div className="card-heading"><div><p className="eyebrow">Report Center</p><h2>Management exports</h2></div><button className="report-center-action" onClick={() => setActivePage('Reports')}><FileText size={17} />Open all reports</button></div><div className="executive-report-links">{['Revenue report', 'Profit report', 'Customer report', 'Shipment report'].map((label) => <button key={label} onClick={() => setActivePage('Reports')}><FileText size={18} /><span>{label}</span><Download size={16} /></button>)}</div></section>}
 
       <div className="section-heading compact-heading"><div><p className="eyebrow">Live pipeline</p><h2>Recent orders</h2></div></div>
       <div className="table-shell"><table><thead><tr><th>Order Number</th><th>Customer</th><th>Vehicle</th>{canViewFinancials && <th>Revenue</th>}{canViewFinancials && <th>Profit</th>}<th>Status</th></tr></thead><tbody>{recentOrders.map((order) => <tr key={order.id}><td>{order.orderNumber}</td><td>{order.customerName}</td><td>{order.vehicle}</td>{canViewFinancials && <td>{money.format(orderRevenue(order))}</td>}{canViewFinancials && <td>{money.format(orderProfit(order))}</td>}<td><StatusBadge status={order.status} /></td></tr>)}</tbody></table>{!recentOrders.length && <EmptyState label="Recent orders will appear here." icon={ClipboardList} />}</div>
@@ -6917,6 +6919,26 @@ function App() {
   );
 }
 
+function ProductLandingGate() {
+  const { user, authLoading } = useAuthSession();
+
+  useEffect(() => {
+    if (user && !isNativeShell) {
+      window.history.replaceState(null, '', '/app');
+    }
+  }, [user]);
+
+  if (authLoading) {
+    return <ScreenLoader label="Checking your Velora session..." />;
+  }
+
+  if (user) {
+    return <App />;
+  }
+
+  return <ProductLandingPage />;
+}
+
 const publicPath = window.location.pathname.replace(/\/+$/, '') || '/';
 const isNativeShell = Boolean(window.Capacitor || window.__TAURI_INTERNALS__);
 
@@ -6926,7 +6948,7 @@ createRoot(document.getElementById('root')).render(
       {!isNativeShell && publicPath === '/privacy' && <PrivacyPolicy />}
       {!isNativeShell && publicPath === '/demo' && <DemoModePage />}
       {!isNativeShell && publicPath === '/showcase' && <ProductShowcasePage />}
-      {!isNativeShell && (publicPath === '/' || publicPath === '/home') && <ProductLandingPage />}
+      {!isNativeShell && (publicPath === '/' || publicPath === '/home') && <ProductLandingGate />}
       {(isNativeShell || !['/privacy', '/demo', '/showcase', '/', '/home'].includes(publicPath)) && <App />}
     </ConfirmProvider>
   </AppErrorBoundary>,

@@ -1885,13 +1885,20 @@ kbd {
   border: 1px solid var(--line);
   border-radius: 16px;
   display: grid;
-  gap: 10px;
-  grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
-  padding: 12px;
+  column-gap: 14px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  padding: 12px 14px;
+}
+
+.alert-row > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
 }
 
 .alert-row strong,
 .alert-row small {
+  display: block;
   overflow-wrap: anywhere;
 }
 
@@ -1900,6 +1907,8 @@ kbd {
   display: inline-flex;
   font-size: 11px;
   font-weight: 900;
+  justify-content: center;
+  min-width: 72px;
   padding: 6px 9px;
   text-transform: uppercase;
 }
@@ -3519,6 +3528,30 @@ tbody tr:hover {
 .executive-activity-card,
 .executive-report-center {
   grid-column: auto;
+}
+
+.report-center-action {
+  align-items: center;
+  background: var(--panel-elevated);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-weight: 900;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 16px;
+  white-space: nowrap;
+}
+
+.report-center-action svg {
+  color: #93c5fd;
+}
+
+.report-center-action:hover {
+  background: var(--blue-soft);
+  border-color: rgba(96, 165, 250, .3);
+  transform: translateY(-1px);
 }
 
 .executive-activity-card .activity-list {
