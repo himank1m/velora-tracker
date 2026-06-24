@@ -71,6 +71,7 @@ import AiCooCommandCenter from './components/AiCooCommandCenter';
 import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
 import HrWorkforceCenter from './components/HrWorkforceCenter';
+import PayrollCompensationCenter from './components/PayrollCompensationCenter';
 import {
   BackupRecoveryCenter,
   LaunchReadinessDashboard,
@@ -349,11 +350,11 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Payroll', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
-  { label: 'People', pages: ['Employees'] },
+  { label: 'People', pages: ['Employees', 'Payroll'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
   { label: 'Knowledge', pages: ['Documents', 'Release Notes'] },
@@ -375,6 +376,7 @@ const navIcons = {
   Quotes: FileText,
   Customers: Users,
   Employees: Users,
+  Payroll: CircleDollarSign,
   Shipments: Truck,
   Finance: CircleDollarSign,
   Documents: FolderLock,
@@ -1427,6 +1429,7 @@ function fromPayrollRow(row) {
     id: row.id,
     employeeId: row.employee_id || '',
     employeeCode: row.employee_code || '',
+    payrollCycleId: row.payroll_cycle_id || '',
     baseSalary,
     bonus,
     deductions,
@@ -1446,12 +1449,128 @@ function toPayrollRow(record, employees, userId) {
   return {
     employee_id: record.employeeId,
     employee_code: employee?.employeeCode || record.employeeCode || '',
+    payroll_cycle_id: record.payrollCycleId || null,
     base_salary: baseSalary,
     bonus,
     deductions,
     net_salary: baseSalary + bonus - deductions,
     payment_date: record.paymentDate || null,
     payment_status: record.paymentStatus || 'Pending',
+    notes: record.notes || '',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromPayrollCycleRow(row) {
+  return {
+    id: row.id,
+    cycleName: row.cycle_name || '',
+    periodStart: row.period_start || '',
+    periodEnd: row.period_end || '',
+    runStatus: row.run_status || 'Draft',
+    approvalStatus: row.approval_status || 'Draft',
+    approvedBy: row.approved_by || '',
+    approvedAt: row.approved_at || '',
+    lockedAt: row.locked_at || '',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toPayrollCycleRow(cycle, userId) {
+  return {
+    cycle_name: cycle.cycleName,
+    period_start: cycle.periodStart || null,
+    period_end: cycle.periodEnd || null,
+    run_status: cycle.runStatus || 'Draft',
+    approval_status: cycle.approvalStatus || cycle.runStatus || 'Draft',
+    notes: cycle.notes || '',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromSalaryHistoryRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    previousSalary: Number(row.previous_salary || 0),
+    newSalary: Number(row.new_salary || 0),
+    effectiveDate: row.effective_date || '',
+    reason: row.reason || '',
+    approvedBy: row.approved_by || '',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toSalaryHistoryRow(record, userId) {
+  return {
+    employee_id: record.employeeId,
+    previous_salary: numberValue(record.previousSalary),
+    new_salary: numberValue(record.newSalary),
+    effective_date: record.effectiveDate || null,
+    reason: record.reason || '',
+    approved_by: record.approvedBy || null,
+    notes: record.notes || '',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromBonusRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    department: row.department || '',
+    payrollCycleId: row.payroll_cycle_id || '',
+    performanceNoteId: row.performance_note_id || '',
+    bonusType: row.bonus_type || 'Performance Bonus',
+    amount: Number(row.amount || 0),
+    paymentDate: row.payment_date || '',
+    status: row.status || 'Pending',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toBonusRow(record, userId) {
+  return {
+    employee_id: record.employeeId,
+    department: record.department || '',
+    payroll_cycle_id: record.payrollCycleId || null,
+    performance_note_id: record.performanceNoteId || null,
+    bonus_type: record.bonusType,
+    amount: numberValue(record.amount),
+    payment_date: record.paymentDate || null,
+    status: record.status || 'Pending',
+    notes: record.notes || '',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromDeductionRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    department: row.department || '',
+    payrollCycleId: row.payroll_cycle_id || '',
+    deductionType: row.deduction_type || 'Other Deduction',
+    amount: Number(row.amount || 0),
+    deductionDate: row.deduction_date || '',
+    status: row.status || 'Pending',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toDeductionRow(record, userId) {
+  return {
+    employee_id: record.employeeId,
+    department: record.department || '',
+    payroll_cycle_id: record.payrollCycleId || null,
+    deduction_type: record.deductionType,
+    amount: numberValue(record.amount),
+    deduction_date: record.deductionDate || null,
+    status: record.status || 'Pending',
     notes: record.notes || '',
     ...(userId ? { created_by: userId } : {}),
   };
@@ -1853,7 +1972,7 @@ function createPermissions(role) {
     'Company Manager': pages.filter((page) => page !== 'User Management'),
     'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
     'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -1884,6 +2003,12 @@ function createPermissions(role) {
     },
     canManageHR() {
       return isExecutive;
+    },
+    canViewPayroll() {
+      return isExecutive || normalizedRole === 'Finance Manager';
+    },
+    canManagePayroll() {
+      return isExecutive || normalizedRole === 'Finance Manager';
     },
     canManageShipments() {
       return isExecutive || normalizedRole === 'Logistics Manager';
@@ -2283,6 +2408,10 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   const [employees, setEmployees] = useState([]);
   const [hrDepartments, setHrDepartments] = useState([]);
   const [payrollRecords, setPayrollRecords] = useState([]);
+  const [payrollCycles, setPayrollCycles] = useState([]);
+  const [salaryHistory, setSalaryHistory] = useState([]);
+  const [bonuses, setBonuses] = useState([]);
+  const [deductions, setDeductions] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [leaveRequests, setLeaveRequests] = useState([]);
   const [performanceNotes, setPerformanceNotes] = useState([]);
@@ -2381,6 +2510,10 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       setEmployees([]);
       setHrDepartments([]);
       setPayrollRecords([]);
+      setPayrollCycles([]);
+      setSalaryHistory([]);
+      setBonuses([]);
+      setDeductions([]);
       setAttendanceRecords([]);
       setLeaveRequests([]);
       setPerformanceNotes([]);
@@ -2426,6 +2559,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
         || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Finance Manager'));
       const needsDocuments = permissions.canViewPage('Documents') || needsCompanyModel;
       const needsHr = permissions.canViewPage('Employees') || (permissions.isExecutive && permissions.canViewPage('AI COO'));
+      const needsPayroll = permissions.canViewPayroll?.() || (permissions.isExecutive && permissions.canViewPage('AI COO'));
 
       const vehicleQuery = !needsVehicles ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
@@ -2484,8 +2618,16 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
         : scopeQuery(supabase.from('employees').select('*')).order('created_at', { ascending: false });
       const hrDepartmentQuery = !needsHr ? emptyQuery
         : scopeQuery(supabase.from('hr_departments').select('*')).order('name', { ascending: true });
-      const payrollQuery = !needsHr || !permissions.canViewFinancials() ? emptyQuery
+      const payrollQuery = !needsPayroll || !permissions.canViewFinancials() ? emptyQuery
         : scopeQuery(supabase.from('payroll_records').select('*')).order('payment_date', { ascending: false });
+      const payrollCycleQuery = !needsPayroll ? emptyQuery
+        : scopeQuery(supabase.from('payroll_cycles').select('*')).order('period_start', { ascending: false });
+      const salaryHistoryQuery = !needsPayroll ? emptyQuery
+        : scopeQuery(supabase.from('salary_history').select('*')).order('effective_date', { ascending: false });
+      const bonusQuery = !needsPayroll ? emptyQuery
+        : scopeQuery(supabase.from('employee_bonuses').select('*')).order('payment_date', { ascending: false });
+      const deductionQuery = !needsPayroll ? emptyQuery
+        : scopeQuery(supabase.from('employee_deductions').select('*')).order('deduction_date', { ascending: false });
       const attendanceQuery = !needsHr ? emptyQuery
         : scopeQuery(supabase.from('attendance_records').select('*')).order('attendance_date', { ascending: false });
       const leaveQuery = !needsHr ? emptyQuery
@@ -2493,7 +2635,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       const performanceQuery = !needsHr ? emptyQuery
         : scopeQuery(supabase.from('performance_notes').select('*')).order('created_at', { ascending: false });
 
-      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows, financeResult, documentResult, vehicleEventResult, shipmentEventResult, customerContactResult, customerNoteResult, employeeRows, hrDepartmentRows, payrollRows, attendanceRows, leaveRows, performanceRows] = await Promise.all([
+      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows, financeResult, documentResult, vehicleEventResult, shipmentEventResult, customerContactResult, customerNoteResult, employeeRows, hrDepartmentRows, payrollRows, payrollCycleRows, salaryHistoryRows, bonusRows, deductionRows, attendanceRows, leaveRows, performanceRows] = await Promise.all([
         runRequest(vehicleQuery, 'load vehicles'),
         runRequest(orderQuery, 'load orders'),
         runOptionalRequest(quoteQuery, 'load quotes'),
@@ -2513,6 +2655,10 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
         runOptionalRequest(employeeQuery, 'load employees'),
         runOptionalRequest(hrDepartmentQuery, 'load HR departments'),
         runOptionalRequest(payrollQuery, 'load payroll records'),
+        runOptionalRequest(payrollCycleQuery, 'load payroll cycles'),
+        runOptionalRequest(salaryHistoryQuery, 'load salary history'),
+        runOptionalRequest(bonusQuery, 'load employee bonuses'),
+        runOptionalRequest(deductionQuery, 'load employee deductions'),
         runOptionalRequest(attendanceQuery, 'load attendance records'),
         runOptionalRequest(leaveQuery, 'load leave requests'),
         runOptionalRequest(performanceQuery, 'load performance notes'),
@@ -2537,6 +2683,10 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       setEmployees(employeeRows.map(fromEmployeeRow));
       setHrDepartments(hrDepartmentRows.map(fromHrDepartmentRow));
       setPayrollRecords(payrollRows.map(fromPayrollRow));
+      setPayrollCycles(payrollCycleRows.map(fromPayrollCycleRow));
+      setSalaryHistory(salaryHistoryRows.map(fromSalaryHistoryRow));
+      setBonuses(bonusRows.map(fromBonusRow));
+      setDeductions(deductionRows.map(fromDeductionRow));
       setAttendanceRecords(attendanceRows.map(fromAttendanceRow));
       setLeaveRequests(leaveRows.map(fromLeaveRow));
       setPerformanceNotes(performanceRows.map(fromPerformanceNoteRow));
@@ -3065,6 +3215,70 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     setPayrollRecords((current) => current.filter((item) => item.id !== id));
   }
 
+  async function savePayrollCycle(cycle, editingId) {
+    if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage payroll cycles.');
+    const existing = payrollCycles.find((item) => item.id === editingId);
+    if (existing?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be edited.');
+    const query = editingId
+      ? scopeQuery(supabase.from('payroll_cycles').update(toPayrollCycleRow(cycle)).eq('id', editingId)).select().single()
+      : supabase.from('payroll_cycles').insert(scopeRow(toPayrollCycleRow(cycle, user.id))).select().single();
+    const saved = fromPayrollCycleRow(await runRequest(query, 'save payroll cycle'));
+    setPayrollCycles((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
+  }
+
+  async function updatePayrollCycleStatus(id, status) {
+    if (!permissions?.canManagePayroll()) throw new Error('Your role cannot approve payroll.');
+    const cycle = payrollCycles.find((item) => item.id === id);
+    if (cycle?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be changed.');
+    const patch = {
+      run_status: status,
+      approval_status: status === 'Approved' ? 'Approved' : cycle?.approvalStatus || status,
+      ...(status === 'Approved' ? { approved_by: user.id, approved_at: new Date().toISOString() } : {}),
+      ...(status === 'Locked' ? { locked_at: new Date().toISOString() } : {}),
+    };
+    const saved = fromPayrollCycleRow(await runRequest(
+      scopeQuery(supabase.from('payroll_cycles').update(patch).eq('id', id)).select().single(),
+      'update payroll cycle status',
+    ));
+    setPayrollCycles((current) => current.map((item) => item.id === id ? saved : item));
+    return saved;
+  }
+
+  async function saveSalaryHistory(record) {
+    if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage salary history.');
+    const saved = fromSalaryHistoryRow(await runRequest(
+      supabase.from('salary_history').insert(scopeRow(toSalaryHistoryRow(record, user.id))).select().single(),
+      'save salary history',
+    ));
+    setSalaryHistory((current) => [saved, ...current]);
+    return saved;
+  }
+
+  async function saveBonus(record) {
+    if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage bonuses.');
+    const cycle = payrollCycles.find((item) => item.id === record.payrollCycleId);
+    if (cycle?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be edited.');
+    const saved = fromBonusRow(await runRequest(
+      supabase.from('employee_bonuses').insert(scopeRow(toBonusRow(record, user.id))).select().single(),
+      'save employee bonus',
+    ));
+    setBonuses((current) => [saved, ...current]);
+    return saved;
+  }
+
+  async function saveDeduction(record) {
+    if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage deductions.');
+    const cycle = payrollCycles.find((item) => item.id === record.payrollCycleId);
+    if (cycle?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be edited.');
+    const saved = fromDeductionRow(await runRequest(
+      supabase.from('employee_deductions').insert(scopeRow(toDeductionRow(record, user.id))).select().single(),
+      'save employee deduction',
+    ));
+    setDeductions((current) => [saved, ...current]);
+    return saved;
+  }
+
   async function saveAttendanceRecord(record, editingId) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot manage attendance.');
     const query = editingId
@@ -3143,6 +3357,10 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     employees,
     hrDepartments,
     payrollRecords,
+    payrollCycles,
+    salaryHistory,
+    bonuses,
+    deductions,
     attendanceRecords,
     leaveRequests,
     performanceNotes,
@@ -3185,6 +3403,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     deleteHrDepartment,
     savePayrollRecord,
     deletePayrollRecord,
+    savePayrollCycle,
+    updatePayrollCycleStatus,
+    saveSalaryHistory,
+    saveBonus,
+    saveDeduction,
     saveAttendanceRecord,
     deleteAttendanceRecord,
     saveLeaveRequest,
@@ -3577,6 +3800,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
     { label: 'Open Employees', page: 'Employees', icon: Users },
+    { label: 'Open Payroll', page: 'Payroll', icon: CircleDollarSign },
     { label: 'Create Order', page: 'Orders', icon: ClipboardList },
     { label: 'Create Quote', page: 'Quotes', icon: FileText },
     { label: 'Create Shipment', page: 'Shipments', icon: Truck },
@@ -7117,6 +7341,10 @@ function AiAssistant({
   employees,
   hrDepartments,
   payrollRecords,
+  payrollCycles,
+  salaryHistory,
+  bonuses,
+  deductions,
   attendanceRecords,
   leaveRequests,
   performanceNotes,
@@ -7231,6 +7459,26 @@ function AiAssistant({
           paymentStatus: record.paymentStatus,
         }))
         : [],
+      compensation: permissions.canViewFinancials()
+        ? {
+          cycles: payrollCycles.slice(0, 12),
+          salaryChanges: salaryHistory.slice(0, 30),
+          bonuses: bonuses.slice(0, 30),
+          deductions: deductions.slice(0, 30),
+          pendingCycles: payrollCycles.filter((cycle) => ['Draft', 'Calculating', 'Pending Approval'].includes(cycle.runStatus)).length,
+          pendingPayrollValue: payrollRecords
+            .filter((record) => record.paymentStatus !== 'Paid')
+            .reduce((sum, record) => sum + numberValue(record.netSalary), 0),
+          highestPayrollDepartment: hrDepartments
+            .map((department) => ({
+              department: department.name,
+              payroll: payrollRecords
+                .filter((record) => employees.find((employee) => employee.id === record.employeeId)?.department === department.name)
+                .reduce((sum, record) => sum + numberValue(record.netSalary), 0),
+            }))
+            .sort((a, b) => b.payroll - a.payroll)[0],
+        }
+        : {},
       attendanceSummary: {
         present: attendanceRecords.filter((record) => record.status === 'Present').length,
         absent: attendanceRecords.filter((record) => record.status === 'Absent').length,
@@ -7262,6 +7510,10 @@ function AiAssistant({
     employees,
     hrDepartments,
     payrollRecords,
+    payrollCycles,
+    salaryHistory,
+    bonuses,
+    deductions,
     attendanceRecords,
     leaveRequests,
     performanceNotes,
@@ -7482,6 +7734,10 @@ function App() {
     employees,
     hrDepartments,
     payrollRecords,
+    payrollCycles,
+    salaryHistory,
+    bonuses,
+    deductions,
     attendanceRecords,
     leaveRequests,
     performanceNotes,
@@ -7524,6 +7780,11 @@ function App() {
     deleteHrDepartment,
     savePayrollRecord,
     deletePayrollRecord,
+    savePayrollCycle,
+    updatePayrollCycleStatus,
+    saveSalaryHistory,
+    saveBonus,
+    saveDeduction,
     saveAttendanceRecord,
     deleteAttendanceRecord,
     saveLeaveRequest,
@@ -7579,8 +7840,9 @@ function App() {
       financeRecords,
       documents,
       employees,
+      payrollCycles,
     }),
-    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers, financeRecords, documents, employees],
+    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers, financeRecords, documents, employees, payrollCycles],
   );
   const enterpriseSummary = useMemo(() => buildEnterpriseSummary({
     vehicles,
@@ -7745,6 +8007,7 @@ function App() {
             {activePage === 'Quotes' && <Quotes quotes={quotes} saveQuote={saveQuote} deleteQuote={deleteQuote} vehicles={vehicles} customers={customers} canEdit={permissions.canManageQuotes()} canDelete={permissions.canDeleteRecords('Quotes')} />}
             {activePage === 'Customers' && <Customers customers={customers} orders={orders} shipments={shipments} financeRecords={financeRecords} documents={documents} customerContacts={customerContacts} customerNotes={customerNotes} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} saveCustomerContact={saveCustomerContact} deleteCustomerContact={deleteCustomerContact} addCustomerNote={addCustomerNote} deleteCustomerNote={deleteCustomerNote} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
             {activePage === 'Employees' && <HrWorkforceCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} attendanceRecords={attendanceRecords} leaveRequests={leaveRequests} performanceNotes={performanceNotes} documents={documents} saveEmployee={saveEmployee} deleteEmployee={deleteEmployee} saveHrDepartment={saveHrDepartment} deleteHrDepartment={deleteHrDepartment} savePayrollRecord={savePayrollRecord} deletePayrollRecord={deletePayrollRecord} saveAttendanceRecord={saveAttendanceRecord} deleteAttendanceRecord={deleteAttendanceRecord} saveLeaveRequest={saveLeaveRequest} updateLeaveStatus={updateLeaveStatus} deleteLeaveRequest={deleteLeaveRequest} savePerformanceNote={savePerformanceNote} deletePerformanceNote={deletePerformanceNote} uploadDocument={uploadDocument} canEdit={permissions.canManageHR()} canDelete={permissions.canDeleteRecords('Employees')} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Payroll' && <PayrollCompensationCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} payrollCycles={payrollCycles} salaryHistory={salaryHistory} bonuses={bonuses} deductions={deductions} performanceNotes={performanceNotes} savePayrollCycle={savePayrollCycle} updatePayrollCycleStatus={updatePayrollCycleStatus} saveSalaryHistory={saveSalaryHistory} saveBonus={saveBonus} saveDeduction={saveDeduction} canEdit={permissions.canManagePayroll()} canApprove={permissions.canManagePayroll()} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Shipments' && <Shipments shipments={shipments} shipmentEvents={shipmentEvents} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Finance' && (phase2Ready ? <Finance financeRecords={financeRecords} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} saveFinanceRecord={saveFinanceRecord} deleteFinanceRecord={deleteFinanceRecord} canEdit={permissions.canManageFinance()} /> : <Phase2SetupState moduleName="Finance & Profit Center" />)}
             {activePage === 'Documents' && (phase2Ready ? <DocumentVault documents={documents} uploadDocument={uploadDocument} openDocument={openDocument} deleteDocument={deleteDocument} canEdit={permissions.canManageDocuments()} /> : <Phase2SetupState moduleName="Document Vault" />)}
@@ -7789,6 +8052,10 @@ function App() {
         employees={employees}
         hrDepartments={hrDepartments}
         payrollRecords={payrollRecords}
+        payrollCycles={payrollCycles}
+        salaryHistory={salaryHistory}
+        bonuses={bonuses}
+        deductions={deductions}
         attendanceRecords={attendanceRecords}
         leaveRequests={leaveRequests}
         performanceNotes={performanceNotes}

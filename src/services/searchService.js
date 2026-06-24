@@ -24,6 +24,7 @@ export function buildSearchIndex({
   financeRecords = [],
   documents = [],
   employees = [],
+  payrollCycles = [],
 }) {
   return [
     ...vehicles.map((item) => searchDocument(
@@ -102,6 +103,13 @@ export function buildSearchIndex({
       item.fullName,
       `${item.employeeCode || 'No employee ID'} - ${item.status || 'Unknown status'}`,
       [item.email, item.phone, item.department, item.role, item.employmentType],
+    )),
+    ...payrollCycles.map((item) => searchDocument(
+      'Payroll',
+      'Payroll',
+      item.cycleName || 'Payroll cycle',
+      `${item.runStatus || 'Draft'} - ${item.periodStart || 'No start'} to ${item.periodEnd || 'No end'}`,
+      [item.approvalStatus, item.notes],
     )),
     searchDocument(
       'Digital Twin',
