@@ -4,6 +4,7 @@ import {
   Bell,
   BookOpen,
   Brush,
+  Building2,
   CheckCircle2,
   Database,
   Download,
@@ -174,6 +175,9 @@ export function SettingsCenter({
   theme,
   setTheme,
   company,
+  companies = [],
+  currentCompanyId,
+  setCurrentCompanyId,
   saveCompany,
   canManageCompany,
 }) {
@@ -239,6 +243,26 @@ export function SettingsCenter({
         <p>Control company profile details, interface preferences, notifications, currency defaults, and AI settings foundation.</p>
       </header>
       {notice && <div className="launch-notice success">{notice}</div>}
+      <Panel eyebrow="Workspace" title="Company workspace" description="Choose the active company context from Settings instead of the top navigation.">
+        <div className="settings-company-switcher">
+          <div>
+            <Building2 size={22} />
+            <span>
+              <strong>{company?.name || 'Velora Motors'}</strong>
+              <small>Current operating company</small>
+            </span>
+          </div>
+          <label>
+            <span>Active company</span>
+            <select
+              value={currentCompanyId || company?.id || ''}
+              onChange={(event) => setCurrentCompanyId?.(event.target.value)}
+            >
+              {companies.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+        </div>
+      </Panel>
       <div className="launch-grid two">
         <Panel eyebrow="Company" title="Company profile" description="Visible in the workspace shell and ecosystem context.">
           <form className="launch-form" onSubmit={saveProfile}>

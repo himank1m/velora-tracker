@@ -22,7 +22,6 @@ import {
   Compass,
   Contact,
   CircleDollarSign,
-  Building2,
   Database,
   Download,
   Eye,
@@ -6824,16 +6823,6 @@ function App() {
             <h1>{activePage}</h1>
           </div>
           <div className="topbar-actions">
-            <label className="company-switcher">
-              <Building2 size={16} />
-              <select
-                aria-label="Current company"
-                value={ecosystem.currentCompanyId}
-                onChange={(event) => ecosystem.setCurrentCompanyId(event.target.value)}
-              >
-                {ecosystem.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-              </select>
-            </label>
             <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
             <button className="theme-toggle ai-button" onClick={() => setAiOpen(true)}>
               <Sparkles size={17} />
@@ -6889,7 +6878,7 @@ function App() {
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
             {activePage === 'Notifications' && <NotificationCenter alerts={alerts} orders={orders} shipments={shipments} procurementRequests={procurementRequests} financeRecords={permissions.canViewFinancials() ? financeRecords : []} healthEvents={healthEvents} onNavigate={goToPage} />}
             {activePage === 'Backup & Recovery' && <BackupRecoveryCenter company={ecosystem.currentCompany} user={user} role={permissions.role} canViewFinancials={permissions.canViewFinancials()} vehicles={vehicles} orders={orders} quotes={quotes} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} alerts={alerts} />}
-            {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} company={ecosystem.currentCompany} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
+            {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} company={ecosystem.currentCompany} companies={ecosystem.companies} currentCompanyId={ecosystem.currentCompanyId} setCurrentCompanyId={ecosystem.setCurrentCompanyId} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
             {activePage === 'User Management' && <UserRoleManagement currentUser={user} permissions={permissions} />}
             {activePage === 'Documentation' && <DocumentationCenter />}
             {activePage === 'Release Notes' && <ReleaseNotesCenter />}

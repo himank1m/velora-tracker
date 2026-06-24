@@ -100,18 +100,18 @@ export function buildDemoCompanyState() {
     { id: 'DEMO-VH-003', brand: 'Kia', model: 'Carnival', category: 'MPV', quantity: 3, purchasePrice: 2800000, sellingPrice: 3450000, status: 'Available' },
   ];
   const orders = [
-    { id: 'demo-order-1', orderNumber: 'D-0001', customerName: 'Milele Automotive', vehicle: 'Hyundai Verna', quantity: 4, status: 'Procurement', totalRevenue: 4720000, totalProfit: 920000 },
-    { id: 'demo-order-2', orderNumber: 'D-0002', customerName: 'Zhang Wei Performance Labs', vehicle: 'Toyota Fortuner', quantity: 2, status: 'Ready', totalRevenue: 7900000, totalProfit: 1500000 },
-    { id: 'demo-order-3', orderNumber: 'D-0003', customerName: 'Monaco Drive Group', vehicle: 'Kia Carnival', quantity: 1, status: 'Completed', totalRevenue: 3450000, totalProfit: 650000 },
+    { id: 'demo-order-1', orderNumber: 'D-0001', customerName: 'Asterline Demo Motors', vehicle: 'Hyundai Verna', quantity: 4, status: 'Procurement', totalRevenue: 4720000, totalProfit: 920000 },
+    { id: 'demo-order-2', orderNumber: 'D-0002', customerName: 'Northstar Fictional Fleet', vehicle: 'Toyota Fortuner', quantity: 2, status: 'Ready', totalRevenue: 7900000, totalProfit: 1500000 },
+    { id: 'demo-order-3', orderNumber: 'D-0003', customerName: 'Blue Harbor Sample Group', vehicle: 'Kia Carnival', quantity: 1, status: 'Completed', totalRevenue: 3450000, totalProfit: 650000 },
   ];
   const shipments = [
-    { shipmentId: 'D-SHIP-001', customerName: 'Milele Automotive', vehicle: 'Hyundai Verna', destinationCountry: 'Chad', status: 'In Transit', freightCost: 420000 },
-    { shipmentId: 'D-SHIP-002', customerName: 'Monaco Drive Group', vehicle: 'Kia Carnival', destinationCountry: 'Monaco', status: 'Customs Clearance', freightCost: 380000 },
+    { shipmentId: 'D-SHIP-001', customerName: 'Asterline Demo Motors', vehicle: 'Hyundai Verna', destinationCountry: 'Demo Port Alpha', status: 'In Transit', freightCost: 420000 },
+    { shipmentId: 'D-SHIP-002', customerName: 'Blue Harbor Sample Group', vehicle: 'Kia Carnival', destinationCountry: 'Demo Port Beta', status: 'Customs Clearance', freightCost: 380000 },
   ];
   const insights = [
     'Fortuner demand is strong and margin positive; prepare procurement review.',
     'One shipment is approaching customs risk and should be monitored by logistics.',
-    'Milele Automotive is a high-growth customer candidate for follow-up.',
+    'Asterline Demo Motors is a high-growth sample customer candidate for follow-up.',
   ];
   return { vehicles, orders, shipments, insights };
 }

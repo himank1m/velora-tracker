@@ -204,6 +204,54 @@
   gap: 13px;
 }
 
+.settings-company-switcher {
+  align-items: center;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+}
+
+.settings-company-switcher > div {
+  align-items: center;
+  background: rgba(148, 163, 184, .06);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: flex;
+  gap: 13px;
+  min-width: 0;
+  padding: 14px;
+}
+
+.settings-company-switcher svg {
+  background: var(--blue-soft);
+  border: 1px solid rgba(147, 197, 253, .18);
+  border-radius: 13px;
+  box-sizing: content-box;
+  color: #93c5fd;
+  flex: 0 0 auto;
+  padding: 10px;
+}
+
+.settings-company-switcher strong,
+.settings-company-switcher small,
+.settings-company-switcher label span {
+  display: block;
+}
+
+.settings-company-switcher strong {
+  overflow-wrap: anywhere;
+}
+
+.settings-company-switcher small,
+.settings-company-switcher label span {
+  color: var(--muted);
+}
+
+.settings-company-switcher label {
+  display: grid;
+  gap: 7px;
+}
+
 .brand-preferences,
 .invite-form {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -226,6 +274,7 @@
 .launch-form select,
 .preference-list select,
 .preference-list input,
+.settings-company-switcher select,
 .launch-table select {
   background: rgba(15, 23, 42, .42);
   border: 1px solid var(--line);
@@ -240,6 +289,7 @@
 :root[data-theme="light"] .launch-form select,
 :root[data-theme="light"] .preference-list select,
 :root[data-theme="light"] .preference-list input,
+:root[data-theme="light"] .settings-company-switcher select,
 :root[data-theme="light"] .launch-table select {
   background: rgba(248, 250, 252, .8);
 }
@@ -447,6 +497,7 @@
 @media (max-width: 980px) {
   .launch-grid.two,
   .launch-grid.three,
+  .settings-company-switcher,
   .brand-preferences,
   .invite-form,
   .doc-grid {

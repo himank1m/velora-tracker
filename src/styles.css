@@ -94,34 +94,6 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
-.company-switcher {
-  align-items: center;
-  background: rgba(148, 163, 184, .06);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: #93c5fd;
-  display: flex;
-  gap: 7px;
-  min-height: 38px;
-  padding: 0 9px;
-}
-
-.company-switcher select {
-  background: transparent;
-  border: 0;
-  color: var(--ink);
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 800;
-  max-width: 170px;
-  outline: 0;
-}
-
-.company-switcher option {
-  background: var(--panel-solid);
-  color: var(--ink);
-}
-
 .app {
   display: grid;
   grid-template-columns: 292px 1fr;
