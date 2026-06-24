@@ -204,6 +204,11 @@
   gap: 13px;
 }
 
+.brand-preferences,
+.invite-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .launch-form label,
 .preference-list label {
   display: grid;
@@ -220,6 +225,7 @@
 .launch-form input,
 .launch-form select,
 .preference-list select,
+.preference-list input,
 .launch-table select {
   background: rgba(15, 23, 42, .42);
   border: 1px solid var(--line);
@@ -233,8 +239,38 @@
 :root[data-theme="light"] .launch-form input,
 :root[data-theme="light"] .launch-form select,
 :root[data-theme="light"] .preference-list select,
+:root[data-theme="light"] .preference-list input,
 :root[data-theme="light"] .launch-table select {
   background: rgba(248, 250, 252, .8);
+}
+
+.invite-drafts {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.invite-drafts div {
+  align-items: center;
+  background: rgba(148, 163, 184, .06);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  gap: 10px;
+  padding: 11px;
+}
+
+.invite-drafts svg {
+  color: #93c5fd;
+}
+
+.invite-drafts strong,
+.invite-drafts small {
+  display: block;
+}
+
+.invite-drafts small {
+  color: var(--muted);
 }
 
 .launch-notice {
@@ -411,6 +447,8 @@
 @media (max-width: 980px) {
   .launch-grid.two,
   .launch-grid.three,
+  .brand-preferences,
+  .invite-form,
   .doc-grid {
     grid-template-columns: 1fr;
   }

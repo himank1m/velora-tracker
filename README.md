@@ -681,6 +681,46 @@ Recommended launch workflow:
 4. Open Launch Readiness and clear any action-needed checks.
 5. Export a JSON backup before major production data operations.
 
+## Velora OS Productization
+
+Phase 10 turns Velora OS into a product-ready experience suitable for demos,
+investors, partners, and future enterprise users.
+
+Public routes:
+
+- `/` product landing page
+- `/app` secure app and login/signup entry
+- `/demo` safe read-only demo mode
+- `/showcase` investor/partner showcase view
+- `/privacy` privacy policy
+
+Internal product surfaces:
+
+- Onboarding
+- Product Tour
+- Showcase
+- Release Notes
+- Improved Settings
+- Invite draft foundation in User Management
+- Expanded Documentation Center
+
+Optional persistence migration:
+
+```text
+supabase/phase10-productization.sql
+```
+
+The migration creates only additive metadata tables:
+
+- `workspace_onboarding`
+- `team_invite_drafts`
+- `product_release_notes`
+- `product_tour_progress`
+
+It does not create sample production records, delete data, truncate tables, or
+alter existing business records. Demo mode remains isolated in the frontend and
+does not write to Supabase.
+
 ## Safety Notes
 
 - The website remains a normal Vite React app.

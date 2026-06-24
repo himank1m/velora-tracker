@@ -16,13 +16,16 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
+  Clock,
   ClipboardList,
   Command,
+  Compass,
   Contact,
   CircleDollarSign,
   Building2,
   Database,
   Download,
+  Eye,
   ExternalLink,
   FileText,
   FolderLock,
@@ -35,6 +38,7 @@ import {
   Moon,
   Network,
   PackageCheck,
+  PlayCircle,
   Plus,
   Search,
   Send,
@@ -75,6 +79,15 @@ import {
   SettingsCenter,
   UserRoleManagement,
 } from './components/LaunchReadinessSuite';
+import {
+  DemoModePage,
+  OnboardingCenter,
+  ProductLandingPage,
+  ProductShowcasePage,
+  ProductTourCenter,
+  ReleaseNotesCenter,
+  VersionBadge,
+} from './components/ProductizationSuite';
 import StrategicWarRoom from './components/StrategicWarRoom';
 import TimeMachine from './components/TimeMachine';
 import useEcosystemWorkspace from './hooks/useEcosystemWorkspace';
@@ -323,17 +336,20 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Documentation', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Documentation', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
-  { label: 'Command', pages: ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
+  { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
-  { label: 'Knowledge', pages: ['Documents', 'Documentation'] },
+  { label: 'Knowledge', pages: ['Documents', 'Documentation', 'Release Notes'] },
   { label: 'System', pages: ['Backup & Recovery', 'Settings', 'User Management', 'Launch Readiness', 'Audit Logs'] },
 ];
 const navIcons = {
   'Command Center': LayoutDashboard,
+  Onboarding: Compass,
+  'Product Tour': PlayCircle,
+  Showcase: Eye,
   Ecosystem: Network,
   'AI COO': Bot,
   'Digital Twin': Globe2,
@@ -355,6 +371,7 @@ const navIcons = {
   Settings: Gauge,
   'User Management': Users,
   Documentation: FileText,
+  'Release Notes': Clock,
   'Launch Readiness': ShieldCheck,
   'Audit Logs': ShieldCheck,
 };
@@ -1636,9 +1653,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages.filter((page) => page !== 'User Management'),
-    'Logistics Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Documentation'],
-    'Inventory Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Documentation'],
-    'Finance Manager': ['Command Center', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Documentation'],
+    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Documentation', 'Release Notes'],
+    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Documentation', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Documentation', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -3076,6 +3093,9 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const dialogRef = useRef(null);
   const actions = useMemo(() => [
+    { label: 'Open Onboarding', page: 'Onboarding', icon: Compass },
+    { label: 'Open Product Tour', page: 'Product Tour', icon: PlayCircle },
+    { label: 'Open Showcase', page: 'Showcase', icon: Eye },
     { label: 'Open Ecosystem', page: 'Ecosystem', icon: Network },
     { label: 'Open AI COO', page: 'AI COO', icon: Bot },
     { label: 'Open Digital Twin', page: 'Digital Twin', icon: Globe2 },
@@ -3095,6 +3115,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Open Settings', page: 'Settings', icon: Gauge },
     { label: 'Open User Management', page: 'User Management', icon: Users },
     { label: 'Open Documentation', page: 'Documentation', icon: FileText },
+    { label: 'Open Release Notes', page: 'Release Notes', icon: Clock },
     { label: 'Open Launch Readiness', page: 'Launch Readiness', icon: ShieldCheck },
     { label: 'Open Audit Logs', page: 'Audit Logs', icon: ShieldCheck },
     { label: 'Open Command Center', page: 'Command Center', icon: LayoutDashboard },
@@ -3913,7 +3934,7 @@ function AuthView({ authError }) {
       const { error: providerError } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/app`,
           ...(provider === 'google'
             ? { queryParams: { prompt: 'select_account' } }
             : {}),
@@ -4005,7 +4026,7 @@ function AuthView({ authError }) {
           password: form.password,
           options: {
             data: { full_name: form.fullName, role: form.role },
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: `${window.location.origin}/app`,
           },
         });
         if (signUpError) throw signUpError;
@@ -4023,7 +4044,7 @@ function AuthView({ authError }) {
 
       if (mode === 'forgot') {
         const { error: resetError } = await supabase.auth.resetPasswordForEmail(form.email, {
-          redirectTo: window.location.origin,
+          redirectTo: `${window.location.origin}/app`,
         });
         if (resetError) throw resetError;
         setMessage('Password reset instructions have been sent to your email.');
@@ -6762,13 +6783,14 @@ function App() {
           <Plus size={18} />
           <span>Quick action</span>
         </button>
-        <div className="user-profile">
-          <div className="avatar">{userName(user).slice(0, 1).toUpperCase()}</div>
-          <strong>{userName(user)}</strong>
-          <small>{user.email}</small>
-          <span className="role-badge">{permissions.role}</span>
-          <button onClick={signOut}>Sign Out</button>
-        </div>
+          <div className="user-profile">
+            <div className="avatar">{userName(user).slice(0, 1).toUpperCase()}</div>
+            <strong>{userName(user)}</strong>
+            <small>{user.email}</small>
+            <span className="role-badge">{permissions.role}</span>
+            <VersionBadge />
+            <button onClick={signOut}>Sign Out</button>
+          </div>
         <nav>
           {visibleNavGroups.map((group) => (
             <div className="nav-group" key={group.label}>
@@ -6846,6 +6868,9 @@ function App() {
         {permissions.canViewPage(activePage) ? (
           <>
             {activePage === 'Command Center' && <Dashboard vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} setActivePage={goToPage} error={error} authError={authError} healthEvents={healthEvents} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Onboarding' && <OnboardingCenter company={ecosystem.currentCompany} profile={profile} hasData={Boolean(vehicles.length || orders.length || customers.length || shipments.length)} onNavigate={goToPage} />}
+            {activePage === 'Product Tour' && <ProductTourCenter activePage={activePage} onNavigate={goToPage} />}
+            {activePage === 'Showcase' && <ProductShowcasePage embedded />}
             {activePage === 'Ecosystem' && <EcosystemCenter companies={ecosystem.companies} relationships={ecosystem.relationships} transactions={ecosystem.transactions} events={ecosystem.events} currentCompany={ecosystem.currentCompany} ready={ecosystem.ready} saveCompany={ecosystem.saveCompany} saveRelationship={ecosystem.saveRelationship} saveTransaction={ecosystem.saveTransaction} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} logisticsPartners={logisticsPartners} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} canManage={permissions.isExecutive} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'AI COO' && <AiCooCommandCenter userId={user.id} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onOpenChat={() => setAiOpen(true)} />}
             {activePage === 'Digital Twin' && <DigitalTwin vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
@@ -6867,6 +6892,7 @@ function App() {
             {activePage === 'Settings' && <SettingsCenter theme={theme} setTheme={setTheme} company={ecosystem.currentCompany} saveCompany={ecosystem.saveCompany} canManageCompany={permissions.isExecutive} />}
             {activePage === 'User Management' && <UserRoleManagement currentUser={user} permissions={permissions} />}
             {activePage === 'Documentation' && <DocumentationCenter />}
+            {activePage === 'Release Notes' && <ReleaseNotesCenter />}
             {activePage === 'Launch Readiness' && <LaunchReadinessDashboard isSupabaseConfigured={isSupabaseConfigured} phase2Ready={phase2Ready} ecosystemReady={ecosystem.ready} authError={authError} dataError={error} healthEvents={healthEvents} documents={documents} counts={recordCounts} notifications={notificationFeed} securityChecklist={securityChecklist} />}
             {activePage === 'Audit Logs' && <AuditLogs orders={orders} shipments={shipments} customers={customers} vehicles={vehicles} />}
           </>
@@ -6903,11 +6929,16 @@ function App() {
 }
 
 const publicPath = window.location.pathname.replace(/\/+$/, '') || '/';
+const isNativeShell = Boolean(window.Capacitor || window.__TAURI_INTERNALS__);
 
 createRoot(document.getElementById('root')).render(
   <AppErrorBoundary>
     <ConfirmProvider>
-      {publicPath === '/privacy' ? <PrivacyPolicy /> : <App />}
+      {!isNativeShell && publicPath === '/privacy' && <PrivacyPolicy />}
+      {!isNativeShell && publicPath === '/demo' && <DemoModePage />}
+      {!isNativeShell && publicPath === '/showcase' && <ProductShowcasePage />}
+      {!isNativeShell && (publicPath === '/' || publicPath === '/home') && <ProductLandingPage />}
+      {(isNativeShell || !['/privacy', '/demo', '/showcase', '/', '/home'].includes(publicPath)) && <App />}
     </ConfirmProvider>
   </AppErrorBoundary>,
 );

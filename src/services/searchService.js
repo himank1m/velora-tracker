@@ -131,6 +131,27 @@ export function buildSearchIndex({
       ['company switcher', 'multi-company', 'business network', 'partnership', 'intercompany', 'tenant'],
     ),
     searchDocument(
+      'Onboarding',
+      'Onboarding',
+      'First-time setup',
+      'Company setup, profile setup, sample data option, setup checklist, and launch preparation',
+      ['setup', 'getting started', 'sample data', 'checklist', 'company setup'],
+    ),
+    searchDocument(
+      'Tour',
+      'Product Tour',
+      'Guided product tours',
+      'Dashboard, procurement, finance, digital twin, time machine, AI COO, and ecosystem tours',
+      ['guided tour', 'walkthrough', 'training', 'learn'],
+    ),
+    searchDocument(
+      'Showcase',
+      'Showcase',
+      'Investor showcase mode',
+      'Presentation-friendly view of company health, AI COO, Digital Twin, Time Machine, War Room, and Ecosystem',
+      ['investor', 'partner', 'presentation', 'demo', 'showcase'],
+    ),
+    searchDocument(
       'Notifications',
       'Notifications',
       'Notification Center',
@@ -164,6 +185,13 @@ export function buildSearchIndex({
       'Velora OS Documentation',
       'Module guide, admin guide, AI COO guide, and data safety guide',
       ['manual', 'help', 'admin guide', 'data safety', 'how velora works'],
+    ),
+    searchDocument(
+      'Release',
+      'Release Notes',
+      'Release notes and changelog',
+      'Version display, changelog, build metadata, and product milestone history',
+      ['version', 'changelog', 'release', 'build'],
     ),
     searchDocument(
       'Launch',

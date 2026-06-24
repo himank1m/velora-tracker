@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Bell,
   BookOpen,
+  Brush,
   CheckCircle2,
   Database,
   Download,
@@ -15,6 +16,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   UploadCloud,
+  UserPlus,
   UserCog,
   Users,
 } from 'lucide-react';
@@ -190,6 +192,13 @@ export function SettingsCenter({
     }
   });
   const [notice, setNotice] = useState('');
+  const [branding, setBranding] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-branding-preferences') || '{}');
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     setProfile({
@@ -206,6 +215,13 @@ export function SettingsCenter({
     setPrefs(next);
     localStorage.setItem('velora-user-preferences', JSON.stringify(next));
     setNotice('Preferences saved locally.');
+  }
+
+  function updateBranding(key, value) {
+    const next = { ...branding, [key]: value };
+    setBranding(next);
+    localStorage.setItem('velora-branding-preferences', JSON.stringify(next));
+    setNotice('Branding preferences saved locally.');
   }
 
   async function saveProfile(event) {
@@ -251,6 +267,16 @@ export function SettingsCenter({
               </select>
             </label>
             <label>
+              <span>Region</span>
+              <select value={prefs.region || 'India'} onChange={(event) => updatePref('region', event.target.value)}>
+                <option>India</option>
+                <option>Middle East</option>
+                <option>East Asia</option>
+                <option>Europe</option>
+                <option>Africa</option>
+              </select>
+            </label>
+            <label>
               <span>Notification density</span>
               <select value={prefs.notificationDensity || 'Priority'} onChange={(event) => updatePref('notificationDensity', event.target.value)}>
                 <option>Priority</option>
@@ -269,6 +295,30 @@ export function SettingsCenter({
           </div>
         </Panel>
       </div>
+      <Panel eyebrow="Branding" title="Product identity foundation" description="Local brand preferences prepare future white-label exports and customer-facing experiences.">
+        <div className="preference-list brand-preferences">
+          <label>
+            <span>Workspace display name</span>
+            <input value={branding.displayName || company?.name || ''} onChange={(event) => updateBranding('displayName', event.target.value)} />
+          </label>
+          <label>
+            <span>Accent style</span>
+            <select value={branding.accent || 'Deep blue'} onChange={(event) => updateBranding('accent', event.target.value)}>
+              <option>Deep blue</option>
+              <option>Graphite</option>
+              <option>Executive slate</option>
+            </select>
+          </label>
+          <label>
+            <span>Logo mode</span>
+            <select value={branding.logoMode || 'Velora mark'} onChange={(event) => updateBranding('logoMode', event.target.value)}>
+              <option>Velora mark</option>
+              <option>Company initials</option>
+              <option>Text only</option>
+            </select>
+          </label>
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -329,6 +379,14 @@ export function UserRoleManagement({ currentUser, permissions }) {
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [invite, setInvite] = useState({ email: '', role: 'Inventory Manager', note: '' });
+  const [draftInvites, setDraftInvites] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-draft-invites') || '[]');
+    } catch {
+      return [];
+    }
+  });
 
   async function loadProfiles() {
     setLoading(true);
@@ -365,6 +423,19 @@ export function UserRoleManagement({ currentUser, permissions }) {
     }
     setProfiles((current) => current.map((item) => (item.id === profile.id ? { ...item, role } : item)));
     setMessage('Role updated safely.');
+  }
+
+  function saveInviteDraft(event) {
+    event.preventDefault();
+    if (!invite.email.trim()) {
+      setMessage('Enter an email before saving an invite draft.');
+      return;
+    }
+    const next = [{ ...invite, id: Date.now(), status: 'Draft' }, ...draftInvites].slice(0, 12);
+    setDraftInvites(next);
+    localStorage.setItem('velora-draft-invites', JSON.stringify(next));
+    setInvite({ email: '', role: 'Inventory Manager', note: '' });
+    setMessage('Invite draft saved. Email automation can be connected later.');
   }
 
   if (!permissions.canManageUsers()) {
@@ -421,16 +492,46 @@ export function UserRoleManagement({ currentUser, permissions }) {
           </div>
         )}
       </Panel>
+      <Panel eyebrow="Invite foundation" title="Prepare team invitations" description="Draft role assignments without sending email automation yet.">
+        <form className="launch-form invite-form" onSubmit={saveInviteDraft}>
+          <label>
+            <span>Email</span>
+            <input type="email" value={invite.email} onChange={(event) => setInvite((current) => ({ ...current, email: event.target.value }))} />
+          </label>
+          <label>
+            <span>Role</span>
+            <select value={invite.role} onChange={(event) => setInvite((current) => ({ ...current, role: event.target.value }))}>
+              {roles.map((role) => <option key={role}>{role}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>Note</span>
+            <input value={invite.note} onChange={(event) => setInvite((current) => ({ ...current, note: event.target.value }))} />
+          </label>
+          <button type="submit"><UserPlus size={17} />Save invite draft</button>
+        </form>
+        <div className="invite-drafts">
+          {draftInvites.map((item) => (
+            <div key={item.id}>
+              <UserCog size={17} />
+              <span><strong>{item.email}</strong><small>{item.role} - {item.status}</small></span>
+            </div>
+          ))}
+        </div>
+      </Panel>
     </div>
   );
 }
 
 export function DocumentationCenter() {
   const sections = [
-    ['How Velora OS works', 'Velora OS combines operations, finance, logistics, intelligence, historical state, future simulation, AI COO, and ecosystem management in one shared workspace.'],
-    ['Module guide', 'Command Center shows priorities. Operations modules manage records. Intelligence modules explain performance. System modules protect and prepare the platform.'],
-    ['Admin guide', 'Keep roles accurate, run migrations in order, review launch readiness, and export backups before large operational changes.'],
+    ['Getting started', 'Sign in, complete company settings, confirm roles, review onboarding, and open Launch Readiness before operational rollout.'],
+    ['Modules guide', 'Command Center shows priorities. Operations modules manage records. Intelligence modules explain performance. System modules protect and prepare the platform.'],
     ['AI COO guide', 'AI COO uses role-authorized context only. It recommends actions but does not execute destructive operations.'],
+    ['Digital Twin guide', 'Use the twin to inspect live operational flow, relationships, bottlenecks, and lifecycle signals.'],
+    ['Time Machine guide', 'Use historical snapshots to compare dates, replay decisions, and understand how the business changed.'],
+    ['Strategic War Room guide', 'Model future decisions across revenue, profit, freight, procurement, inventory, and risk before acting.'],
+    ['Admin and security guide', 'Keep roles accurate, run migrations in order, review launch readiness, and export backups before large operational changes.'],
     ['Data safety guide', 'Never restore directly into production. Export, verify, test in staging, then use controlled SQL or import tooling.'],
   ];
   return (
