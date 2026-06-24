@@ -23,6 +23,7 @@ export function buildSearchIndex({
   suppliers = [],
   financeRecords = [],
   documents = [],
+  employees = [],
 }) {
   return [
     ...vehicles.map((item) => searchDocument(
@@ -94,6 +95,13 @@ export function buildSearchIndex({
       item.fileName,
       `${item.category} - ${item.linkedModule || 'General'}`,
       [item.linkedRecordId, item.notes],
+    )),
+    ...employees.map((item) => searchDocument(
+      'Employee',
+      'Employees',
+      item.fullName,
+      `${item.employeeCode || 'No employee ID'} - ${item.status || 'Unknown status'}`,
+      [item.email, item.phone, item.department, item.role, item.employmentType],
     )),
     searchDocument(
       'Digital Twin',

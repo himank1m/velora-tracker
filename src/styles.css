@@ -1843,6 +1843,88 @@ kbd {
   white-space: nowrap;
 }
 
+.tabs {
+  background: rgba(15, 23, 42, .42);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+}
+
+.tabs button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--muted);
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.tabs button.active,
+.tabs button:hover {
+  background: var(--blue-soft);
+  border-color: rgba(147, 197, 253, .24);
+  color: var(--ink);
+}
+
+.table-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012)),
+    var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  overflow: auto;
+}
+
+.table-card table {
+  min-width: 860px;
+}
+
+.status-pill {
+  background: rgba(96, 165, 250, .14);
+  border: 1px solid rgba(96, 165, 250, .22);
+  border-radius: 999px;
+  color: #bfdbfe;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: .04em;
+  padding: 6px 10px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-active,
+.status-paid,
+.status-present,
+.status-approved {
+  background: rgba(34, 197, 94, .14);
+  border-color: rgba(34, 197, 94, .24);
+  color: #86efac;
+}
+
+.status-overdue,
+.status-absent,
+.status-suspended,
+.status-terminated,
+.status-rejected {
+  background: rgba(239, 68, 68, .14);
+  border-color: rgba(239, 68, 68, .24);
+  color: #fca5a5;
+}
+
+.status-pending,
+.status-on-leave,
+.status-half-day,
+.status-requested {
+  background: rgba(245, 158, 11, .14);
+  border-color: rgba(245, 158, 11, .24);
+  color: #fcd34d;
+}
+
 .open-logs-button:hover {
   transform: translateY(-7px);
 }

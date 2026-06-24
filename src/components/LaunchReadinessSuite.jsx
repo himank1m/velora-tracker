@@ -202,6 +202,20 @@ export function SettingsCenter({
       return {};
     }
   });
+  const [themeFoundation, setThemeFoundation] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-theme-foundation') || '{}');
+    } catch {
+      return {};
+    }
+  });
+  const [serverFoundation, setServerFoundation] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-server-foundation') || '{}');
+    } catch {
+      return {};
+    }
+  });
 
   useEffect(() => {
     setProfile({
@@ -225,6 +239,20 @@ export function SettingsCenter({
     setBranding(next);
     localStorage.setItem('velora-branding-preferences', JSON.stringify(next));
     setNotice('Branding preferences saved locally.');
+  }
+
+  function updateThemeFoundation(key, value) {
+    const next = { ...themeFoundation, [key]: value };
+    setThemeFoundation(next);
+    localStorage.setItem('velora-theme-foundation', JSON.stringify(next));
+    setNotice('Theme foundation saved locally.');
+  }
+
+  function updateServerFoundation(key, value) {
+    const next = { ...serverFoundation, [key]: value };
+    setServerFoundation(next);
+    localStorage.setItem('velora-server-foundation', JSON.stringify(next));
+    setNotice('Server configuration foundation saved locally.');
   }
 
   async function saveProfile(event) {
@@ -342,6 +370,44 @@ export function SettingsCenter({
           </label>
         </div>
       </Panel>
+      <div className="launch-grid two">
+        <Panel eyebrow="Theme" title="Theme settings foundation" description="Prepared for a future theme studio without changing the current Velora visual system.">
+          <div className="preference-list">
+            <label>
+              <span>Theme strategy</span>
+              <select value={themeFoundation.strategy || 'Velora default'} onChange={(event) => updateThemeFoundation('strategy', event.target.value)}>
+                <option>Velora default</option>
+                <option>Department accents</option>
+                <option>Company branded</option>
+              </select>
+            </label>
+            <label>
+              <span>Density preset</span>
+              <select value={themeFoundation.density || 'Balanced'} onChange={(event) => updateThemeFoundation('density', event.target.value)}>
+                <option>Comfortable</option>
+                <option>Balanced</option>
+                <option>Compact</option>
+              </select>
+            </label>
+          </div>
+        </Panel>
+        <Panel eyebrow="Server" title="Server configuration foundation" description="Prepared for future multi-server deployment and environment routing.">
+          <div className="preference-list">
+            <label>
+              <span>Server profile</span>
+              <select value={serverFoundation.profile || 'Primary Supabase'} onChange={(event) => updateServerFoundation('profile', event.target.value)}>
+                <option>Primary Supabase</option>
+                <option>Staging workspace</option>
+                <option>Regional server ready</option>
+              </select>
+            </label>
+            <label>
+              <span>Data residency note</span>
+              <input value={serverFoundation.residency || ''} onChange={(event) => updateServerFoundation('residency', event.target.value)} placeholder="Future server policy note" />
+            </label>
+          </div>
+        </Panel>
+      </div>
     </div>
   );
 }

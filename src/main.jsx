@@ -70,6 +70,7 @@ import AppErrorBoundary from './components/AppErrorBoundary';
 import AiCooCommandCenter from './components/AiCooCommandCenter';
 import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
+import HrWorkforceCenter from './components/HrWorkforceCenter';
 import {
   BackupRecoveryCenter,
   LaunchReadinessDashboard,
@@ -314,6 +315,20 @@ const blankDocument = {
   notes: '',
 };
 
+const blankEmployee = {
+  employeeCode: '',
+  fullName: '',
+  profilePhotoUrl: '',
+  email: '',
+  phone: '',
+  department: 'Operations',
+  role: '',
+  dateOfJoining: today,
+  employmentType: 'Full Time',
+  reportingManagerId: '',
+  status: 'Active',
+};
+
 const vehicleStatuses = ['Available', 'Reserved', 'Sold'];
 const vehicleLifecycleStatuses = ['Planned', 'Procured', 'In Transit to Velora', 'In Inventory', 'Reserved', 'Sold', 'Assigned to Shipment', 'Shipped', 'Delivered', 'Archived'];
 const orderStatuses = ['Inquiry', 'Confirmed', 'Procurement', 'Inspection', 'Ready', 'Shipped', 'Delivered', 'Completed'];
@@ -327,17 +342,18 @@ const customerTypes = ['Individual', 'Company', 'Government', 'Dealer', 'Logisti
 const customerRatings = ['A+', 'A', 'B', 'C', 'Risk'];
 const shippingModes = ['Road', 'Sea', 'Air', 'Rail', 'Internal Velora Logistics'];
 const customsStatuses = ['Not Started', 'Documents Pending', 'Submitted', 'Under Review', 'Cleared', 'Held'];
-const documentCategories = ['Invoice', 'Supplier Bill', 'Shipping Document', 'Customs Document', 'Insurance', 'Contract', 'Delivery Proof', 'Vehicle Certificate', 'Payment Receipt', 'Other'];
+const documentCategories = ['Invoice', 'Supplier Bill', 'Shipping Document', 'Customs Document', 'Insurance', 'Contract', 'ID Document', 'Certification', 'Offer Letter', 'Payroll Document', 'Delivery Proof', 'Vehicle Certificate', 'Payment Receipt', 'Other'];
 const locationOptions = ['Seoul HQ', 'New City Showroom', 'Port Operations Office', 'Warehouse'];
-const departments = ['Sales', 'Inventory', 'Logistics', 'Finance', 'Management'];
+const departments = ['Management', 'Sales', 'Logistics', 'Procurement', 'Finance', 'HR', 'Operations', 'IT', 'Inventory'];
 const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
+  { label: 'People', pages: ['Employees'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
   { label: 'Knowledge', pages: ['Documents', 'Release Notes'] },
@@ -358,6 +374,7 @@ const navIcons = {
   Orders: ClipboardList,
   Quotes: FileText,
   Customers: Users,
+  Employees: Users,
   Shipments: Truck,
   Finance: CircleDollarSign,
   Documents: FolderLock,
@@ -1346,6 +1363,182 @@ function toCustomerRow(customer, userId, includeEnterprise = true) {
   return row;
 }
 
+function fromEmployeeRow(row) {
+  return {
+    id: row.id,
+    employeeCode: row.employee_id || '',
+    fullName: row.full_name || '',
+    profilePhotoUrl: row.profile_photo_url || '',
+    email: row.email || '',
+    phone: row.phone || '',
+    department: row.department || 'Operations',
+    role: row.role || '',
+    dateOfJoining: row.date_of_joining || '',
+    employmentType: row.employment_type || 'Full Time',
+    reportingManagerId: row.reporting_manager_id || '',
+    status: row.status || 'Active',
+    createdAt: row.created_at,
+  };
+}
+
+function toEmployeeRow(employee, userId) {
+  return {
+    employee_id: employee.employeeCode,
+    full_name: employee.fullName,
+    profile_photo_url: employee.profilePhotoUrl,
+    email: employee.email,
+    phone: employee.phone,
+    department: employee.department,
+    role: employee.role,
+    date_of_joining: employee.dateOfJoining || null,
+    employment_type: employee.employmentType,
+    reporting_manager_id: employee.reportingManagerId || null,
+    status: employee.status,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromHrDepartmentRow(row) {
+  return {
+    id: row.id,
+    name: row.name || '',
+    description: row.description || '',
+    managerEmployeeId: row.manager_employee_id || '',
+    status: row.status || 'Active',
+    createdAt: row.created_at,
+  };
+}
+
+function toHrDepartmentRow(department, userId) {
+  return {
+    name: department.name,
+    description: department.description,
+    manager_employee_id: department.managerEmployeeId || null,
+    status: department.status || 'Active',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromPayrollRow(row) {
+  const baseSalary = Number(row.base_salary || 0);
+  const bonus = Number(row.bonus || 0);
+  const deductions = Number(row.deductions || 0);
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    employeeCode: row.employee_code || '',
+    baseSalary,
+    bonus,
+    deductions,
+    netSalary: Number(row.net_salary ?? (baseSalary + bonus - deductions)),
+    paymentDate: row.payment_date || '',
+    paymentStatus: row.payment_status || 'Pending',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toPayrollRow(record, employees, userId) {
+  const employee = employees.find((item) => item.id === record.employeeId);
+  const baseSalary = numberValue(record.baseSalary);
+  const bonus = numberValue(record.bonus);
+  const deductions = numberValue(record.deductions);
+  return {
+    employee_id: record.employeeId,
+    employee_code: employee?.employeeCode || record.employeeCode || '',
+    base_salary: baseSalary,
+    bonus,
+    deductions,
+    net_salary: baseSalary + bonus - deductions,
+    payment_date: record.paymentDate || null,
+    payment_status: record.paymentStatus || 'Pending',
+    notes: record.notes || '',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromAttendanceRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    attendanceDate: row.attendance_date || '',
+    status: row.status || 'Present',
+    notes: row.notes || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toAttendanceRow(record, userId) {
+  return {
+    employee_id: record.employeeId,
+    attendance_date: record.attendanceDate || null,
+    status: record.status,
+    notes: record.notes || '',
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function leaveDays(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate || startDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 1;
+  return Math.max(1, Math.ceil((end - start) / 86400000) + 1);
+}
+
+function fromLeaveRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    leaveType: row.leave_type || 'Annual Leave',
+    startDate: row.start_date || '',
+    endDate: row.end_date || '',
+    days: Number(row.days || 0),
+    status: row.status || 'Requested',
+    reason: row.reason || '',
+    approvedBy: row.approved_by || '',
+    approvedAt: row.approved_at || '',
+    createdAt: row.created_at,
+  };
+}
+
+function toLeaveRow(record, userId) {
+  return {
+    employee_id: record.employeeId,
+    leave_type: record.leaveType,
+    start_date: record.startDate || null,
+    end_date: record.endDate || null,
+    days: leaveDays(record.startDate, record.endDate),
+    status: record.status || 'Requested',
+    reason: record.reason || '',
+    approved_by: record.approvedBy || null,
+    approved_at: record.approvedAt || null,
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
+function fromPerformanceNoteRow(row) {
+  return {
+    id: row.id,
+    employeeId: row.employee_id || '',
+    noteType: row.note_type || 'Performance Note',
+    title: row.title || '',
+    note: row.note || '',
+    rating: row.rating ?? '',
+    createdAt: row.created_at,
+  };
+}
+
+function toPerformanceNoteRow(note, userId) {
+  return {
+    employee_id: note.employeeId,
+    note_type: note.noteType,
+    title: note.title,
+    note: note.note,
+    rating: note.rating === '' ? null : numberValue(note.rating),
+    ...(userId ? { created_by: userId } : {}),
+  };
+}
+
 function fromShipmentRow(row) {
   return {
     shipmentId: row.shipment_id,
@@ -1689,6 +1882,9 @@ function createPermissions(role) {
     canManageCustomers() {
       return isExecutive;
     },
+    canManageHR() {
+      return isExecutive;
+    },
     canManageShipments() {
       return isExecutive || normalizedRole === 'Logistics Manager';
     },
@@ -1738,6 +1934,10 @@ function buildAiContext({
   procurementRequests,
   alerts,
   enterpriseSummary,
+  employees = [],
+  hrDepartments = [],
+  payrollRecords = [],
+  leaveRequests = [],
 }) {
   const generatedAt = new Date().toISOString();
   const activeOrders = orders.filter((order) => order.status !== 'Completed');
@@ -1763,6 +1963,7 @@ function buildAiContext({
       overdueShipments: overdueShipments.length,
       lowStockVehicles: lowStockVehicles.length,
       openAlerts: alerts.filter((alert) => !alert.resolved).length,
+      totalEmployees: employees.length,
       ...(permissions.canViewFinancials()
         ? { totalRevenue, totalProfit, inventoryValue, freightCost }
         : {}),
@@ -1864,6 +2065,36 @@ function buildAiContext({
       hasPhone: Boolean(customer.phone),
       hasEmail: Boolean(customer.email),
     }));
+
+    context.workforce = {
+      totalEmployees: employees.length,
+      activeEmployees: employees.filter((employee) => employee.status === 'Active').length,
+      employeesOnLeave: employees.filter((employee) => employee.status === 'On Leave').length,
+      departments: hrDepartments.map((department) => ({
+        name: department.name,
+        status: department.status,
+        employeeCount: employees.filter((employee) => employee.department === department.name).length,
+      })),
+      recentJoiners: employees
+        .filter((employee) => employee.dateOfJoining && (new Date() - new Date(employee.dateOfJoining)) / 86400000 <= 30)
+        .slice(0, 10)
+        .map((employee) => ({
+          employeeId: employee.employeeCode,
+          name: employee.fullName,
+          department: employee.department,
+          role: employee.role,
+          dateOfJoining: employee.dateOfJoining,
+        })),
+      pendingLeaveRequests: leaveRequests.filter((request) => request.status === 'Requested').length,
+      ...(permissions.canViewFinancials()
+        ? {
+          overduePayroll: payrollRecords.filter((record) => record.paymentStatus === 'Overdue').length,
+          pendingPayrollValue: payrollRecords
+            .filter((record) => record.paymentStatus !== 'Paid')
+            .reduce((sum, record) => sum + numberValue(record.netSalary), 0),
+        }
+        : {}),
+    };
   }
 
   if (permissions.canViewReports()) {
@@ -2049,6 +2280,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   const [shipmentEvents, setShipmentEvents] = useState({});
   const [customerContacts, setCustomerContacts] = useState([]);
   const [customerNotes, setCustomerNotes] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [hrDepartments, setHrDepartments] = useState([]);
+  const [payrollRecords, setPayrollRecords] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [performanceNotes, setPerformanceNotes] = useState([]);
   const [phase2Ready, setPhase2Ready] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2059,6 +2296,14 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   const scopeRow = (row) => ecosystemReady && currentCompanyId
     ? { ...row, company_id: currentCompanyId }
     : row;
+
+  function isOptionalSchemaError(requestError) {
+    const message = requestError?.message || '';
+    return ['42P01', '42703', 'PGRST204', 'PGRST205'].includes(requestError?.code)
+      || message.includes('does not exist')
+      || message.includes('schema cache')
+      || message.includes('Could not find');
+  }
 
   async function runRequest(request, operation = 'database request') {
     const { data, error: requestError } = await request;
@@ -2078,8 +2323,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   async function runOptionalRequest(request, operation = 'optional database request') {
     const { data, error: requestError } = await request;
     if (requestError) {
-      const message = requestError.message || '';
-      if (requestError.code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) return [];
+      if (isOptionalSchemaError(requestError)) return [];
       const friendlyMessage = friendlyError(requestError);
       setError(friendlyMessage);
       recordHealthEvent({
@@ -2095,8 +2339,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   async function runEnterpriseRequest(request, operation) {
     const { data, error: requestError } = await request;
     if (requestError) {
-      const message = requestError.message || '';
-      if (requestError.code === '42P01' || message.includes('does not exist') || message.includes('schema cache')) {
+      if (isOptionalSchemaError(requestError)) {
         return { rows: [], available: false };
       }
       const friendlyMessage = friendlyError(requestError);
@@ -2135,6 +2378,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       setShipmentEvents({});
       setCustomerContacts([]);
       setCustomerNotes([]);
+      setEmployees([]);
+      setHrDepartments([]);
+      setPayrollRecords([]);
+      setAttendanceRecords([]);
+      setLeaveRequests([]);
+      setPerformanceNotes([]);
       setPhase2Ready(false);
       setLoading(false);
       setLastUpdated(null);
@@ -2176,6 +2425,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       const needsFinance = permissions.canViewPage('Finance')
         || (needsCompanyModel && (permissions.isExecutive || permissions.role === 'Finance Manager'));
       const needsDocuments = permissions.canViewPage('Documents') || needsCompanyModel;
+      const needsHr = permissions.canViewPage('Employees') || (permissions.isExecutive && permissions.canViewPage('AI COO'));
 
       const vehicleQuery = !needsVehicles ? emptyQuery
         : permissions.isExecutive || permissions.role === 'Inventory Manager' || permissions.role === 'Finance Manager'
@@ -2230,15 +2480,27 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
         : scopeQuery(supabase.from('customer_contacts').select('*')).order('created_at', { ascending: true });
       const customerNoteQuery = !needsCustomers ? emptyQuery
         : scopeQuery(supabase.from('customer_notes').select('*')).order('created_at', { ascending: false });
+      const employeeQuery = !needsHr ? emptyQuery
+        : scopeQuery(supabase.from('employees').select('*')).order('created_at', { ascending: false });
+      const hrDepartmentQuery = !needsHr ? emptyQuery
+        : scopeQuery(supabase.from('hr_departments').select('*')).order('name', { ascending: true });
+      const payrollQuery = !needsHr || !permissions.canViewFinancials() ? emptyQuery
+        : scopeQuery(supabase.from('payroll_records').select('*')).order('payment_date', { ascending: false });
+      const attendanceQuery = !needsHr ? emptyQuery
+        : scopeQuery(supabase.from('attendance_records').select('*')).order('attendance_date', { ascending: false });
+      const leaveQuery = !needsHr ? emptyQuery
+        : scopeQuery(supabase.from('leave_requests').select('*')).order('created_at', { ascending: false });
+      const performanceQuery = !needsHr ? emptyQuery
+        : scopeQuery(supabase.from('performance_notes').select('*')).order('created_at', { ascending: false });
 
-      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows, financeResult, documentResult, vehicleEventResult, shipmentEventResult, customerContactResult, customerNoteResult] = await Promise.all([
+      const [vehicleRows, orderRows, quoteRows, customerRows, shipmentRows, logisticsPartnerRows, timelineRows, procurementRows, supplierRows, procurementTimelineRows, financeResult, documentResult, vehicleEventResult, shipmentEventResult, customerContactResult, customerNoteResult, employeeRows, hrDepartmentRows, payrollRows, attendanceRows, leaveRows, performanceRows] = await Promise.all([
         runRequest(vehicleQuery, 'load vehicles'),
         runRequest(orderQuery, 'load orders'),
         runOptionalRequest(quoteQuery, 'load quotes'),
         runRequest(customerQuery, 'load customers'),
         runRequest(shipmentQuery, 'load shipments'),
         runOptionalRequest(logisticsPartnerQuery, 'load logistics partners'),
-        runRequest(timelineQuery, 'load order timeline'),
+        runOptionalRequest(timelineQuery, 'load order timeline'),
         runOptionalRequest(procurementQuery, 'load procurement requests'),
         runOptionalRequest(supplierQuery, 'load suppliers'),
         runOptionalRequest(procurementTimelineQuery, 'load procurement timeline'),
@@ -2248,6 +2510,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
         runEnterpriseRequest(shipmentEventQuery, 'load shipment timeline'),
         runEnterpriseRequest(customerContactQuery, 'load customer contacts'),
         runEnterpriseRequest(customerNoteQuery, 'load customer notes'),
+        runOptionalRequest(employeeQuery, 'load employees'),
+        runOptionalRequest(hrDepartmentQuery, 'load HR departments'),
+        runOptionalRequest(payrollQuery, 'load payroll records'),
+        runOptionalRequest(attendanceQuery, 'load attendance records'),
+        runOptionalRequest(leaveQuery, 'load leave requests'),
+        runOptionalRequest(performanceQuery, 'load performance notes'),
       ]);
 
       setVehicles(vehicleRows.map(fromVehicleRow));
@@ -2266,6 +2534,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       setShipmentEvents(groupTimelineRows(shipmentEventResult.rows.map((row) => fromOperationalEvent(row, 'shipment_id'))));
       setCustomerContacts(customerContactResult.rows.map(fromCustomerContactRow));
       setCustomerNotes(customerNoteResult.rows.map(fromCustomerNoteRow));
+      setEmployees(employeeRows.map(fromEmployeeRow));
+      setHrDepartments(hrDepartmentRows.map(fromHrDepartmentRow));
+      setPayrollRecords(payrollRows.map(fromPayrollRow));
+      setAttendanceRecords(attendanceRows.map(fromAttendanceRow));
+      setLeaveRequests(leaveRows.map(fromLeaveRow));
+      setPerformanceNotes(performanceRows.map(fromPerformanceNoteRow));
       setPhase2Ready(financeResult.available);
       setLastUpdated(new Date());
     } catch (requestError) {
@@ -2352,18 +2626,36 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   }
 
   async function addOrderTimelineEvent(orderId, status, note) {
-    const saved = fromTimelineRow(await runRequest(
-      supabase
-        .from('order_timeline_events')
-        .insert(scopeRow(toTimelineRow({ orderId, status, note }, user.id)))
-        .select()
-        .single()
-    ));
+    const { data, error: requestError } = await supabase
+      .from('order_timeline_events')
+      .insert(scopeRow(toTimelineRow({ orderId, status, note }, user.id)))
+      .select()
+      .single();
+    if (requestError) {
+      if (isOptionalSchemaError(requestError)) {
+        recordHealthEvent({
+          type: 'supabase-query',
+          message: 'Order timeline storage is not available. Core order data was saved.',
+          context: { operation: 'add order timeline event', code: requestError.code },
+        });
+        return null;
+      }
+      const message = friendlyError(requestError);
+      setError(message);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message,
+        context: { operation: 'add order timeline event', code: requestError.code },
+      });
+      throw requestError;
+    }
+    const saved = fromTimelineRow(data);
 
     setOrderTimelines((current) => ({
       ...current,
       [orderId]: [...(current[orderId] || []), saved],
     }));
+    return saved;
   }
 
   async function addOrderTimelineNote(orderId, note) {
@@ -2462,18 +2754,36 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   }
 
   async function addProcurementTimelineEvent(procurementId, status, note) {
-    const saved = fromProcurementTimelineRow(await runRequest(
-      supabase
-        .from('procurement_timeline')
-        .insert(scopeRow(toProcurementTimelineRow({ procurementId, status, note }, user.id)))
-        .select()
-        .single()
-    ));
+    const { data, error: requestError } = await supabase
+      .from('procurement_timeline')
+      .insert(scopeRow(toProcurementTimelineRow({ procurementId, status, note }, user.id)))
+      .select()
+      .single();
+    if (requestError) {
+      if (isOptionalSchemaError(requestError)) {
+        recordHealthEvent({
+          type: 'supabase-query',
+          message: 'Procurement timeline storage is not available. Core procurement data was saved.',
+          context: { operation: 'add procurement timeline event', code: requestError.code },
+        });
+        return null;
+      }
+      const message = friendlyError(requestError);
+      setError(message);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message,
+        context: { operation: 'add procurement timeline event', code: requestError.code },
+      });
+      throw requestError;
+    }
+    const saved = fromProcurementTimelineRow(data);
 
     setProcurementTimelines((current) => ({
       ...current,
       [procurementId]: [...(current[procurementId] || []), saved],
     }));
+    return saved;
   }
 
   async function saveProcurementRequest(request, editingId) {
@@ -2531,14 +2841,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function addVehicleLifecycleEvent(vehicleId, status, note) {
     if (!phase2Ready) return;
-    const saved = fromOperationalEvent(await runRequest(
-      supabase
-        .from('vehicle_lifecycle_events')
-        .insert(scopeRow({ vehicle_id: vehicleId, status, note, created_by: user.id }))
-        .select()
-        .single(),
-      'add vehicle lifecycle event',
-    ), 'vehicle_id');
+    const { data, error: requestError } = await supabase
+      .from('vehicle_lifecycle_events')
+      .insert(scopeRow({ vehicle_id: vehicleId, status, note, created_by: user.id }))
+      .select()
+      .single();
+    if (requestError) {
+      if (isOptionalSchemaError(requestError)) return;
+      const message = friendlyError(requestError);
+      setError(message);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message,
+        context: { operation: 'add vehicle lifecycle event', code: requestError.code },
+      });
+      throw requestError;
+    }
+    const saved = fromOperationalEvent(data, 'vehicle_id');
     setVehicleEvents((current) => ({
       ...current,
       [vehicleId]: [...(current[vehicleId] || []), saved],
@@ -2547,14 +2866,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function addShipmentEvent(shipmentId, status, note) {
     if (!phase2Ready) return;
-    const saved = fromOperationalEvent(await runRequest(
-      supabase
-        .from('shipment_events')
-        .insert(scopeRow({ shipment_id: shipmentId, status, note, created_by: user.id }))
-        .select()
-        .single(),
-      'add shipment event',
-    ), 'shipment_id');
+    const { data, error: requestError } = await supabase
+      .from('shipment_events')
+      .insert(scopeRow({ shipment_id: shipmentId, status, note, created_by: user.id }))
+      .select()
+      .single();
+    if (requestError) {
+      if (isOptionalSchemaError(requestError)) return;
+      const message = friendlyError(requestError);
+      setError(message);
+      recordHealthEvent({
+        type: 'supabase-query',
+        message,
+        context: { operation: 'add shipment event', code: requestError.code },
+      });
+      throw requestError;
+    }
+    const saved = fromOperationalEvent(data, 'shipment_id');
     setShipmentEvents((current) => ({
       ...current,
       [shipmentId]: [...(current[shipmentId] || []), saved],
@@ -2680,6 +3008,121 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     setCustomerNotes((current) => current.filter((item) => item.id !== id));
   }
 
+  function nextEmployeeCode() {
+    const max = employees.reduce((highest, employee) => {
+      const match = String(employee.employeeCode || '').match(/(\d+)$/);
+      return match ? Math.max(highest, Number.parseInt(match[1], 10) || 0) : highest;
+    }, 0);
+    return `EMP-${String(max + 1).padStart(4, '0')}`;
+  }
+
+  async function saveEmployee(employee, editingId) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot manage employees.');
+    const employeeToSave = { ...employee, employeeCode: employee.employeeCode || nextEmployeeCode() };
+    const query = editingId
+      ? scopeQuery(supabase.from('employees').update(toEmployeeRow(employeeToSave)).eq('id', editingId)).select().single()
+      : supabase.from('employees').insert(scopeRow(toEmployeeRow(employeeToSave, user.id))).select().single();
+    const saved = fromEmployeeRow(await runRequest(query, 'save employee'));
+    setEmployees((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
+  }
+
+  async function deleteEmployee(id) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot delete employee records.');
+    await runRequest(scopeQuery(supabase.from('employees').delete().eq('id', id)), 'delete employee');
+    setEmployees((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveHrDepartment(department, editingId) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot manage departments.');
+    const query = editingId
+      ? scopeQuery(supabase.from('hr_departments').update(toHrDepartmentRow(department)).eq('id', editingId)).select().single()
+      : supabase.from('hr_departments').insert(scopeRow(toHrDepartmentRow(department, user.id))).select().single();
+    const saved = fromHrDepartmentRow(await runRequest(query, 'save HR department'));
+    setHrDepartments((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [...current, saved]);
+    return saved;
+  }
+
+  async function deleteHrDepartment(id) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot delete departments.');
+    await runRequest(scopeQuery(supabase.from('hr_departments').delete().eq('id', id)), 'delete HR department');
+    setHrDepartments((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function savePayrollRecord(record, editingId) {
+    if (!permissions?.canManageHR() || !permissions?.canViewFinancials()) throw new Error('Your role cannot manage payroll.');
+    const query = editingId
+      ? scopeQuery(supabase.from('payroll_records').update(toPayrollRow(record, employees)).eq('id', editingId)).select().single()
+      : supabase.from('payroll_records').insert(scopeRow(toPayrollRow(record, employees, user.id))).select().single();
+    const saved = fromPayrollRow(await runRequest(query, 'save payroll record'));
+    setPayrollRecords((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
+  }
+
+  async function deletePayrollRecord(id) {
+    if (!permissions?.canManageHR() || !permissions?.canViewFinancials()) throw new Error('Your role cannot delete payroll.');
+    await runRequest(scopeQuery(supabase.from('payroll_records').delete().eq('id', id)), 'delete payroll record');
+    setPayrollRecords((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveAttendanceRecord(record, editingId) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot manage attendance.');
+    const query = editingId
+      ? scopeQuery(supabase.from('attendance_records').update(toAttendanceRow(record)).eq('id', editingId)).select().single()
+      : supabase.from('attendance_records').insert(scopeRow(toAttendanceRow(record, user.id))).select().single();
+    const saved = fromAttendanceRow(await runRequest(query, 'save attendance record'));
+    setAttendanceRecords((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
+  }
+
+  async function deleteAttendanceRecord(id) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot delete attendance.');
+    await runRequest(scopeQuery(supabase.from('attendance_records').delete().eq('id', id)), 'delete attendance record');
+    setAttendanceRecords((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function saveLeaveRequest(record, editingId) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot manage leave.');
+    const query = editingId
+      ? scopeQuery(supabase.from('leave_requests').update(toLeaveRow(record)).eq('id', editingId)).select().single()
+      : supabase.from('leave_requests').insert(scopeRow(toLeaveRow(record, user.id))).select().single();
+    const saved = fromLeaveRow(await runRequest(query, 'save leave request'));
+    setLeaveRequests((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
+  }
+
+  async function updateLeaveStatus(id, status) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot approve leave.');
+    const saved = fromLeaveRow(await runRequest(
+      scopeQuery(supabase.from('leave_requests').update({ status, approved_by: user.id, approved_at: new Date().toISOString() }).eq('id', id)).select().single(),
+      'update leave status',
+    ));
+    setLeaveRequests((current) => current.map((item) => item.id === id ? saved : item));
+    return saved;
+  }
+
+  async function deleteLeaveRequest(id) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot delete leave requests.');
+    await runRequest(scopeQuery(supabase.from('leave_requests').delete().eq('id', id)), 'delete leave request');
+    setLeaveRequests((current) => current.filter((item) => item.id !== id));
+  }
+
+  async function savePerformanceNote(note, editingId) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot manage performance notes.');
+    const query = editingId
+      ? scopeQuery(supabase.from('performance_notes').update(toPerformanceNoteRow(note)).eq('id', editingId)).select().single()
+      : supabase.from('performance_notes').insert(scopeRow(toPerformanceNoteRow(note, user.id))).select().single();
+    const saved = fromPerformanceNoteRow(await runRequest(query, 'save performance note'));
+    setPerformanceNotes((current) => editingId ? current.map((item) => item.id === editingId ? saved : item) : [saved, ...current]);
+    return saved;
+  }
+
+  async function deletePerformanceNote(id) {
+    if (!permissions?.canManageHR()) throw new Error('Your role cannot delete performance notes.');
+    await runRequest(scopeQuery(supabase.from('performance_notes').delete().eq('id', id)), 'delete performance note');
+    setPerformanceNotes((current) => current.filter((item) => item.id !== id));
+  }
+
   return {
     vehicles,
     orders,
@@ -2697,6 +3140,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     shipmentEvents,
     customerContacts,
     customerNotes,
+    employees,
+    hrDepartments,
+    payrollRecords,
+    attendanceRecords,
+    leaveRequests,
+    performanceNotes,
     phase2Ready,
     loading,
     error,
@@ -2730,6 +3179,19 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     deleteCustomerContact,
     addCustomerNote,
     deleteCustomerNote,
+    saveEmployee,
+    deleteEmployee,
+    saveHrDepartment,
+    deleteHrDepartment,
+    savePayrollRecord,
+    deletePayrollRecord,
+    saveAttendanceRecord,
+    deleteAttendanceRecord,
+    saveLeaveRequest,
+    updateLeaveStatus,
+    deleteLeaveRequest,
+    savePerformanceNote,
+    deletePerformanceNote,
   };
 }
 
@@ -3114,6 +3576,7 @@ function CommandPalette({ open, onClose, setActivePage, allowedPages }) {
     { label: 'Open Procurement', page: 'Procurement', icon: ClipboardList },
     { label: 'Add Vehicle', page: 'Inventory', icon: Boxes },
     { label: 'Add Customer', page: 'Customers', icon: Users },
+    { label: 'Open Employees', page: 'Employees', icon: Users },
     { label: 'Create Order', page: 'Orders', icon: ClipboardList },
     { label: 'Create Quote', page: 'Quotes', icon: FileText },
     { label: 'Create Shipment', page: 'Shipments', icon: Truck },
@@ -6276,7 +6739,7 @@ function DocumentVault({ documents, uploadDocument, openDocument, deleteDocument
   );
 }
 
-function Reports({ vehicles, orders, customers, shipments, procurementRequests, suppliers }) {
+function Reports({ vehicles, orders, customers, shipments, procurementRequests, suppliers, employees = [], payrollRecords = [], attendanceRecords = [], hrDepartments = [] }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const filteredOrders = orders.filter((order) => inDateRange(order.orderDate, startDate, endDate));
@@ -6284,6 +6747,9 @@ function Reports({ vehicles, orders, customers, shipments, procurementRequests, 
   const filteredProcurements = procurementRequests.filter((request) => inDateRange(request.createdAt, startDate, endDate));
   const filteredCustomers = customers.filter((customer) => inDateRange(customer.createdAt, startDate, endDate));
   const filteredVehicles = vehicles.filter((vehicle) => inDateRange(vehicle.createdAt, startDate, endDate));
+  const filteredEmployees = employees.filter((employee) => inDateRange(employee.dateOfJoining || employee.createdAt, startDate, endDate));
+  const filteredPayroll = payrollRecords.filter((record) => inDateRange(record.paymentDate || record.createdAt, startDate, endDate));
+  const filteredAttendance = attendanceRecords.filter((record) => inDateRange(record.attendanceDate || record.createdAt, startDate, endDate));
   const orderNumberById = useMemo(() => {
     return orders.reduce((lookup, order) => ({ ...lookup, [order.id]: order.orderNumber || order.id }), {});
   }, [orders]);
@@ -6294,6 +6760,7 @@ function Reports({ vehicles, orders, customers, shipments, procurementRequests, 
     freightCost: filteredShipments.reduce((sum, shipment) => sum + numberValue(shipment.freightCost), 0),
     inventoryValue: filteredVehicles.reduce((sum, vehicle) => sum + numberValue(vehicle.purchasePrice) * numberValue(vehicle.quantity), 0),
     procurementValue: filteredProcurements.reduce((sum, request) => sum + procurementValue(request), 0),
+    payrollValue: filteredPayroll.reduce((sum, record) => sum + numberValue(record.netSalary), 0),
   };
 
   const reports = [
@@ -6426,6 +6893,74 @@ function Reports({ vehicles, orders, customers, shipments, procurementRequests, 
         totalValue: money.format(procurementValue(request)),
       })),
     },
+    {
+      title: 'Employee Report',
+      slug: 'velora-employee-report',
+      summary: `${filteredEmployees.length} employees`,
+      columns: [
+        { key: 'employeeCode', label: 'Employee ID' },
+        { key: 'fullName', label: 'Full Name' },
+        { key: 'email', label: 'Email' },
+        { key: 'department', label: 'Department' },
+        { key: 'role', label: 'Role' },
+        { key: 'dateOfJoining', label: 'Joining Date' },
+        { key: 'employmentType', label: 'Employment Type' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: filteredEmployees,
+    },
+    {
+      title: 'Payroll Report',
+      slug: 'velora-payroll-report',
+      summary: `${filteredPayroll.length} payroll records, ${money.format(totals.payrollValue)} net salary`,
+      columns: [
+        { key: 'employeeCode', label: 'Employee ID' },
+        { key: 'employeeName', label: 'Employee' },
+        { key: 'baseSalary', label: 'Base Salary' },
+        { key: 'bonus', label: 'Bonus' },
+        { key: 'deductions', label: 'Deductions' },
+        { key: 'netSalary', label: 'Net Salary' },
+        { key: 'paymentDate', label: 'Payment Date' },
+        { key: 'paymentStatus', label: 'Status' },
+      ],
+      rows: filteredPayroll.map((record) => ({
+        ...record,
+        employeeName: employees.find((employee) => employee.id === record.employeeId)?.fullName || record.employeeId,
+        baseSalary: money.format(record.baseSalary),
+        bonus: money.format(record.bonus),
+        deductions: money.format(record.deductions),
+        netSalary: money.format(record.netSalary),
+      })),
+    },
+    {
+      title: 'Department Report',
+      slug: 'velora-department-report',
+      summary: `${hrDepartments.length} departments`,
+      columns: [
+        { key: 'name', label: 'Department' },
+        { key: 'employeeCount', label: 'Employees' },
+        { key: 'status', label: 'Status' },
+      ],
+      rows: hrDepartments.map((department) => ({
+        ...department,
+        employeeCount: employees.filter((employee) => employee.department === department.name).length,
+      })),
+    },
+    {
+      title: 'Attendance Report',
+      slug: 'velora-attendance-report',
+      summary: `${filteredAttendance.length} attendance records`,
+      columns: [
+        { key: 'employeeName', label: 'Employee' },
+        { key: 'attendanceDate', label: 'Date' },
+        { key: 'status', label: 'Status' },
+        { key: 'notes', label: 'Notes' },
+      ],
+      rows: filteredAttendance.map((record) => ({
+        ...record,
+        employeeName: employees.find((employee) => employee.id === record.employeeId)?.fullName || record.employeeId,
+      })),
+    },
   ];
 
   return (
@@ -6442,6 +6977,7 @@ function Reports({ vehicles, orders, customers, shipments, procurementRequests, 
         <Metric label="Freight cost" value={money.format(totals.freightCost)} />
         <Metric label="Inventory value" value={money.format(totals.inventoryValue)} />
         <Metric label="Procurement value" value={money.format(totals.procurementValue)} />
+        <Metric label="Payroll value" value={money.format(totals.payrollValue)} />
       </div>
       <div className="report-grid">
         {reports.map((report) => (
@@ -6578,6 +7114,12 @@ function AiAssistant({
   logisticsPartners,
   strategicScenarios,
   ecosystem,
+  employees,
+  hrDepartments,
+  payrollRecords,
+  attendanceRecords,
+  leaveRequests,
+  performanceNotes,
 }) {
   const confirm = useConfirm();
   const [question, setQuestion] = useState('');
@@ -6599,6 +7141,10 @@ function AiAssistant({
       shipments,
       procurementRequests,
       alerts,
+      employees,
+      hrDepartments,
+      payrollRecords: permissions.canViewFinancials() ? payrollRecords : [],
+      leaveRequests,
     }),
     enterpriseSummary,
     digitalTwin: buildDigitalTwinAiContext({
@@ -6663,6 +7209,37 @@ function AiAssistant({
         financeRecords: permissions.canViewFinancials() ? financeRecords : [],
       },
     }),
+    workforce: {
+      employees: employees.slice(0, 40).map((employee) => ({
+        employeeId: employee.employeeCode,
+        fullName: employee.fullName,
+        department: employee.department,
+        role: employee.role,
+        status: employee.status,
+        dateOfJoining: employee.dateOfJoining,
+      })),
+      departments: hrDepartments.map((department) => ({
+        name: department.name,
+        status: department.status,
+        managerEmployeeId: department.managerEmployeeId,
+      })),
+      payroll: permissions.canViewFinancials()
+        ? payrollRecords.slice(0, 40).map((record) => ({
+          employeeId: record.employeeId,
+          netSalary: numberValue(record.netSalary),
+          paymentDate: record.paymentDate,
+          paymentStatus: record.paymentStatus,
+        }))
+        : [],
+      attendanceSummary: {
+        present: attendanceRecords.filter((record) => record.status === 'Present').length,
+        absent: attendanceRecords.filter((record) => record.status === 'Absent').length,
+        leave: attendanceRecords.filter((record) => record.status === 'Leave').length,
+        halfDay: attendanceRecords.filter((record) => record.status === 'Half Day').length,
+      },
+      leaveRequests: leaveRequests.slice(0, 30),
+      performanceNotes: performanceNotes.slice(0, 20),
+    },
   }), [
     permissions,
     vehicles,
@@ -6682,6 +7259,12 @@ function AiAssistant({
     logisticsPartners,
     strategicScenarios,
     ecosystem,
+    employees,
+    hrDepartments,
+    payrollRecords,
+    attendanceRecords,
+    leaveRequests,
+    performanceNotes,
   ]);
 
   async function askAssistant(prompt) {
@@ -6896,6 +7479,12 @@ function App() {
     shipmentEvents,
     customerContacts,
     customerNotes,
+    employees,
+    hrDepartments,
+    payrollRecords,
+    attendanceRecords,
+    leaveRequests,
+    performanceNotes,
     phase2Ready,
     loading,
     error,
@@ -6929,6 +7518,19 @@ function App() {
     deleteCustomerContact,
     addCustomerNote,
     deleteCustomerNote,
+    saveEmployee,
+    deleteEmployee,
+    saveHrDepartment,
+    deleteHrDepartment,
+    savePayrollRecord,
+    deletePayrollRecord,
+    saveAttendanceRecord,
+    deleteAttendanceRecord,
+    saveLeaveRequest,
+    updateLeaveStatus,
+    deleteLeaveRequest,
+    savePerformanceNote,
+    deletePerformanceNote,
   } = useSupabaseRecords(
     user,
     profileLoading || ecosystem.loading ? null : permissions,
@@ -6962,7 +7564,8 @@ function App() {
     suppliers: suppliers.length,
     finance: permissions.canViewFinancials() ? financeRecords.length : 0,
     documents: documents.length,
-  }), [customers.length, documents.length, financeRecords.length, orders.length, permissions, procurementRequests.length, quotes.length, shipments.length, suppliers.length, vehicles.length]);
+    employees: employees.length,
+  }), [customers.length, documents.length, employees.length, financeRecords.length, orders.length, permissions, procurementRequests.length, quotes.length, shipments.length, suppliers.length, vehicles.length]);
   const searchIndexData = useMemo(
     () => buildSearchIndex({
       vehicles,
@@ -6975,8 +7578,9 @@ function App() {
       suppliers,
       financeRecords,
       documents,
+      employees,
     }),
-    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers, financeRecords, documents],
+    [vehicles, orders, quotes, customers, shipments, logisticsPartners, procurementRequests, suppliers, financeRecords, documents, employees],
   );
   const enterpriseSummary = useMemo(() => buildEnterpriseSummary({
     vehicles,
@@ -7140,11 +7744,12 @@ function App() {
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
             {activePage === 'Quotes' && <Quotes quotes={quotes} saveQuote={saveQuote} deleteQuote={deleteQuote} vehicles={vehicles} customers={customers} canEdit={permissions.canManageQuotes()} canDelete={permissions.canDeleteRecords('Quotes')} />}
             {activePage === 'Customers' && <Customers customers={customers} orders={orders} shipments={shipments} financeRecords={financeRecords} documents={documents} customerContacts={customerContacts} customerNotes={customerNotes} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} saveCustomerContact={saveCustomerContact} deleteCustomerContact={deleteCustomerContact} addCustomerNote={addCustomerNote} deleteCustomerNote={deleteCustomerNote} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
+            {activePage === 'Employees' && <HrWorkforceCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} attendanceRecords={attendanceRecords} leaveRequests={leaveRequests} performanceNotes={performanceNotes} documents={documents} saveEmployee={saveEmployee} deleteEmployee={deleteEmployee} saveHrDepartment={saveHrDepartment} deleteHrDepartment={deleteHrDepartment} savePayrollRecord={savePayrollRecord} deletePayrollRecord={deletePayrollRecord} saveAttendanceRecord={saveAttendanceRecord} deleteAttendanceRecord={deleteAttendanceRecord} saveLeaveRequest={saveLeaveRequest} updateLeaveStatus={updateLeaveStatus} deleteLeaveRequest={deleteLeaveRequest} savePerformanceNote={savePerformanceNote} deletePerformanceNote={deletePerformanceNote} uploadDocument={uploadDocument} canEdit={permissions.canManageHR()} canDelete={permissions.canDeleteRecords('Employees')} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Shipments' && <Shipments shipments={shipments} shipmentEvents={shipmentEvents} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Finance' && (phase2Ready ? <Finance financeRecords={financeRecords} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} saveFinanceRecord={saveFinanceRecord} deleteFinanceRecord={deleteFinanceRecord} canEdit={permissions.canManageFinance()} /> : <Phase2SetupState moduleName="Finance & Profit Center" />)}
             {activePage === 'Documents' && (phase2Ready ? <DocumentVault documents={documents} uploadDocument={uploadDocument} openDocument={openDocument} deleteDocument={deleteDocument} canEdit={permissions.canManageDocuments()} /> : <Phase2SetupState moduleName="Document Vault" />)}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
-            {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} />}
+            {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} employees={employees} payrollRecords={payrollRecords} attendanceRecords={attendanceRecords} hrDepartments={hrDepartments} />}
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
             {activePage === 'Notifications' && <NotificationCenter alerts={alerts} orders={orders} shipments={shipments} procurementRequests={procurementRequests} financeRecords={permissions.canViewFinancials() ? financeRecords : []} healthEvents={healthEvents} onNavigate={goToPage} />}
             {activePage === 'Backup & Recovery' && <BackupRecoveryCenter company={ecosystem.currentCompany} user={user} role={permissions.role} canViewFinancials={permissions.canViewFinancials()} vehicles={vehicles} orders={orders} quotes={quotes} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} alerts={alerts} />}
@@ -7181,6 +7786,12 @@ function App() {
         logisticsPartners={logisticsPartners}
         strategicScenarios={strategicScenarios}
         ecosystem={ecosystem}
+        employees={employees}
+        hrDepartments={hrDepartments}
+        payrollRecords={payrollRecords}
+        attendanceRecords={attendanceRecords}
+        leaveRequests={leaveRequests}
+        performanceNotes={performanceNotes}
       />
     </div>
   );
