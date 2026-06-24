@@ -6443,6 +6443,147 @@ tbody tr:hover {
   grid-row: 1 / span 2;
 }
 
+/* Theme Studio accent propagation */
+.quick-action,
+.auth-submit,
+.form-actions button,
+.timeline-note-form button,
+.ai-composer button,
+.time-twin-launcher button,
+.war-save-button,
+.report-actions button:not(:first-child) {
+  background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--blue) 68%, var(--info)));
+  border-color: color-mix(in srgb, var(--blue) 36%, transparent);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--blue) 22%, transparent);
+}
+
+.quick-action:hover,
+.auth-submit:hover,
+.form-actions button:hover,
+.timeline-note-form button:hover,
+.ai-composer button:hover,
+.time-twin-launcher button:hover,
+.war-save-button:hover {
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--blue) 30%, transparent);
+}
+
+.role-badge,
+.locked-label,
+.status-pill,
+.ai-quick-actions button,
+.ai-suggestions article button,
+.download-list > a:hover,
+.privacy-home-link:hover,
+.tabs button.active,
+.tabs button:hover,
+.time-quick-jumps button:hover,
+.time-compare-control > button:hover,
+.time-compare-control > button.active,
+.war-new-button,
+.twin-detail > button,
+.twin-stream > button:hover,
+.twin-stream > button > span,
+.twin-flow-stage:hover,
+.war-saved-grid footer button:hover,
+.executive-report-links button:hover,
+.report-center-action:hover {
+  background: var(--blue-soft);
+  border-color: color-mix(in srgb, var(--blue) 34%, transparent);
+  color: color-mix(in srgb, var(--blue) 28%, var(--ink));
+}
+
+.metric:hover,
+.report-card:hover,
+.chart-card:hover,
+.department-card:hover,
+.timeline-event-card:hover,
+.activity-item:hover,
+.document-card:hover,
+.time-kpi:hover,
+.time-event:hover,
+.twin-lifecycle button:hover,
+.twin-stream > button:hover,
+.recommendation-list > button:hover,
+.war-kpi:hover,
+.war-saved-grid > article:hover {
+  border-color: color-mix(in srgb, var(--blue) 34%, transparent);
+}
+
+.global-search:focus-within,
+.twin-search:focus-within,
+input:focus,
+select:focus,
+textarea:focus,
+.war-field textarea:focus {
+  border-color: color-mix(in srgb, var(--blue) 74%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 16%, transparent);
+}
+
+.search-popover button:hover,
+.search-popover button.selected,
+.command-list button:hover,
+.command-list button.selected,
+tbody tr:hover {
+  background: color-mix(in srgb, var(--blue) 9%, transparent);
+}
+
+.search-popover span,
+.eyebrow,
+.metric.accent strong,
+.report-center-action svg,
+.time-periods svg,
+.time-replay svg,
+.twin-node-type,
+.twin-lifecycle button > span,
+.twin-flow-link,
+.twin-flow-link i,
+.twin-stream > button > span,
+.war-horizon button.active,
+.war-saved-grid footer button:hover,
+.command-list button.selected,
+.mini.invoice-action {
+  color: color-mix(in srgb, var(--blue) 45%, var(--ink));
+}
+
+.mini.invoice-action,
+.twin-reset-button {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 22%, transparent), color-mix(in srgb, var(--info) 14%, transparent));
+  border-color: color-mix(in srgb, var(--blue) 42%, transparent);
+}
+
+.twin-reset-button:hover {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 32%, transparent), color-mix(in srgb, var(--info) 18%, transparent));
+  border-color: color-mix(in srgb, var(--blue) 56%, transparent);
+  color: var(--ink);
+}
+
+.analytics-bars > div > div,
+.executive-ranking-row i {
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 14%, transparent);
+}
+
+.analytics-bars i,
+.time-health-factors em,
+.twin-lifecycle em {
+  background: linear-gradient(90deg, var(--blue), var(--info));
+}
+
+.metric::after,
+.entry-form::before {
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--blue) 48%, transparent), transparent);
+}
+
+.time-event-dot {
+  background: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 18%, transparent);
+}
+
+.time-historical-twin,
+.war-recommendations button {
+  border-left-color: var(--blue);
+}
+
 .war-strategy-grid dl {
   display: grid;
   gap: 8px;

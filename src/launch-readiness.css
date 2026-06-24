@@ -108,9 +108,9 @@
 .launch-empty > svg {
   align-items: center;
   background: var(--blue-soft);
-  border: 1px solid rgba(147, 197, 253, .18);
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
   border-radius: 14px;
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--blue) 42%, var(--ink));
   display: inline-flex;
   flex: 0 0 auto;
   height: 42px;
@@ -191,8 +191,8 @@
 .launch-actions button:first-child,
 .launch-form button,
 .theme-preset-card.active .theme-preset-meta button {
-  background: linear-gradient(135deg, rgba(79, 140, 255, .96), rgba(37, 99, 235, .96));
-  border-color: rgba(147, 197, 253, .18);
+  background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--blue) 68%, var(--info)));
+  border-color: color-mix(in srgb, var(--blue) 28%, transparent);
   color: #fff;
 }
 
@@ -230,7 +230,7 @@
 
 .safety-list svg,
 .launch-checklist svg {
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--blue) 45%, var(--ink));
   flex: 0 0 auto;
 }
 
@@ -260,10 +260,10 @@
 
 .settings-company-switcher svg {
   background: var(--blue-soft);
-  border: 1px solid rgba(147, 197, 253, .18);
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
   border-radius: 13px;
   box-sizing: content-box;
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--blue) 42%, var(--ink));
   flex: 0 0 auto;
   padding: 10px;
 }
@@ -316,7 +316,7 @@
 
 .theme-studio-toolbar > div > svg {
   background: var(--blue-soft);
-  border: 1px solid rgba(147, 197, 253, .2);
+  border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
   border-radius: 14px;
   color: var(--blue);
   height: 44px;
@@ -515,7 +515,7 @@
 }
 
 .invite-drafts svg {
-  color: #93c5fd;
+  color: color-mix(in srgb, var(--blue) 45%, var(--ink));
 }
 
 .invite-drafts strong,
@@ -528,10 +528,10 @@
 }
 
 .launch-notice {
-  background: rgba(59, 130, 246, .12);
-  border: 1px solid rgba(147, 197, 253, .22);
+  background: var(--blue-soft);
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
   border-radius: 14px;
-  color: #bfdbfe;
+  color: color-mix(in srgb, var(--blue) 32%, var(--ink));
   font-weight: 800;
   padding: 12px 14px;
 }
