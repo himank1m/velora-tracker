@@ -1,24 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Activity,
   ArrowRight,
   BarChart3,
   Building2,
   CheckCircle2,
-  ChevronRight,
   CircleDollarSign,
   GitBranch,
-  Globe2,
   Handshake,
   HeartPulse,
-  Network,
   Plus,
-  Route,
+  Network,
   Sparkles,
   TrendingUp,
-  Users,
 } from 'lucide-react';
-import { buildEcosystemIntelligence, buildEcosystemNetwork } from '../services/ecosystemService';
+import { buildEcosystemIntelligence } from '../services/ecosystemService';
 import '../ecosystem.css';
 
 const money = (value) =>
@@ -61,51 +58,31 @@ function Metric({ icon: Icon, label, value, detail, tone = '' }) {
   );
 }
 
-function EcosystemNetwork({ network, onSelect, selected }) {
-  const nodeById = Object.fromEntries(network.nodes.map((node) => [node.id, node]));
-  return (
-    <div className="eco-network-shell">
-      <svg viewBox="0 0 820 650" className="eco-network" role="img" aria-label="Business ecosystem relationship map">
-        <defs>
-          <filter id="eco-glow"><feGaussianBlur stdDeviation="4" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-        </defs>
-        {network.edges.map((edge) => {
-          const source = nodeById[edge.source];
-          const target = nodeById[edge.target];
-          if (!source || !target) return null;
-          return (
-            <g key={edge.id}>
-              <line x1={source.x} y1={source.y} x2={target.x} y2={target.y} className="eco-edge" />
-              <text x={(source.x + target.x) / 2} y={(source.y + target.y) / 2 - 5} className="eco-edge-label">{edge.relationship}</text>
-            </g>
-          );
-        })}
-        {network.nodes.map((node) => (
-          <g
-            key={node.id}
-            className={`eco-node ${node.type.toLowerCase()} ${selected?.id === node.id ? 'selected' : ''}`}
-            onClick={() => onSelect(node)}
-            role="button"
-            tabIndex="0"
-          >
-            <circle cx={node.x} cy={node.y} r={node.type === 'Company' ? 34 : 25} filter={node.type === 'Company' ? 'url(#eco-glow)' : undefined} />
-            <text x={node.x} y={node.y + 3} textAnchor="middle" className="eco-node-symbol">{node.type === 'Company' ? 'CO' : node.type.slice(0, 2).toUpperCase()}</text>
-            <text x={node.x} y={node.y + (node.type === 'Company' ? 51 : 40)} textAnchor="middle" className="eco-node-label">{node.label.slice(0, 24)}</text>
-          </g>
-        ))}
-      </svg>
-    </div>
-  );
-}
-
 function Modal({ title, children, onClose }) {
-  return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
-      <section className="modal-card eco-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="modal-heading"><div><p className="eyebrow">Ecosystem administration</p><h2>{title}</h2></div><button onClick={onClose}>Close</button></div>
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="modal-backdrop eco-modal-backdrop" onMouseDown={onClose}>
+      <section className="modal-card eco-modal" role="dialog" aria-modal="true" aria-labelledby="eco-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="modal-heading">
+          <div>
+            <p className="eyebrow">Ecosystem administration</p>
+            <h2 id="eco-modal-title">{title}</h2>
+          </div>
+          <button className="modal-close-button" onClick={onClose}>Close</button>
+        </div>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -130,7 +107,6 @@ export default function EcosystemCenter({
   canManage,
   canViewFinancials,
 }) {
-  const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState('');
   const [company, setCompany] = useState(blankCompany);
   const [relationship, setRelationship] = useState(blankRelationship);
@@ -156,15 +132,6 @@ export default function EcosystemCenter({
     currentCompanyId: currentCompany.id,
     operational,
   }), [companies, relationships, transactions, events, currentCompany.id, operational]);
-  const network = useMemo(() => buildEcosystemNetwork({
-    companies,
-    relationships,
-    customers,
-    suppliers,
-    logisticsPartners,
-    currentCompanyId: currentCompany.id,
-  }), [companies, relationships, customers, suppliers, logisticsPartners, currentCompany.id]);
-
   const submit = async (type) => {
     setSaving(true);
     setError('');
@@ -225,32 +192,9 @@ export default function EcosystemCenter({
         {canManage && <button onClick={() => setModal('transaction')}><ArrowRight size={16} /> Inter-company activity</button>}
       </div>
 
-      <div className="eco-network-layout">
+      <div className="eco-analysis-grid eco-performance-grid">
         <section className="eco-panel">
-          <div className="eco-heading"><div><p className="eyebrow">Business network map</p><h2>Connected operating ecosystem</h2><span>Explore companies, suppliers, customers, logistics partners, and strategic relationships.</span></div><Globe2 size={21} /></div>
-          <EcosystemNetwork network={network} selected={selected} onSelect={setSelected} />
-        </section>
-        <aside className="eco-panel eco-selection">
-          {selected ? (
-            <>
-              <span className="eco-entity-type">{selected.type}</span>
-              <h2>{selected.label}</h2>
-              <p>{selected.meta || 'Connected ecosystem entity'}</p>
-              <dl>
-                {Object.entries(selected.record || {}).filter(([, value]) => typeof value !== 'object' && value !== '' && value !== null && value !== undefined).slice(0, 7).map(([key, value]) => (
-                  <div key={key}><dt>{key.replace(/([A-Z])/g, ' $1')}</dt><dd>{String(value)}</dd></div>
-                ))}
-              </dl>
-            </>
-          ) : (
-            <div className="eco-empty"><Route size={27} /><strong>Select a network entity</strong><span>Its company or relationship details will appear here.</span></div>
-          )}
-        </aside>
-      </div>
-
-      <div className="eco-analysis-grid">
-        <section className="eco-panel">
-          <div className="eco-heading"><div><p className="eyebrow">Cross-company analytics</p><h2>Company performance</h2></div><BarChart3 size={20} /></div>
+          <div className="eco-heading"><div><p className="eyebrow">Cross-company analytics</p><h2>Company performance</h2><span>Revenue, profit, health, and operating strength across the Velora ecosystem.</span></div><BarChart3 size={20} /></div>
           <div className="eco-company-list">
             {intelligence.companies.map((item, index) => (
               <article key={item.id}>
@@ -264,7 +208,7 @@ export default function EcosystemCenter({
           </div>
         </section>
         <section className="eco-panel">
-          <div className="eco-heading"><div><p className="eyebrow">Relationship engine</p><h2>Strategic network value</h2></div><Handshake size={20} /></div>
+          <div className="eco-heading"><div><p className="eyebrow">Relationship engine</p><h2>Strategic network value</h2><span>Track partner value, relationship status, and network strength without the old map view.</span></div><Handshake size={20} /></div>
           <div className="eco-relationship-list">
             {intelligence.relationships.map((item) => (
               <article key={item.id}>
