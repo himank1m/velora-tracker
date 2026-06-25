@@ -68,6 +68,7 @@ import {
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import AiCooCommandCenter from './components/AiCooCommandCenter';
+import CommunicationCenter from './components/CommunicationCenter';
 import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
 import HrWorkforceCenter from './components/HrWorkforceCenter';
@@ -357,11 +358,11 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Payroll', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
-  { label: 'People', pages: ['Employees', 'Payroll'] },
+  { label: 'People', pages: ['Employees', 'Payroll', 'Communication'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
   { label: 'Knowledge', pages: ['Documents', 'Release Notes'] },
@@ -384,6 +385,7 @@ const navIcons = {
   Customers: Users,
   Employees: Users,
   Payroll: CircleDollarSign,
+  Communication: Send,
   Shipments: Truck,
   Finance: CircleDollarSign,
   Documents: FolderLock,
@@ -1977,9 +1979,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages.filter((page) => page !== 'User Management'),
-    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
+    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Communication', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2034,6 +2036,9 @@ function createPermissions(role) {
     },
     canManageDocuments() {
       return roleOptions.includes(normalizedRole);
+    },
+    canManageCommunication() {
+      return isExecutive;
     },
     canViewFinancials() {
       return isExecutive || normalizedRole === 'Finance Manager';
@@ -8044,6 +8049,7 @@ function App() {
             {activePage === 'Customers' && <Customers customers={customers} orders={orders} shipments={shipments} financeRecords={financeRecords} documents={documents} customerContacts={customerContacts} customerNotes={customerNotes} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} saveCustomerContact={saveCustomerContact} deleteCustomerContact={deleteCustomerContact} addCustomerNote={addCustomerNote} deleteCustomerNote={deleteCustomerNote} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
             {activePage === 'Employees' && <HrWorkforceCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} attendanceRecords={attendanceRecords} leaveRequests={leaveRequests} performanceNotes={performanceNotes} documents={documents} saveEmployee={saveEmployee} deleteEmployee={deleteEmployee} saveHrDepartment={saveHrDepartment} deleteHrDepartment={deleteHrDepartment} savePayrollRecord={savePayrollRecord} deletePayrollRecord={deletePayrollRecord} saveAttendanceRecord={saveAttendanceRecord} deleteAttendanceRecord={deleteAttendanceRecord} saveLeaveRequest={saveLeaveRequest} updateLeaveStatus={updateLeaveStatus} deleteLeaveRequest={deleteLeaveRequest} savePerformanceNote={savePerformanceNote} deletePerformanceNote={deletePerformanceNote} uploadDocument={uploadDocument} canEdit={permissions.canManageHR()} canDelete={permissions.canDeleteRecords('Employees')} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Payroll' && <PayrollCompensationCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} payrollCycles={payrollCycles} salaryHistory={salaryHistory} bonuses={bonuses} deductions={deductions} performanceNotes={performanceNotes} savePayrollCycle={savePayrollCycle} updatePayrollCycleStatus={updatePayrollCycleStatus} saveSalaryHistory={saveSalaryHistory} saveBonus={saveBonus} saveDeduction={saveDeduction} canEdit={permissions.canManagePayroll()} canApprove={permissions.canManagePayroll()} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Communication' && <CommunicationCenter user={user} profile={profile} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} alerts={alerts} financeRecords={permissions.canViewFinancials() ? financeRecords : []} procurementRequests={procurementRequests} payrollRecords={permissions.canViewFinancials() ? payrollRecords : []} documents={documents} employees={employees} canManage={permissions.canManageCommunication()} />}
             {activePage === 'Shipments' && <Shipments shipments={shipments} shipmentEvents={shipmentEvents} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Finance' && (phase2Ready ? <Finance financeRecords={financeRecords} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} saveFinanceRecord={saveFinanceRecord} deleteFinanceRecord={deleteFinanceRecord} canEdit={permissions.canManageFinance()} /> : <Phase2SetupState moduleName="Finance & Profit Center" />)}
             {activePage === 'Documents' && (phase2Ready ? <DocumentVault documents={documents} uploadDocument={uploadDocument} openDocument={openDocument} deleteDocument={deleteDocument} canEdit={permissions.canManageDocuments()} /> : <Phase2SetupState moduleName="Document Vault" />)}
