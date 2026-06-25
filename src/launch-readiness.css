@@ -695,6 +695,254 @@
   margin-bottom: 14px;
 }
 
+.infrastructure-network-dashboard {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.infrastructure-network-grid {
+  align-items: stretch;
+}
+
+.server-network-map,
+.region-distribution {
+  background: rgba(8, 13, 24, .24);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.network-map-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.network-map-header span {
+  align-items: center;
+  color: var(--ink);
+  display: inline-flex;
+  font-weight: 950;
+  gap: 8px;
+}
+
+.network-map-header small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.network-map-frame {
+  aspect-ratio: 16 / 8;
+  background:
+    linear-gradient(rgba(96, 165, 250, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 250, .07) 1px, transparent 1px),
+    radial-gradient(circle at 50% 50%, rgba(37, 99, 235, .18), transparent 58%);
+  background-size: 10px 10px, 10px 10px, 100% 100%;
+  border: 1px solid rgba(96, 165, 250, .16);
+  border-radius: 18px;
+  min-height: 240px;
+  overflow: visible;
+  width: 100%;
+}
+
+.network-link {
+  stroke: color-mix(in srgb, var(--blue) 48%, transparent);
+  stroke-width: .55;
+}
+
+.network-link.offline {
+  stroke: rgba(239, 68, 68, .62);
+  stroke-dasharray: 2 1.7;
+}
+
+.network-link.warning,
+.network-link.maintenance,
+.network-link.unknown {
+  stroke: rgba(245, 158, 11, .7);
+  stroke-dasharray: 2 1.5;
+}
+
+.network-node {
+  cursor: pointer;
+  outline: none;
+}
+
+.network-node circle {
+  fill: url("#serverNodeGlow");
+  stroke: rgba(191, 219, 254, .86);
+  stroke-width: .5;
+}
+
+.network-node.offline circle {
+  fill: rgba(239, 68, 68, .72);
+  stroke: rgba(254, 202, 202, .9);
+}
+
+.network-node.warning circle,
+.network-node.maintenance circle,
+.network-node.unknown circle {
+  fill: rgba(245, 158, 11, .74);
+  stroke: rgba(254, 240, 138, .9);
+}
+
+.network-node text {
+  fill: var(--ink);
+  font-size: 2.7px;
+  font-weight: 950;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.network-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.network-map-legend span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 850;
+  gap: 7px;
+}
+
+.network-map-legend i {
+  border-radius: 999px;
+  display: inline-flex;
+  height: 9px;
+  width: 9px;
+}
+
+.network-map-legend .online {
+  background: var(--green);
+}
+
+.network-map-legend .warning,
+.network-map-legend .maintenance {
+  background: var(--amber);
+}
+
+.network-map-legend .offline {
+  background: var(--red);
+}
+
+.region-distribution h3 {
+  color: var(--ink);
+  font-size: 17px;
+  margin: 0;
+}
+
+.region-card,
+.server-link-list article,
+.server-group-card {
+  background: rgba(148, 163, 184, .055);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--ink);
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+}
+
+.region-card {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.region-card strong,
+.server-link-list strong,
+.server-group-card strong {
+  overflow-wrap: anywhere;
+}
+
+.region-card small,
+.server-link-list small,
+.server-group-card small {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.region-card span,
+.server-group-card span {
+  color: color-mix(in srgb, var(--blue) 36%, var(--ink));
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.region-card meter,
+.server-group-card meter {
+  grid-column: 1 / -1;
+  height: 8px;
+  width: 100%;
+}
+
+.server-network-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.server-link-list,
+.server-group-list {
+  display: grid;
+  gap: 11px;
+}
+
+.server-link-list article {
+  align-items: center;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.server-group-card {
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.server-mini-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.server-mini-picker > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.server-mini-picker > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.server-mini-picker button {
+  background: rgba(148, 163, 184, .07);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 850;
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
+.server-mini-picker button.active {
+  background: var(--blue-soft);
+  border-color: color-mix(in srgb, var(--blue) 34%, transparent);
+  color: color-mix(in srgb, var(--blue) 35%, var(--ink));
+}
+
 .server-primary-strip,
 .server-facts {
   display: grid;
@@ -890,6 +1138,8 @@
   .launch-grid.three,
   .settings-company-switcher,
   .brand-preferences,
+  .infrastructure-network-dashboard,
+  .server-network-form,
   .server-form,
   .server-primary-strip,
   .server-facts,

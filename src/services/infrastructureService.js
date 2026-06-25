@@ -11,6 +11,8 @@ export const connectedServiceOptions = [
   'AI Assistant',
   'Backup Storage',
 ];
+export const serverLinkTypes = ['Primary-Backup', 'Primary-Analytics', 'Primary-AI', 'Regional-Regional', 'Failover', 'Sync', 'Monitoring'];
+export const serverGroupTypes = ['Production Cluster', 'Development Cluster', 'Analytics Cluster', 'AI Cluster', 'Regional Cluster', 'Backup Cluster'];
 
 export const blankServerConfig = {
   id: '',
@@ -28,6 +30,28 @@ export const blankServerConfig = {
   errorMessage: '',
   linkedServices: ['Supabase Database', 'Supabase Storage'],
   notes: '',
+};
+
+export const blankServerLink = {
+  id: '',
+  sourceServerId: '',
+  targetServerId: '',
+  linkType: 'Sync',
+  status: 'Online',
+  latencyMs: 0,
+  notes: '',
+  createdAt: '',
+};
+
+export const blankServerGroup = {
+  id: '',
+  groupName: '',
+  groupType: 'Production Cluster',
+  region: 'Global',
+  environment: 'Production',
+  serverIds: [],
+  notes: '',
+  createdAt: '',
 };
 
 export function maskSensitiveValue(value) {
@@ -60,6 +84,33 @@ export function sanitizeServerConfig(server) {
   };
 }
 
+export function sanitizeServerLink(link) {
+  return {
+    ...blankServerLink,
+    ...link,
+    id: link.id || `lnk-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+    sourceServerId: link.sourceServerId || '',
+    targetServerId: link.targetServerId || '',
+    linkType: serverLinkTypes.includes(link.linkType) ? link.linkType : 'Sync',
+    status: serverStatuses.includes(link.status) ? link.status : 'Online',
+    latencyMs: Number(link.latencyMs) || 0,
+    createdAt: link.createdAt || todayIso(),
+  };
+}
+
+export function sanitizeServerGroup(group) {
+  return {
+    ...blankServerGroup,
+    ...group,
+    id: group.id || `grp-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+    groupName: String(group.groupName || '').trim(),
+    groupType: serverGroupTypes.includes(group.groupType) ? group.groupType : 'Production Cluster',
+    environment: serverEnvironments.includes(group.environment) ? group.environment : 'Production',
+    serverIds: Array.isArray(group.serverIds) ? group.serverIds.filter(Boolean) : [],
+    createdAt: group.createdAt || todayIso(),
+  };
+}
+
 export function buildServerSummary(servers = []) {
   const active = servers.filter((server) => server.status === 'Online');
   const offline = servers.filter((server) => server.status === 'Offline');
@@ -74,6 +125,64 @@ export function buildServerSummary(servers = []) {
     warning: warning.length,
     primary: primary?.serverName || 'Not assigned',
     backup: backup?.serverName || 'Not assigned',
+  };
+}
+
+export function buildNetworkHealthScore(servers = [], links = []) {
+  if (!servers.length) return 0;
+  const onlineScore = (servers.filter((server) => server.status === 'Online').length / servers.length) * 42;
+  const uptimeScore = servers.reduce((sum, server) => sum + (Number(server.uptimePercentage) || 0), 0) / servers.length * 0.32;
+  const latencyPenalty = Math.min(18, servers.reduce((sum, server) => sum + Math.max(0, (Number(server.responseTimeMs) || 0) - 650), 0) / Math.max(servers.length, 1) / 80);
+  const linkScore = links.length ? (links.filter((link) => link.status === 'Online').length / links.length) * 18 : 8;
+  return Math.max(0, Math.min(100, Math.round(onlineScore + uptimeScore + linkScore - latencyPenalty)));
+}
+
+export function buildRegionalDistribution(servers = []) {
+  const regions = servers.reduce((acc, server) => {
+    const region = server.region || 'Unassigned';
+    acc[region] = acc[region] || { region, total: 0, online: 0, warning: 0, offline: 0, avgLatency: 0, uptime: 0 };
+    acc[region].total += 1;
+    if (server.status === 'Online') acc[region].online += 1;
+    if (['Warning', 'Maintenance', 'Unknown'].includes(server.status)) acc[region].warning += 1;
+    if (server.status === 'Offline') acc[region].offline += 1;
+    acc[region].avgLatency += Number(server.responseTimeMs) || 0;
+    acc[region].uptime += Number(server.uptimePercentage) || 0;
+    return acc;
+  }, {});
+  return Object.values(regions).map((region) => ({
+    ...region,
+    avgLatency: Math.round(region.avgLatency / Math.max(region.total, 1)),
+    uptime: Number((region.uptime / Math.max(region.total, 1)).toFixed(2)),
+  })).sort((a, b) => b.total - a.total || a.region.localeCompare(b.region));
+}
+
+export function buildGroupHealth(servers = [], groups = []) {
+  return groups.map((group) => {
+    const groupServers = servers.filter((server) => group.serverIds.includes(server.id));
+    return {
+      ...group,
+      total: groupServers.length,
+      online: groupServers.filter((server) => server.status === 'Online').length,
+      unhealthy: groupServers.filter((server) => server.status !== 'Online').length,
+      avgLatency: Math.round(groupServers.reduce((sum, server) => sum + (Number(server.responseTimeMs) || 0), 0) / Math.max(groupServers.length, 1)),
+      uptime: Number((groupServers.reduce((sum, server) => sum + (Number(server.uptimePercentage) || 0), 0) / Math.max(groupServers.length, 1)).toFixed(2)),
+    };
+  });
+}
+
+export function buildInfrastructureAnalytics(servers = [], links = [], groups = []) {
+  const highestLatency = [...servers].sort((a, b) => (Number(b.responseTimeMs) || 0) - (Number(a.responseTimeMs) || 0))[0];
+  const lowestUptime = [...servers].sort((a, b) => (Number(a.uptimePercentage) || 0) - (Number(b.uptimePercentage) || 0))[0];
+  const backups = servers.filter((server) => server.serverType === 'Backup' && server.status === 'Online');
+  return {
+    networkHealthScore: buildNetworkHealthScore(servers, links),
+    regionalDistribution: buildRegionalDistribution(servers),
+    groupHealth: buildGroupHealth(servers, groups),
+    highestLatency,
+    lowestUptime,
+    backupCoverage: servers.some((server) => server.serverType === 'Primary') ? backups.length : 0,
+    unhealthyServers: servers.filter((server) => server.status !== 'Online'),
+    activeLinks: links.filter((link) => link.status === 'Online').length,
   };
 }
 
@@ -124,6 +233,27 @@ export function buildInfrastructureAlerts(servers = []) {
   });
 }
 
+export function buildNetworkAlerts(servers = [], links = [], groups = []) {
+  const baseAlerts = buildInfrastructureAlerts(servers);
+  const linkAlerts = links
+    .filter((link) => link.status !== 'Online' || Number(link.latencyMs) > 800)
+    .map((link) => ({
+      id: `${link.id}-network`,
+      severity: link.status === 'Offline' ? 'Critical' : 'Medium',
+      title: `Server link ${link.linkType} needs review`,
+      message: `${link.status} link with ${link.latencyMs || 0} ms latency.`,
+    }));
+  const groupAlerts = buildGroupHealth(servers, groups)
+    .filter((group) => group.unhealthy > 0)
+    .map((group) => ({
+      id: `${group.id}-group-health`,
+      severity: group.unhealthy >= 2 ? 'High' : 'Medium',
+      title: `${group.groupName} has unhealthy servers`,
+      message: `${group.unhealthy} of ${group.total} servers require attention.`,
+    }));
+  return [...baseAlerts, ...linkAlerts, ...groupAlerts];
+}
+
 export function buildServerActivity(servers = []) {
   return servers
     .flatMap((server) => [
@@ -140,6 +270,24 @@ export function buildServerActivity(servers = []) {
         createdAt: server.lastCheckedAt || todayIso(),
       },
     ])
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+export function buildInfrastructureTimeline(servers = [], links = [], groups = []) {
+  const serverEvents = buildServerActivity(servers);
+  const linkEvents = links.map((link) => ({
+    id: `${link.id}-linked`,
+    title: `Server link created`,
+    detail: `${link.linkType} - ${link.status} - ${link.latencyMs || 0} ms`,
+    createdAt: link.createdAt || todayIso(),
+  }));
+  const groupEvents = groups.map((group) => ({
+    id: `${group.id}-group`,
+    title: `${group.groupName} created`,
+    detail: `${group.groupType} with ${group.serverIds.length} servers`,
+    createdAt: group.createdAt || todayIso(),
+  }));
+  return [...serverEvents, ...linkEvents, ...groupEvents]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
@@ -161,6 +309,56 @@ export function serverToRow(server, userId) {
     notes: server.notes || '',
     created_by: userId || null,
   };
+}
+
+export function linkToRow(link, userId) {
+  return {
+    source_server_id: link.sourceServerId || null,
+    target_server_id: link.targetServerId || null,
+    link_type: link.linkType,
+    status: link.status,
+    latency_ms: Number(link.latencyMs) || 0,
+    notes: link.notes || '',
+    created_by: userId || null,
+  };
+}
+
+export function rowToLink(row) {
+  return sanitizeServerLink({
+    id: row.id,
+    sourceServerId: row.source_server_id,
+    targetServerId: row.target_server_id,
+    linkType: row.link_type,
+    status: row.status,
+    latencyMs: row.latency_ms,
+    notes: row.notes,
+    createdAt: row.created_at,
+  });
+}
+
+export function groupToRow(group, userId) {
+  return {
+    group_name: group.groupName,
+    group_type: group.groupType,
+    region: group.region,
+    environment: group.environment,
+    server_ids: group.serverIds || [],
+    notes: group.notes || '',
+    created_by: userId || null,
+  };
+}
+
+export function rowToGroup(row) {
+  return sanitizeServerGroup({
+    id: row.id,
+    groupName: row.group_name,
+    groupType: row.group_type,
+    region: row.region,
+    environment: row.environment,
+    serverIds: row.server_ids,
+    notes: row.notes,
+    createdAt: row.created_at,
+  });
 }
 
 export function rowToServer(row) {

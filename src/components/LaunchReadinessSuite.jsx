@@ -11,7 +11,10 @@ import {
   FileArchive,
   Gauge,
   HardDrive,
+  Link2,
   Lock,
+  Map,
+  Network,
   RefreshCw,
   Save,
   Server,
@@ -41,16 +44,27 @@ import {
 } from '../services/themeService';
 import {
   blankServerConfig,
-  buildInfrastructureAlerts,
-  buildServerActivity,
+  blankServerGroup,
+  blankServerLink,
+  buildInfrastructureAnalytics,
+  buildInfrastructureTimeline,
+  buildNetworkAlerts,
   buildServerSummary,
   connectedServiceOptions,
+  groupToRow,
+  rowToGroup,
+  rowToLink,
+  sanitizeServerGroup,
   maskSensitiveValue,
   rowToServer,
   sanitizeServerConfig,
+  sanitizeServerLink,
   serverEnvironments,
+  serverGroupTypes,
+  serverLinkTypes,
   serverStatuses,
   serverToRow,
+  linkToRow,
   serverTypes,
 } from '../services/infrastructureService';
 import '../launch-readiness.css';
@@ -255,10 +269,27 @@ export function SettingsCenter({
       return [];
     }
   });
+  const [serverLinks, setServerLinks] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-server-links') || '[]').map(sanitizeServerLink);
+    } catch {
+      return [];
+    }
+  });
+  const [serverGroups, setServerGroups] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-server-groups') || '[]').map(sanitizeServerGroup);
+    } catch {
+      return [];
+    }
+  });
   const [serverForm, setServerForm] = useState(blankServerConfig);
+  const [linkForm, setLinkForm] = useState(blankServerLink);
+  const [groupForm, setGroupForm] = useState(blankServerGroup);
   const [editingServerId, setEditingServerId] = useState('');
   const [selectedServerId, setSelectedServerId] = useState('');
   const [serverSyncAvailable, setServerSyncAvailable] = useState(true);
+  const [networkSyncAvailable, setNetworkSyncAvailable] = useState(true);
 
   useEffect(() => {
     setProfile({
@@ -294,6 +325,33 @@ export function SettingsCenter({
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    let mounted = true;
+    async function loadNetwork() {
+      if (!user?.id) return;
+      const [linksResult, groupsResult] = await Promise.all([
+        supabase.from('server_links').select('*').order('created_at', { ascending: false }),
+        supabase.from('server_groups').select('*').order('created_at', { ascending: false }),
+      ]);
+      if (!mounted) return;
+      if (linksResult.error || groupsResult.error) {
+        setNetworkSyncAvailable(false);
+        return;
+      }
+      setNetworkSyncAvailable(true);
+      const mappedLinks = (linksResult.data || []).map(rowToLink);
+      const mappedGroups = (groupsResult.data || []).map(rowToGroup);
+      setServerLinks(mappedLinks);
+      setServerGroups(mappedGroups);
+      localStorage.setItem('velora-server-links', JSON.stringify(mappedLinks));
+      localStorage.setItem('velora-server-groups', JSON.stringify(mappedGroups));
+    }
+    loadNetwork();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
+
   function updatePref(key, value) {
     const next = { ...prefs, [key]: value };
     setPrefs(next);
@@ -319,6 +377,16 @@ export function SettingsCenter({
   async function persistServers(nextServers) {
     setServers(nextServers);
     localStorage.setItem('velora-server-control-center', JSON.stringify(nextServers));
+  }
+
+  async function persistServerLinks(nextLinks) {
+    setServerLinks(nextLinks);
+    localStorage.setItem('velora-server-links', JSON.stringify(nextLinks));
+  }
+
+  async function persistServerGroups(nextGroups) {
+    setServerGroups(nextGroups);
+    localStorage.setItem('velora-server-groups', JSON.stringify(nextGroups));
   }
 
   async function saveServerConfiguration(event) {
@@ -397,6 +465,86 @@ export function SettingsCenter({
     setServerForm((value) => ({ ...value, linkedServices }));
   }
 
+  async function saveServerLink(event) {
+    event.preventDefault();
+    if (!canManageCompany) {
+      setNotice('Only CEO and Company Manager accounts can link servers.');
+      return;
+    }
+    const cleanLink = sanitizeServerLink(linkForm);
+    if (!cleanLink.sourceServerId || !cleanLink.targetServerId || cleanLink.sourceServerId === cleanLink.targetServerId) {
+      setNotice('Choose two different servers before creating a network link.');
+      return;
+    }
+
+    let savedLink = cleanLink;
+    let syncedToSupabase = networkSyncAvailable;
+    if (networkSyncAvailable && user?.id) {
+      const { data, error } = await supabase
+        .from('server_links')
+        .insert(linkToRow(cleanLink, user.id))
+        .select()
+        .single();
+      if (error) {
+        setNetworkSyncAvailable(false);
+        syncedToSupabase = false;
+      } else {
+        savedLink = rowToLink(data);
+        syncedToSupabase = true;
+      }
+    }
+
+    await persistServerLinks([savedLink, ...serverLinks]);
+    setLinkForm(blankServerLink);
+    setNotice(syncedToSupabase ? 'Server link saved.' : 'Server link saved locally. Run the Phase 15 SQL migration to enable Supabase sync.');
+  }
+
+  function toggleGroupServer(serverId) {
+    setGroupForm((value) => {
+      const current = value.serverIds || [];
+      return {
+        ...value,
+        serverIds: current.includes(serverId)
+          ? current.filter((id) => id !== serverId)
+          : [...current, serverId],
+      };
+    });
+  }
+
+  async function saveServerGroup(event) {
+    event.preventDefault();
+    if (!canManageCompany) {
+      setNotice('Only CEO and Company Manager accounts can manage server groups.');
+      return;
+    }
+    const cleanGroup = sanitizeServerGroup(groupForm);
+    if (!cleanGroup.groupName) {
+      setNotice('Add a group name before saving.');
+      return;
+    }
+
+    let savedGroup = cleanGroup;
+    let syncedToSupabase = networkSyncAvailable;
+    if (networkSyncAvailable && user?.id) {
+      const { data, error } = await supabase
+        .from('server_groups')
+        .insert(groupToRow(cleanGroup, user.id))
+        .select()
+        .single();
+      if (error) {
+        setNetworkSyncAvailable(false);
+        syncedToSupabase = false;
+      } else {
+        savedGroup = rowToGroup(data);
+        syncedToSupabase = true;
+      }
+    }
+
+    await persistServerGroups([savedGroup, ...serverGroups]);
+    setGroupForm(blankServerGroup);
+    setNotice(syncedToSupabase ? 'Server group saved.' : 'Server group saved locally. Run the Phase 15 SQL migration to enable Supabase sync.');
+  }
+
   async function saveProfile(event) {
     event.preventDefault();
     if (!canManageCompany || !saveCompany) return;
@@ -422,9 +570,27 @@ export function SettingsCenter({
   const activePreset = resolveTheme(theme);
   const activeAppearance = appearance || {};
   const serverSummary = buildServerSummary(servers);
-  const infrastructureAlerts = buildInfrastructureAlerts(servers);
-  const serverActivity = buildServerActivity(servers);
+  const infrastructureAnalytics = buildInfrastructureAnalytics(servers, serverLinks, serverGroups);
+  const networkAlerts = buildNetworkAlerts(servers, serverLinks, serverGroups);
+  const infrastructureTimeline = buildInfrastructureTimeline(servers, serverLinks, serverGroups);
   const selectedServer = servers.find((server) => server.id === selectedServerId) || servers[0];
+  const networkNodes = servers.map((server, index) => {
+    const angle = (Math.PI * 2 * index) / Math.max(servers.length, 1);
+    const radius = servers.length > 4 ? 38 : 30;
+    return {
+      ...server,
+      x: 50 + Math.cos(angle) * radius,
+      y: 50 + Math.sin(angle) * radius,
+    };
+  });
+  const networkLinkLines = serverLinks
+    .map((link) => ({
+      ...link,
+      source: networkNodes.find((node) => node.id === link.sourceServerId),
+      target: networkNodes.find((node) => node.id === link.targetServerId),
+    }))
+    .filter((link) => link.source && link.target);
+  const serverNameById = (serverId) => servers.find((server) => server.id === serverId)?.serverName || 'Unknown server';
 
   return (
     <div className="launch-page">
@@ -655,6 +821,126 @@ export function SettingsCenter({
           )}
         </Panel>
       </div>
+      <Panel eyebrow="Multi-server network" title="Infrastructure universe" description="Monitor regional servers, linked services, failover readiness, and cluster health from one control surface.">
+        <div className="infrastructure-network-dashboard">
+          <Metric icon={Gauge} label="Network health" value={`${infrastructureAnalytics.networkHealthScore}/100`} detail="Availability, latency, uptime, and link quality" tone={infrastructureAnalytics.networkHealthScore >= 80 ? 'success' : 'warning'} />
+          <Metric icon={Map} label="Regions" value={infrastructureAnalytics.regionalDistribution.length} detail="Active infrastructure footprints" />
+          <Metric icon={Link2} label="Active links" value={infrastructureAnalytics.activeLinks} detail={`${serverLinks.length} total server relationships`} />
+          <Metric icon={ShieldCheck} label="Backup coverage" value={infrastructureAnalytics.backupCoverage ? 'Ready' : 'Gap'} detail="Primary to backup readiness" tone={infrastructureAnalytics.backupCoverage ? 'success' : 'warning'} />
+        </div>
+        <div className="launch-grid two infrastructure-network-grid">
+          <div className="server-network-map">
+            <div className="network-map-header">
+              <span><Network size={18} />Server network map</span>
+              <small>{servers.length} nodes - {serverLinks.length} links</small>
+            </div>
+            <svg className="network-map-frame" viewBox="0 0 100 100" role="img" aria-label="Server network relationship map">
+              <defs>
+                <radialGradient id="serverNodeGlow" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="var(--accent-color)" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="var(--accent-color)" stopOpacity="0.18" />
+                </radialGradient>
+              </defs>
+              {networkLinkLines.map((link) => (
+                <line
+                  className={`network-link ${link.status.toLowerCase()}`}
+                  key={link.id}
+                  x1={link.source.x}
+                  y1={link.source.y}
+                  x2={link.target.x}
+                  y2={link.target.y}
+                />
+              ))}
+              {networkNodes.map((node) => (
+                <g className={`network-node ${node.status.toLowerCase()}`} key={node.id} onClick={() => setSelectedServerId(node.id)} tabIndex="0" role="button">
+                  <circle cx={node.x} cy={node.y} r="5.6" />
+                  <text x={node.x} y={node.y + 1.2}>{node.serverName.slice(0, 2).toUpperCase()}</text>
+                </g>
+              ))}
+            </svg>
+            <div className="network-map-legend">
+              <span><i className="online" />Online</span>
+              <span><i className="warning" />Warning</span>
+              <span><i className="offline" />Offline</span>
+              <span><i className="maintenance" />Maintenance</span>
+            </div>
+          </div>
+          <div className="region-distribution">
+            <h3>Regional performance</h3>
+            {infrastructureAnalytics.regionalDistribution.map((region) => (
+              <article className="region-card" key={region.region}>
+                <div>
+                  <strong>{region.region}</strong>
+                  <small>{region.total} servers - {region.online} online - {region.warning + region.offline} issues</small>
+                </div>
+                <span>{region.avgLatency} ms</span>
+                <meter min="0" max="100" value={region.uptime}>{region.uptime}%</meter>
+              </article>
+            ))}
+            {!infrastructureAnalytics.regionalDistribution.length && <EmptyState icon={Map} title="No regional servers" text="Add server configurations to begin regional infrastructure monitoring." />}
+          </div>
+        </div>
+      </Panel>
+      <div className="launch-grid two">
+        <Panel eyebrow="Server linking" title="Relationship and failover links" description="Connect primary, backup, analytics, AI, and regional servers without storing secrets.">
+          <form className="launch-form server-network-form" onSubmit={saveServerLink}>
+            <label><span>Source server</span><select value={linkForm.sourceServerId} onChange={(event) => setLinkForm((value) => ({ ...value, sourceServerId: event.target.value }))}><option value="">Choose source</option>{servers.map((server) => <option value={server.id} key={server.id}>{server.serverName}</option>)}</select></label>
+            <label><span>Target server</span><select value={linkForm.targetServerId} onChange={(event) => setLinkForm((value) => ({ ...value, targetServerId: event.target.value }))}><option value="">Choose target</option>{servers.map((server) => <option value={server.id} key={server.id}>{server.serverName}</option>)}</select></label>
+            <label><span>Link type</span><select value={linkForm.linkType} onChange={(event) => setLinkForm((value) => ({ ...value, linkType: event.target.value }))}>{serverLinkTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label><span>Status</span><select value={linkForm.status} onChange={(event) => setLinkForm((value) => ({ ...value, status: event.target.value }))}>{serverStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+            <label><span>Latency ms</span><input type="number" value={linkForm.latencyMs} onChange={(event) => setLinkForm((value) => ({ ...value, latencyMs: event.target.value }))} /></label>
+            <label><span>Notes</span><input value={linkForm.notes} onChange={(event) => setLinkForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Failover, sync, monitoring, or routing note" /></label>
+            <div className="server-form-actions server-form-wide">
+              <button type="submit" disabled={!canManageCompany || servers.length < 2}><Link2 size={17} />Link servers</button>
+            </div>
+          </form>
+          <div className="server-link-list">
+            {serverLinks.map((link) => (
+              <article key={link.id}>
+                <span className={`server-status-dot ${link.status.toLowerCase()}`} />
+                <div>
+                  <strong>{serverNameById(link.sourceServerId)} {'->'} {serverNameById(link.targetServerId)}</strong>
+                  <small>{link.linkType} - {link.status} - {link.latencyMs || 0} ms</small>
+                </div>
+              </article>
+            ))}
+            {!serverLinks.length && <EmptyState icon={Link2} title="No server links yet" text="Create links to model primary-backup, analytics, AI, regional, and failover relationships." />}
+          </div>
+        </Panel>
+        <Panel eyebrow="Server groups" title="Clusters and regional foundations" description="Group infrastructure into production, analytics, AI, backup, and regional clusters.">
+          <form className="launch-form server-network-form" onSubmit={saveServerGroup}>
+            <label><span>Group name</span><input value={groupForm.groupName} onChange={(event) => setGroupForm((value) => ({ ...value, groupName: event.target.value }))} placeholder="Production Cluster" /></label>
+            <label><span>Group type</span><select value={groupForm.groupType} onChange={(event) => setGroupForm((value) => ({ ...value, groupType: event.target.value }))}>{serverGroupTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label><span>Region</span><input value={groupForm.region} onChange={(event) => setGroupForm((value) => ({ ...value, region: event.target.value }))} placeholder="India / Global" /></label>
+            <label><span>Environment</span><select value={groupForm.environment} onChange={(event) => setGroupForm((value) => ({ ...value, environment: event.target.value }))}>{serverEnvironments.map((environment) => <option key={environment}>{environment}</option>)}</select></label>
+            <div className="server-mini-picker server-form-wide">
+              <span>Servers in group</span>
+              <div>
+                {servers.map((server) => (
+                  <button type="button" className={(groupForm.serverIds || []).includes(server.id) ? 'active' : ''} key={server.id} onClick={() => toggleGroupServer(server.id)}>{server.serverName}</button>
+                ))}
+              </div>
+            </div>
+            <label className="server-form-wide"><span>Notes</span><input value={groupForm.notes} onChange={(event) => setGroupForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Ownership, region policy, disaster recovery note" /></label>
+            <div className="server-form-actions server-form-wide">
+              <button type="submit" disabled={!canManageCompany}><Network size={17} />Create group</button>
+            </div>
+          </form>
+          <div className="server-group-list">
+            {infrastructureAnalytics.groupHealth.map((group) => (
+              <article className="server-group-card" key={group.id}>
+                <div>
+                  <strong>{group.groupName}</strong>
+                  <small>{group.groupType} - {group.region} - {group.environment}</small>
+                </div>
+                <span>{group.online}/{group.total} online</span>
+                <meter min="0" max="100" value={group.uptime}>{group.uptime}%</meter>
+              </article>
+            ))}
+            {!serverGroups.length && <EmptyState icon={Network} title="No server groups yet" text="Create a cluster to prepare global scaling, regional routing, and future failover." />}
+          </div>
+        </Panel>
+      </div>
       <div className="launch-grid two">
         <Panel eyebrow="Server registry" title="Configured infrastructure">
           <div className="server-list">
@@ -674,25 +960,25 @@ export function SettingsCenter({
         </Panel>
         <Panel eyebrow="Infrastructure alerts" title="Health and configuration risks">
           <div className="server-alert-list">
-            {infrastructureAlerts.map((alert) => (
+            {networkAlerts.map((alert) => (
               <article key={alert.id}>
                 <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
                 <div><strong>{alert.title}</strong><p>{alert.message}</p></div>
               </article>
             ))}
-            {!infrastructureAlerts.length && <EmptyState icon={ShieldCheck} title="Infrastructure looks clean" text="No offline, high-latency, missing configuration, or AI function alerts detected." />}
+            {!networkAlerts.length && <EmptyState icon={ShieldCheck} title="Infrastructure looks clean" text="No offline, high-latency, missing configuration, group, or AI function alerts detected." />}
           </div>
         </Panel>
       </div>
       <Panel eyebrow="Server activity log" title="Infrastructure timeline" description="Tracks server added, updated, status checked, failed checks, backups, and configuration changes.">
         <div className="server-activity-list">
-          {serverActivity.slice(0, 12).map((item) => (
+          {infrastructureTimeline.slice(0, 12).map((item) => (
             <div key={item.id}>
               <Database size={16} />
               <span><strong>{item.title}</strong><small>{item.detail} - {new Date(item.createdAt).toLocaleString()}</small></span>
             </div>
           ))}
-          {!serverActivity.length && <EmptyState icon={Database} title="No server activity yet" text="Activity will appear as infrastructure records are added and checked." />}
+          {!infrastructureTimeline.length && <EmptyState icon={Database} title="No server activity yet" text="Activity will appear as infrastructure records, links, groups, and health checks are added." />}
         </div>
       </Panel>
       <div className="launch-grid two">
