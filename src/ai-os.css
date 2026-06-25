@@ -1,0 +1,512 @@
+.aios-page {
+  display: grid;
+  gap: 22px;
+}
+
+.aios-hero {
+  position: relative;
+}
+
+.aios-hero-badge,
+.aios-metric,
+.aios-panel,
+.aios-executive-card,
+.aios-scorecard,
+.aios-recommendation-list article,
+.aios-boardroom article,
+.aios-collaboration-list article {
+  border: 1px solid var(--border);
+  background: linear-gradient(145deg, var(--surface), var(--surface-muted));
+  box-shadow: var(--shadow-soft);
+}
+
+.aios-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 999px;
+  padding: 11px 15px;
+  color: var(--text);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.aios-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.aios-metric {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 118px;
+  border-radius: 20px;
+  padding: 18px;
+}
+
+.aios-metric > span,
+.aios-executive-card header > span,
+.aios-scorecard header > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.aios-metric small,
+.aios-executive-card small,
+.aios-scorecard p,
+.aios-recommendation-list p,
+.aios-boardroom p,
+.aios-collaboration-list p,
+.aios-memory-list p {
+  color: var(--muted);
+}
+
+.aios-metric strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: clamp(1.45rem, 2vw, 2rem);
+  line-height: 1.08;
+}
+
+.aios-metric em {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.8rem;
+}
+
+.aios-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.aios-grid.main {
+  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.7fr);
+}
+
+.aios-grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aios-panel {
+  border-radius: 24px;
+  padding: 22px;
+  overflow: hidden;
+}
+
+.aios-panel h2 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: clamp(1.2rem, 1.5vw, 1.6rem);
+  line-height: 1.18;
+}
+
+.aios-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.aios-panel-heading > span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 8px 11px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.aios-executive-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.aios-executive-card {
+  display: grid;
+  gap: 14px;
+  min-height: 285px;
+  border-radius: 20px;
+  padding: 17px;
+}
+
+.aios-executive-card header,
+.aios-scorecard header,
+.aios-recommendation-list header,
+.aios-recommendation-list footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.aios-executive-card header div,
+.aios-scorecard header strong {
+  min-width: 0;
+}
+
+.aios-executive-card h3 {
+  margin: 3px 0 0;
+  color: var(--text);
+  font-size: 1.04rem;
+}
+
+.aios-executive-card header > strong,
+.aios-scorecard header b {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 1.15rem;
+}
+
+.aios-executive-card > p,
+.aios-briefing p,
+.aios-answer p {
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.aios-executive-section {
+  display: grid;
+  gap: 6px;
+}
+
+.aios-executive-section span {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.aios-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.aios-confidence i,
+.aios-scorecard > i {
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.aios-confidence i {
+  width: 76px;
+  height: 7px;
+}
+
+.aios-confidence em,
+.aios-scorecard em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #22c55e);
+}
+
+.aios-question-list {
+  display: grid;
+  gap: 9px;
+  margin: 18px 0;
+}
+
+.aios-question-list button,
+.aios-tabs button,
+.aios-primary-button,
+.aios-recommendation-list footer button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.aios-question-list button {
+  padding: 11px 13px;
+  text-align: left;
+}
+
+.aios-command-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--input-bg);
+  padding: 0 14px;
+  color: var(--muted);
+}
+
+.aios-command-input:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 72%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.aios-command-input input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.aios-primary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 12px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+}
+
+.aios-answer {
+  margin-top: 15px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-soft);
+  padding: 15px;
+}
+
+.aios-answer strong,
+.aios-briefing strong,
+.aios-recommendation-list strong,
+.aios-boardroom strong,
+.aios-collaboration-list strong,
+.aios-memory-list strong {
+  color: var(--text);
+}
+
+.aios-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+}
+
+.aios-tabs button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-color: transparent;
+}
+
+.aios-tabs button.active {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--accent);
+}
+
+.aios-briefing {
+  display: grid;
+  gap: 12px;
+}
+
+.aios-briefing p {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 13px;
+}
+
+.aios-collaboration-list,
+.aios-recommendation-list,
+.aios-boardroom,
+.aios-memory-list,
+.aios-governance-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.aios-collaboration-list article,
+.aios-recommendation-list article {
+  display: grid;
+  gap: 11px;
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.aios-collaboration-list footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aios-collaboration-list footer span,
+.aios-severity,
+.aios-recommendation-list header span,
+.aios-recommendation-list footer em {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  padding: 7px 10px;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.aios-collaboration-list article > em {
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.aios-score-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.aios-scorecard {
+  display: grid;
+  gap: 14px;
+  border-radius: 18px;
+  padding: 16px;
+}
+
+.aios-scorecard > i {
+  width: 100%;
+  height: 9px;
+}
+
+.aios-scorecard p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.aios-recommendation-list header {
+  justify-content: space-between;
+}
+
+.aios-recommendation-list header b {
+  color: var(--accent);
+}
+
+.aios-recommendation-list footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.aios-recommendation-list footer button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.aios-boardroom {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aios-boardroom article {
+  border-radius: 16px;
+  padding: 15px;
+}
+
+.aios-boardroom span {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.aios-governance-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.aios-governance-grid article,
+.aios-memory-list article {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-soft);
+  padding: 14px;
+  color: var(--text);
+}
+
+.aios-governance-grid svg,
+.aios-memory-list svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.aios-severity.critical,
+.aios-severity.high {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+.aios-severity.medium {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+}
+
+.aios-severity.low {
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+}
+
+@media (max-width: 1200px) {
+  .aios-metrics-grid,
+  .aios-score-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .aios-executive-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 920px) {
+  .aios-grid.main,
+  .aios-grid.two,
+  .aios-metrics-grid,
+  .aios-score-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .aios-executive-grid,
+  .aios-boardroom,
+  .aios-governance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aios-panel,
+  .aios-metric,
+  .aios-executive-card {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .aios-panel-heading {
+    flex-direction: column;
+  }
+
+  .aios-tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

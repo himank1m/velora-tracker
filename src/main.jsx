@@ -69,11 +69,13 @@ import {
 import { isSupabaseConfigured, supabase, supabaseConfigError } from './supabaseClient';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import AiCooCommandCenter from './components/AiCooCommandCenter';
+import AiOperatingSystemCenter from './components/AiOperatingSystemCenter';
 import CommunicationCenter from './components/CommunicationCenter';
 import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
 import HrWorkforceCenter from './components/HrWorkforceCenter';
 import KnowledgeHub from './components/KnowledgeHub';
+import MarketplaceCenter from './components/MarketplaceCenter';
 import PayrollCompensationCenter from './components/PayrollCompensationCenter';
 import PortalCenter from './components/PortalCenter';
 import ProjectManagementCenter from './components/ProjectManagementCenter';
@@ -362,9 +364,9 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Portals', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Knowledge Hub', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Portals', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Knowledge Hub', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
-  { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
+  { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Portals'] },
   { label: 'People', pages: ['Employees', 'Payroll', 'Communication'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
@@ -378,6 +380,8 @@ const navIcons = {
   'Product Tour': PlayCircle,
   Showcase: Eye,
   Ecosystem: Network,
+  Marketplace: Globe2,
+  AIOS: Sparkles,
   'AI COO': Bot,
   'Digital Twin': Globe2,
   'Time Machine': History,
@@ -1986,9 +1990,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages.filter((page) => page !== 'User Management'),
-    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Shipments', 'Documents', 'Knowledge Hub', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Knowledge Hub', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Knowledge Hub', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
+    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Shipments', 'Documents', 'Knowledge Hub', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Knowledge Hub', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Knowledge Hub', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2054,6 +2058,9 @@ function createPermissions(role) {
       return isExecutive;
     },
     canManagePortals() {
+      return isExecutive;
+    },
+    canManageMarketplace() {
       return isExecutive;
     },
     canViewFinancials() {
@@ -8054,6 +8061,8 @@ function App() {
             {activePage === 'Product Tour' && <ProductTourCenter activePage={activePage} onNavigate={goToPage} />}
             {activePage === 'Showcase' && <ProductShowcasePage embedded />}
             {activePage === 'Ecosystem' && <EcosystemCenter companies={ecosystem.companies} relationships={ecosystem.relationships} transactions={ecosystem.transactions} events={ecosystem.events} currentCompany={ecosystem.currentCompany} ready={ecosystem.ready} saveCompany={ecosystem.saveCompany} saveRelationship={ecosystem.saveRelationship} saveTransaction={ecosystem.saveTransaction} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} logisticsPartners={logisticsPartners} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} canManage={permissions.isExecutive} canViewFinancials={permissions.canViewFinancials()} />}
+            {activePage === 'Marketplace' && <MarketplaceCenter user={user} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} suppliers={suppliers} logisticsPartners={logisticsPartners} ecosystemCompanies={ecosystem.companies} ecosystemRelationships={ecosystem.relationships} canManage={permissions.canManageMarketplace()} />}
+            {activePage === 'AIOS' && <AiOperatingSystemCenter vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} logisticsPartners={logisticsPartners} financeRecords={financeRecords} employees={employees} payrollRecords={payrollRecords} documents={documents} strategicScenarios={strategicScenarios} ecosystemCompanies={ecosystem.companies} ecosystemRelationships={ecosystem.relationships} canViewFinancials={permissions.canViewFinancials()} onNavigate={goToPage} />}
             {activePage === 'AI COO' && <AiCooCommandCenter userId={user.id} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} onOpenChat={() => setAiOpen(true)} />}
             {activePage === 'Digital Twin' && <DigitalTwin vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Time Machine' && <TimeMachine userId={user.id} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} financeRecords={financeRecords} documents={documents} orderTimelines={orderTimelines} procurementTimelines={procurementTimelines} shipmentEvents={shipmentEvents} vehicleEvents={vehicleEvents} onNavigate={goToPage} canViewFinancials={permissions.canViewFinancials()} />}

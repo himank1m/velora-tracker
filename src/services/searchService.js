@@ -147,6 +147,20 @@ export function buildSearchIndex({
       ['company switcher', 'multi-company', 'business network', 'partnership', 'intercompany', 'tenant'],
     ),
     searchDocument(
+      'Marketplace',
+      'Marketplace',
+      'Ecosystem Marketplace',
+      'Discover suppliers, logistics providers, strategic partners, opportunities, and business relationships',
+      ['supplier marketplace', 'logistics marketplace', 'partner directory', 'opportunity exchange', 'vendor discovery'],
+    ),
+    searchDocument(
+      'AIOS',
+      'AIOS',
+      'AI Operating System',
+      'Digital executive board with AI COO, CFO, HR, Logistics, Procurement, and Strategy directors',
+      ['ai executive board', 'ai cfo', 'ai hr director', 'ai logistics director', 'boardroom', 'executive briefing'],
+    ),
+    searchDocument(
       'Onboarding',
       'Onboarding',
       'First-time setup',
