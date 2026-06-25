@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   BarChart3,
   Bell,
+  BookOpen,
   Bot,
   Boxes,
   ChevronLeft,
@@ -72,6 +73,7 @@ import CommunicationCenter from './components/CommunicationCenter';
 import DigitalTwin from './components/DigitalTwin';
 import EcosystemCenter from './components/EcosystemCenter';
 import HrWorkforceCenter from './components/HrWorkforceCenter';
+import KnowledgeHub from './components/KnowledgeHub';
 import PayrollCompensationCenter from './components/PayrollCompensationCenter';
 import ProjectManagementCenter from './components/ProjectManagementCenter';
 import {
@@ -359,14 +361,14 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Knowledge Hub', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
   { label: 'Operations', pages: ['Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
   { label: 'People', pages: ['Employees', 'Payroll', 'Communication'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
-  { label: 'Knowledge', pages: ['Documents', 'Release Notes'] },
+  { label: 'Knowledge', pages: ['Documents', 'Knowledge Hub', 'Release Notes'] },
   { label: 'System', pages: ['Backup & Recovery', 'Settings', 'User Management', 'Launch Readiness', 'Audit Logs'] },
 ];
 const navIcons = {
@@ -391,6 +393,7 @@ const navIcons = {
   Shipments: Truck,
   Finance: CircleDollarSign,
   Documents: FolderLock,
+  'Knowledge Hub': BookOpen,
   Timeline: TimelineIcon,
   Reports: FileText,
   'Alerts Center': Bell,
@@ -1981,9 +1984,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages.filter((page) => page !== 'User Management'),
-    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Shipments', 'Documents', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
+    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Shipments', 'Documents', 'Knowledge Hub', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Knowledge Hub', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Knowledge Hub', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2043,6 +2046,9 @@ function createPermissions(role) {
       return isExecutive;
     },
     canManageProjects() {
+      return isExecutive;
+    },
+    canManageKnowledge() {
       return isExecutive;
     },
     canViewFinancials() {
@@ -8059,6 +8065,7 @@ function App() {
             {activePage === 'Shipments' && <Shipments shipments={shipments} shipmentEvents={shipmentEvents} saveShipment={saveShipment} deleteShipment={deleteShipment} orders={orders} logisticsPartners={logisticsPartners} saveLogisticsPartner={saveLogisticsPartner} deleteLogisticsPartner={deleteLogisticsPartner} canEdit={permissions.canManageShipments()} canDelete={permissions.canDeleteRecords('Shipments')} />}
             {activePage === 'Finance' && (phase2Ready ? <Finance financeRecords={financeRecords} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} saveFinanceRecord={saveFinanceRecord} deleteFinanceRecord={deleteFinanceRecord} canEdit={permissions.canManageFinance()} /> : <Phase2SetupState moduleName="Finance & Profit Center" />)}
             {activePage === 'Documents' && (phase2Ready ? <DocumentVault documents={documents} uploadDocument={uploadDocument} openDocument={openDocument} deleteDocument={deleteDocument} canEdit={permissions.canManageDocuments()} /> : <Phase2SetupState moduleName="Document Vault" />)}
+            {activePage === 'Knowledge Hub' && <KnowledgeHub user={user} profile={profile} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} documents={documents} canEdit={permissions.canManageKnowledge()} />}
             {activePage === 'Timeline' && <TimelineOverview orders={orders} orderTimelines={orderTimelines} />}
             {activePage === 'Reports' && <Reports vehicles={vehicles} orders={orders} customers={customers} shipments={shipments} procurementRequests={procurementRequests} suppliers={suppliers} employees={employees} payrollRecords={payrollRecords} attendanceRecords={attendanceRecords} hrDepartments={hrDepartments} />}
             {activePage === 'Alerts Center' && <AlertsCenter alerts={alerts} />}
