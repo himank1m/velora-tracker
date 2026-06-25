@@ -75,6 +75,7 @@ import EcosystemCenter from './components/EcosystemCenter';
 import HrWorkforceCenter from './components/HrWorkforceCenter';
 import KnowledgeHub from './components/KnowledgeHub';
 import PayrollCompensationCenter from './components/PayrollCompensationCenter';
+import PortalCenter from './components/PortalCenter';
 import ProjectManagementCenter from './components/ProjectManagementCenter';
 import {
   BackupRecoveryCenter,
@@ -361,10 +362,10 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
-const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Knowledge Hub', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
+const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Portals', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Knowledge Hub', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
-  { label: 'Operations', pages: ['Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers'] },
+  { label: 'Operations', pages: ['Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Portals'] },
   { label: 'People', pages: ['Employees', 'Payroll', 'Communication'] },
   { label: 'Logistics', pages: ['Shipments', 'Timeline'] },
   { label: 'Intelligence', pages: ['Finance', 'Reports', 'Alerts Center', 'Notifications'] },
@@ -387,6 +388,7 @@ const navIcons = {
   Orders: ClipboardList,
   Quotes: FileText,
   Customers: Users,
+  Portals: Globe2,
   Employees: Users,
   Payroll: CircleDollarSign,
   Communication: Send,
@@ -1984,9 +1986,9 @@ function createPermissions(role) {
   const allowedPagesByRole = {
     CEO: pages,
     'Company Manager': pages.filter((page) => page !== 'User Management'),
-    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Shipments', 'Documents', 'Knowledge Hub', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Knowledge Hub', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
-    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Knowledge Hub', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
+    'Logistics Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Shipments', 'Documents', 'Knowledge Hub', 'Timeline', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Inventory Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Procurement', 'Inventory', 'Documents', 'Knowledge Hub', 'Alerts Center', 'Notifications', 'Settings', 'Release Notes'],
+    'Finance Manager': ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Portals', 'Communication', 'Procurement', 'Quotes', 'Payroll', 'Finance', 'Documents', 'Knowledge Hub', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'Release Notes'],
   };
   const allowedPages = allowedPagesByRole[normalizedRole] || [];
 
@@ -2049,6 +2051,9 @@ function createPermissions(role) {
       return isExecutive;
     },
     canManageKnowledge() {
+      return isExecutive;
+    },
+    canManagePortals() {
       return isExecutive;
     },
     canViewFinancials() {
@@ -8059,6 +8064,7 @@ function App() {
             {activePage === 'Orders' && <Orders orders={orders} saveOrder={saveOrder} deleteOrder={deleteOrder} updateOrderStatus={updateOrderStatus} vehicles={vehicles} customers={customers} orderTimelines={orderTimelines} addOrderTimelineNote={addOrderTimelineNote} canEdit={permissions.canManageOrders()} canDelete={permissions.canDeleteRecords('Orders')} />}
             {activePage === 'Quotes' && <Quotes quotes={quotes} saveQuote={saveQuote} deleteQuote={deleteQuote} vehicles={vehicles} customers={customers} canEdit={permissions.canManageQuotes()} canDelete={permissions.canDeleteRecords('Quotes')} />}
             {activePage === 'Customers' && <Customers customers={customers} orders={orders} shipments={shipments} financeRecords={financeRecords} documents={documents} customerContacts={customerContacts} customerNotes={customerNotes} saveCustomer={saveCustomer} deleteCustomer={deleteCustomer} saveCustomerContact={saveCustomerContact} deleteCustomerContact={deleteCustomerContact} addCustomerNote={addCustomerNote} deleteCustomerNote={deleteCustomerNote} canEdit={permissions.canManageCustomers()} canDelete={permissions.canDeleteRecords('Customers')} />}
+            {activePage === 'Portals' && <PortalCenter user={user} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} customers={customers} suppliers={suppliers} orders={orders} shipments={shipments} procurementRequests={procurementRequests} documents={documents} canManage={permissions.canManagePortals()} />}
             {activePage === 'Employees' && <HrWorkforceCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} attendanceRecords={attendanceRecords} leaveRequests={leaveRequests} performanceNotes={performanceNotes} documents={documents} saveEmployee={saveEmployee} deleteEmployee={deleteEmployee} saveHrDepartment={saveHrDepartment} deleteHrDepartment={deleteHrDepartment} savePayrollRecord={savePayrollRecord} deletePayrollRecord={deletePayrollRecord} saveAttendanceRecord={saveAttendanceRecord} deleteAttendanceRecord={deleteAttendanceRecord} saveLeaveRequest={saveLeaveRequest} updateLeaveStatus={updateLeaveStatus} deleteLeaveRequest={deleteLeaveRequest} savePerformanceNote={savePerformanceNote} deletePerformanceNote={deletePerformanceNote} uploadDocument={uploadDocument} canEdit={permissions.canManageHR()} canDelete={permissions.canDeleteRecords('Employees')} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Payroll' && <PayrollCompensationCenter employees={employees} hrDepartments={hrDepartments} payrollRecords={payrollRecords} payrollCycles={payrollCycles} salaryHistory={salaryHistory} bonuses={bonuses} deductions={deductions} performanceNotes={performanceNotes} savePayrollCycle={savePayrollCycle} updatePayrollCycleStatus={updatePayrollCycleStatus} saveSalaryHistory={saveSalaryHistory} saveBonus={saveBonus} saveDeduction={saveDeduction} canEdit={permissions.canManagePayroll()} canApprove={permissions.canManagePayroll()} canViewFinancials={permissions.canViewFinancials()} />}
             {activePage === 'Communication' && <CommunicationCenter user={user} profile={profile} role={permissions.role} companyId={ecosystem.ready ? ecosystem.currentCompanyId : null} alerts={alerts} financeRecords={permissions.canViewFinancials() ? financeRecords : []} procurementRequests={procurementRequests} payrollRecords={permissions.canViewFinancials() ? payrollRecords : []} documents={documents} employees={employees} canManage={permissions.canManageCommunication()} />}
