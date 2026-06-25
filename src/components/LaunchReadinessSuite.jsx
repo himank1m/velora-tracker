@@ -5,13 +5,16 @@ import {
   Brush,
   Building2,
   CheckCircle2,
+  Cloud,
   Database,
   Download,
   FileArchive,
   Gauge,
+  HardDrive,
   Lock,
   RefreshCw,
   Save,
+  Server,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -36,6 +39,20 @@ import {
   resolveTheme,
   themePresets,
 } from '../services/themeService';
+import {
+  blankServerConfig,
+  buildInfrastructureAlerts,
+  buildServerActivity,
+  buildServerSummary,
+  connectedServiceOptions,
+  maskSensitiveValue,
+  rowToServer,
+  sanitizeServerConfig,
+  serverEnvironments,
+  serverStatuses,
+  serverToRow,
+  serverTypes,
+} from '../services/infrastructureService';
 import '../launch-readiness.css';
 
 const roles = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory Manager', 'Finance Manager'];
@@ -194,6 +211,7 @@ export function SettingsCenter({
   appearance,
   updateAppearance,
   resetAppearance,
+  user,
   company,
   companies = [],
   currentCompanyId,
@@ -230,6 +248,17 @@ export function SettingsCenter({
       return {};
     }
   });
+  const [servers, setServers] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('velora-server-control-center') || '[]').map(sanitizeServerConfig);
+    } catch {
+      return [];
+    }
+  });
+  const [serverForm, setServerForm] = useState(blankServerConfig);
+  const [editingServerId, setEditingServerId] = useState('');
+  const [selectedServerId, setSelectedServerId] = useState('');
+  const [serverSyncAvailable, setServerSyncAvailable] = useState(true);
 
   useEffect(() => {
     setProfile({
@@ -240,6 +269,30 @@ export function SettingsCenter({
       phone: company?.phone || '',
     });
   }, [company]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadServers() {
+      if (!user?.id) return;
+      const { data, error } = await supabase
+        .from('server_configurations')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!mounted) return;
+      if (error) {
+        setServerSyncAvailable(false);
+        return;
+      }
+      setServerSyncAvailable(true);
+      const mapped = (data || []).map(rowToServer);
+      setServers(mapped);
+      localStorage.setItem('velora-server-control-center', JSON.stringify(mapped));
+    }
+    loadServers();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   function updatePref(key, value) {
     const next = { ...prefs, [key]: value };
@@ -261,6 +314,87 @@ export function SettingsCenter({
     setServerFoundation(next);
     localStorage.setItem('velora-server-foundation', JSON.stringify(next));
     setNotice('Server configuration foundation saved locally.');
+  }
+
+  async function persistServers(nextServers) {
+    setServers(nextServers);
+    localStorage.setItem('velora-server-control-center', JSON.stringify(nextServers));
+  }
+
+  async function saveServerConfiguration(event) {
+    event.preventDefault();
+    if (!canManageCompany) {
+      setNotice('Only CEO and Company Manager accounts can manage server configurations.');
+      return;
+    }
+    const cleanServer = sanitizeServerConfig({
+      ...serverForm,
+      id: editingServerId || serverForm.id,
+      lastCheckedAt: serverForm.lastCheckedAt || new Date().toISOString(),
+    });
+    if (!cleanServer.serverName) {
+      setNotice('Add a server name before saving.');
+      return;
+    }
+
+    let savedServer = cleanServer;
+    let syncedToSupabase = serverSyncAvailable;
+    if (serverSyncAvailable && user?.id) {
+      const query = editingServerId
+        ? supabase.from('server_configurations').update(serverToRow(cleanServer, user.id)).eq('id', editingServerId).select().single()
+        : supabase.from('server_configurations').insert(serverToRow(cleanServer, user.id)).select().single();
+      const { data, error } = await query;
+      if (error) {
+        setServerSyncAvailable(false);
+        syncedToSupabase = false;
+      } else {
+        savedServer = rowToServer(data);
+        syncedToSupabase = true;
+      }
+    }
+
+    const nextServers = editingServerId
+      ? servers.map((server) => server.id === editingServerId ? savedServer : server)
+      : [savedServer, ...servers];
+    await persistServers(nextServers);
+    setServerForm(blankServerConfig);
+    setEditingServerId('');
+    setSelectedServerId(savedServer.id);
+    setNotice(syncedToSupabase ? 'Server configuration saved.' : 'Server saved locally. Run the Phase 14 SQL migration to enable Supabase sync.');
+  }
+
+  function editServer(server) {
+    if (!canManageCompany) {
+      setNotice('Only CEO and Company Manager accounts can edit server configurations.');
+      return;
+    }
+    setServerForm(server);
+    setEditingServerId(server.id);
+    setSelectedServerId(server.id);
+  }
+
+  async function simulateHealthCheck(server) {
+    const nextStatus = server.apiUrl ? 'Online' : 'Warning';
+    const checkedServer = sanitizeServerConfig({
+      ...server,
+      status: nextStatus,
+      responseTimeMs: server.apiUrl ? Math.max(80, Math.round(220 + Math.random() * 520)) : 0,
+      uptimePercentage: server.apiUrl ? Math.max(97, Number(server.uptimePercentage) || 99.2) : Number(server.uptimePercentage) || 0,
+      lastCheckedAt: new Date().toISOString(),
+      errorMessage: server.apiUrl ? '' : 'Missing API URL placeholder.',
+    });
+    const nextServers = servers.map((item) => item.id === server.id ? checkedServer : item);
+    await persistServers(nextServers);
+    setSelectedServerId(server.id);
+    setNotice('Health check simulated. Live network probing will be connected in a future backend phase.');
+  }
+
+  function toggleLinkedService(service) {
+    const current = serverForm.linkedServices || [];
+    const linkedServices = current.includes(service)
+      ? current.filter((item) => item !== service)
+      : [...current, service];
+    setServerForm((value) => ({ ...value, linkedServices }));
   }
 
   async function saveProfile(event) {
@@ -287,6 +421,10 @@ export function SettingsCenter({
 
   const activePreset = resolveTheme(theme);
   const activeAppearance = appearance || {};
+  const serverSummary = buildServerSummary(servers);
+  const infrastructureAlerts = buildInfrastructureAlerts(servers);
+  const serverActivity = buildServerActivity(servers);
+  const selectedServer = servers.find((server) => server.id === selectedServerId) || servers[0];
 
   return (
     <div className="launch-page">
@@ -445,6 +583,116 @@ export function SettingsCenter({
               </div>
             </article>
           ))}
+        </div>
+      </Panel>
+      <div className="launch-grid two">
+        <Panel eyebrow="Server Control Center" title="Infrastructure command layer" description="Add, monitor, and prepare server configurations for multi-region Velora OS infrastructure. Secrets are never stored here.">
+          <div className="launch-grid three server-metrics-grid">
+            <Metric icon={Server} label="Total servers" value={serverSummary.total} detail="Configured infrastructure nodes" />
+            <Metric icon={CheckCircle2} label="Active servers" value={serverSummary.active} detail="Currently marked online" tone="success" />
+            <Metric icon={AlertTriangle} label="Warnings" value={serverSummary.warning + serverSummary.offline} detail="Offline, warning, maintenance, unknown" tone="warning" />
+          </div>
+          <div className="server-primary-strip">
+            <div><small>Primary server</small><strong>{serverSummary.primary}</strong></div>
+            <div><small>Backup server</small><strong>{serverSummary.backup}</strong></div>
+            <div><small>Sync mode</small><strong>{serverSyncAvailable ? 'Supabase ready' : 'Local fallback'}</strong></div>
+          </div>
+          <form className="launch-form server-form" onSubmit={saveServerConfiguration}>
+            <label><span>Server name</span><input value={serverForm.serverName} onChange={(event) => setServerForm((value) => ({ ...value, serverName: event.target.value }))} placeholder="Velora Primary Supabase" /></label>
+            <label><span>Server type</span><select value={serverForm.serverType} onChange={(event) => setServerForm((value) => ({ ...value, serverType: event.target.value }))}>{serverTypes.map((type) => <option key={type}>{type}</option>)}</select></label>
+            <label><span>Region</span><input value={serverForm.region} onChange={(event) => setServerForm((value) => ({ ...value, region: event.target.value }))} placeholder="India / Mumbai" /></label>
+            <label><span>Environment</span><select value={serverForm.environment} onChange={(event) => setServerForm((value) => ({ ...value, environment: event.target.value }))}>{serverEnvironments.map((environment) => <option key={environment}>{environment}</option>)}</select></label>
+            <label><span>API URL</span><input value={serverForm.apiUrl} onChange={(event) => setServerForm((value) => ({ ...value, apiUrl: event.target.value }))} placeholder="https://api.example.com" /></label>
+            <label><span>Database reference</span><input value={serverForm.databaseReference} onChange={(event) => setServerForm((value) => ({ ...value, databaseReference: event.target.value }))} placeholder="Project ref or masked database URL" /></label>
+            <label><span>Storage URL</span><input value={serverForm.storageUrl} onChange={(event) => setServerForm((value) => ({ ...value, storageUrl: event.target.value }))} placeholder="https://storage.example.com" /></label>
+            <label><span>Status</span><select value={serverForm.status} onChange={(event) => setServerForm((value) => ({ ...value, status: event.target.value }))}>{serverStatuses.map((status) => <option key={status}>{status}</option>)}</select></label>
+            <label><span>Response time ms</span><input type="number" value={serverForm.responseTimeMs} onChange={(event) => setServerForm((value) => ({ ...value, responseTimeMs: event.target.value }))} /></label>
+            <label><span>Uptime %</span><input type="number" step="0.01" value={serverForm.uptimePercentage} onChange={(event) => setServerForm((value) => ({ ...value, uptimePercentage: event.target.value }))} /></label>
+            <label className="server-form-wide"><span>Error message</span><input value={serverForm.errorMessage} onChange={(event) => setServerForm((value) => ({ ...value, errorMessage: event.target.value }))} placeholder="Shown only when health checks fail" /></label>
+            <label className="server-form-wide"><span>Notes</span><textarea value={serverForm.notes} onChange={(event) => setServerForm((value) => ({ ...value, notes: event.target.value }))} placeholder="Operational notes, failover plan, owner, region policy" /></label>
+            <div className="server-service-picker server-form-wide">
+              <span>Connected services</span>
+              <div>
+                {connectedServiceOptions.map((service) => (
+                  <button type="button" className={(serverForm.linkedServices || []).includes(service) ? 'active' : ''} key={service} onClick={() => toggleLinkedService(service)}>{service}</button>
+                ))}
+              </div>
+            </div>
+            <div className="server-form-actions server-form-wide">
+              <button type="submit" disabled={!canManageCompany}><Save size={17} />{editingServerId ? 'Update server' : 'Add server'}</button>
+              {editingServerId && <button type="button" className="secondary-action" onClick={() => { setServerForm(blankServerConfig); setEditingServerId(''); }}>Cancel edit</button>}
+            </div>
+          </form>
+        </Panel>
+        <Panel eyebrow="Server detail" title={selectedServer?.serverName || 'No server selected'} description="Configuration, health, linked services, recent errors, and activity history.">
+          {selectedServer ? (
+            <div className="server-detail-stack">
+              <div className="server-detail-card">
+                <span className={`server-status-dot ${selectedServer.status.toLowerCase()}`} />
+                <div>
+                  <strong>{selectedServer.status}</strong>
+                  <small>{selectedServer.serverType} - {selectedServer.environment} - {selectedServer.region}</small>
+                </div>
+                <button type="button" className="secondary-action" onClick={() => simulateHealthCheck(selectedServer)}><RefreshCw size={16} />Check</button>
+              </div>
+              <div className="server-facts">
+                <span><small>API URL</small><strong>{maskSensitiveValue(selectedServer.apiUrl)}</strong></span>
+                <span><small>Database</small><strong>{maskSensitiveValue(selectedServer.databaseReference)}</strong></span>
+                <span><small>Storage</small><strong>{maskSensitiveValue(selectedServer.storageUrl)}</strong></span>
+                <span><small>Response</small><strong>{selectedServer.responseTimeMs || 0} ms</strong></span>
+                <span><small>Uptime</small><strong>{selectedServer.uptimePercentage || 0}%</strong></span>
+                <span><small>Last checked</small><strong>{selectedServer.lastCheckedAt ? new Date(selectedServer.lastCheckedAt).toLocaleString() : 'Not checked'}</strong></span>
+              </div>
+              <div className="server-linked-services">
+                {selectedServer.linkedServices.map((service) => <span key={service}><Cloud size={14} />{service}</span>)}
+                {!selectedServer.linkedServices.length && <span><Cloud size={14} />No linked services</span>}
+              </div>
+              {selectedServer.errorMessage && <div className="launch-notice"><AlertTriangle size={16} />{selectedServer.errorMessage}</div>}
+              <p className="server-notes">{selectedServer.notes || 'No infrastructure notes recorded yet.'}</p>
+            </div>
+          ) : (
+            <EmptyState icon={Server} title="No servers yet" text="Add a server configuration to begin infrastructure monitoring." />
+          )}
+        </Panel>
+      </div>
+      <div className="launch-grid two">
+        <Panel eyebrow="Server registry" title="Configured infrastructure">
+          <div className="server-list">
+            {servers.map((server) => (
+              <button type="button" className={selectedServer?.id === server.id ? 'active' : ''} key={server.id} onClick={() => setSelectedServerId(server.id)}>
+                <span className={`server-status-dot ${server.status.toLowerCase()}`} />
+                <div><strong>{server.serverName}</strong><small>{server.serverType} - {server.region} - {server.environment}</small></div>
+                <em>{server.status}</em>
+                <span className="server-row-actions">
+                  {canManageCompany && <span onClick={(event) => { event.stopPropagation(); editServer(server); }}>Edit</span>}
+                  <span onClick={(event) => { event.stopPropagation(); simulateHealthCheck(server); }}>Check</span>
+                </span>
+              </button>
+            ))}
+            {!servers.length && <EmptyState icon={HardDrive} title="No server configurations" text="Use the form above to add primary, backup, regional, storage, analytics, AI function, or development servers." />}
+          </div>
+        </Panel>
+        <Panel eyebrow="Infrastructure alerts" title="Health and configuration risks">
+          <div className="server-alert-list">
+            {infrastructureAlerts.map((alert) => (
+              <article key={alert.id}>
+                <span className={`severity-pill ${alert.severity.toLowerCase()}`}>{alert.severity}</span>
+                <div><strong>{alert.title}</strong><p>{alert.message}</p></div>
+              </article>
+            ))}
+            {!infrastructureAlerts.length && <EmptyState icon={ShieldCheck} title="Infrastructure looks clean" text="No offline, high-latency, missing configuration, or AI function alerts detected." />}
+          </div>
+        </Panel>
+      </div>
+      <Panel eyebrow="Server activity log" title="Infrastructure timeline" description="Tracks server added, updated, status checked, failed checks, backups, and configuration changes.">
+        <div className="server-activity-list">
+          {serverActivity.slice(0, 12).map((item) => (
+            <div key={item.id}>
+              <Database size={16} />
+              <span><strong>{item.title}</strong><small>{item.detail} - {new Date(item.createdAt).toLocaleString()}</small></span>
+            </div>
+          ))}
+          {!serverActivity.length && <EmptyState icon={Database} title="No server activity yet" text="Activity will appear as infrastructure records are added and checked." />}
         </div>
       </Panel>
       <div className="launch-grid two">
