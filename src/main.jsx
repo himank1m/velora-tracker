@@ -124,6 +124,7 @@ import {
   projectOrderFinance,
 } from './services/enterpriseService';
 import './styles.css';
+import './halo.css';
 
 installGlobalHealthListeners();
 
@@ -1982,6 +1983,16 @@ function userName(user) {
 
 function normalizeRole(role) {
   return roleOptions.includes(role) ? role : 'Inventory Manager';
+}
+
+function getHaloContext(page) {
+  if (['AIOS', 'AI COO', 'Time Machine', 'Digital Twin', 'Strategic War Room'].includes(page)) return 'ai';
+  if (['Command Center', 'Showcase', 'Ecosystem', 'Marketplace', 'Reports', 'Launch Readiness'].includes(page)) return 'management';
+  if (['Finance', 'Payroll', 'Backup & Recovery'].includes(page)) return 'finance';
+  if (['Shipments', 'Timeline'].includes(page)) return 'logistics';
+  if (['Inventory', 'Procurement', 'Orders', 'Quotes', 'Customers', 'Projects', 'Portals'].includes(page)) return 'operations';
+  if (['Employees', 'Communication', 'User Management', 'Settings', 'Notifications'].includes(page)) return 'people';
+  return 'system';
 }
 
 function createPermissions(role) {
@@ -7920,6 +7931,7 @@ function App() {
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
+  const haloContext = useMemo(() => getHaloContext(activePage), [activePage]);
 
   useEffect(() => {
     if (!profileLoading && !permissions.canViewPage(activePage) && permissions.allowedPages[0]) {
@@ -7963,7 +7975,7 @@ function App() {
   }
 
   return (
-    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
+    <div className={`app halo-shell halo-context-${haloContext} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand-mark">
           <span>{ecosystem.currentCompany.name.slice(0, 2).toUpperCase()}</span>
@@ -8021,6 +8033,7 @@ function App() {
           <div className="page-title">
             <p className="breadcrumb">{ecosystem.currentCompany.name} / {activePage}</p>
             <h1>{activePage}</h1>
+            <span className="halo-operating-mode">{haloContext} workspace</span>
           </div>
           <div className="topbar-actions">
             <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
