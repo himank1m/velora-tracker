@@ -7891,6 +7891,7 @@ function App() {
     canViewFinancials: permissions.canViewFinancials(),
   }), [ecosystem.ready, permissions, phase2Ready, user]);
   const recordCounts = useMemo(() => ({
+    totalRecords: vehicles.length + orders.length + quotes.length + customers.length + shipments.length + procurementRequests.length + suppliers.length + (permissions.canViewFinancials() ? financeRecords.length : 0) + documents.length + employees.length,
     vehicles: vehicles.length,
     orders: orders.length,
     quotes: quotes.length,
@@ -8025,7 +8026,7 @@ function App() {
         </nav>
       </aside>
       <button className="mobile-scrim" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation overlay" />
-      <main>
+      <main className="halo-main" data-halo-context={haloContext}>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
             <Menu size={20} />
@@ -8033,7 +8034,12 @@ function App() {
           <div className="page-title">
             <p className="breadcrumb">{ecosystem.currentCompany.name} / {activePage}</p>
             <h1>{activePage}</h1>
-            <span className="halo-operating-mode">{haloContext} workspace</span>
+            <div className="halo-status-pills" aria-label="Workspace status">
+              <span className="halo-operating-mode">{haloContext} workspace</span>
+              <span>{permissions.role}</span>
+              <span>{recordCounts.totalRecords} records</span>
+              {lastUpdated && <span>Live {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            </div>
           </div>
           <div className="topbar-actions">
             <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
