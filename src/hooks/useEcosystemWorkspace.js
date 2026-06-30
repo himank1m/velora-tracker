@@ -87,6 +87,16 @@ export default function useEcosystemWorkspace(user, role) {
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
+    if (user?.isGuest || user?.app_metadata?.provider === 'guest') {
+      setCompanies([{ ...fallbackCompany, name: 'Velora Guest Workspace', slug: 'velora-guest-workspace' }]);
+      setRelationships([]);
+      setTransactions([]);
+      setEvents([]);
+      setReady(false);
+      setLoading(false);
+      return;
+    }
+
     if (!user || !isSupabaseConfigured || !supabase) {
       setCompanies([fallbackCompany]);
       setReady(false);

@@ -110,6 +110,7 @@ import { buildTimeMachineAiContext } from './services/timeMachineService';
 import { buildStrategicAiContext } from './services/strategicSimulationService';
 import { buildAiCooContext } from './services/aiCooService';
 import { buildEcosystemAiContext } from './services/ecosystemService';
+import { buildDemoCompanyState } from './services/productizationService';
 import { buildNotificationFeed, buildSecurityChecklist } from './services/readinessService';
 import {
   applyAppearanceTheme,
@@ -124,7 +125,6 @@ import {
   projectOrderFinance,
 } from './services/enterpriseService';
 import './styles.css';
-import './halo.css';
 
 installGlobalHealthListeners();
 
@@ -365,6 +365,8 @@ const roleOptions = ['CEO', 'Company Manager', 'Logistics Manager', 'Inventory M
 const exclusiveRoles = ['CEO', 'Company Manager'];
 const pendingOAuthRoleKey = 'velora-pending-oauth-role';
 const pendingAuthErrorKey = 'velora-pending-auth-error';
+const guestSessionKey = 'velora-guest-session';
+const guestRecordsKey = 'velora-guest-records';
 const pages = ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room', 'Projects', 'Procurement', 'Inventory', 'Orders', 'Quotes', 'Customers', 'Portals', 'Employees', 'Payroll', 'Communication', 'Shipments', 'Finance', 'Documents', 'Knowledge Hub', 'Timeline', 'Reports', 'Alerts Center', 'Notifications', 'Backup & Recovery', 'Settings', 'User Management', 'Release Notes', 'Launch Readiness', 'Audit Logs'];
 const navGroups = [
   { label: 'Command', pages: ['Command Center', 'Onboarding', 'Product Tour', 'Showcase', 'Ecosystem', 'Marketplace', 'AIOS', 'AI COO', 'Digital Twin', 'Time Machine', 'Strategic War Room'] },
@@ -413,6 +415,157 @@ const navIcons = {
   'Audit Logs': ShieldCheck,
 };
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function createGuestUser() {
+  return {
+    id: 'guest-demo-user',
+    email: 'guest@velora.demo',
+    isGuest: true,
+    app_metadata: { provider: 'guest' },
+    user_metadata: {
+      full_name: 'Velora Guest',
+      role: 'Company Manager',
+    },
+  };
+}
+
+function isGuestUser(user) {
+  return Boolean(user?.isGuest || user?.app_metadata?.provider === 'guest');
+}
+
+function guestId(prefix) {
+  return `guest-${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function createGuestRecords() {
+  const demo = buildDemoCompanyState();
+  const vehicles = demo.vehicles.map((vehicle) => ({
+    ...blankVehicle,
+    ...vehicle,
+    lifecycleStatus: vehicle.lifecycleStatus || 'In Inventory',
+    locationName: 'New City Showroom',
+    department: 'Inventory',
+  }));
+  const customers = [
+    { ...blankCustomer, id: 'guest-customer-1', name: 'Asterline Demo Motors', phone: '+91 90000 11001', email: 'ops@asterline.demo', country: 'India', city: 'Mumbai', location: 'India / Mumbai', customerType: 'Dealer', customerRating: 'A', notes: 'High-growth fictional demo customer.' },
+    { ...blankCustomer, id: 'guest-customer-2', name: 'Northstar Fictional Fleet', phone: '+91 90000 11002', email: 'fleet@northstar.demo', country: 'India', city: 'Delhi', location: 'India / Delhi', customerType: 'Company', customerRating: 'A+', notes: 'Sample fleet buyer for demo workflows.' },
+    { ...blankCustomer, id: 'guest-customer-3', name: 'Blue Harbor Sample Group', phone: '+91 90000 11003', email: 'team@blueharbor.demo', country: 'India', city: 'Chennai', location: 'India / Chennai', customerType: 'Company', customerRating: 'B', notes: 'Demo customer for shipment and invoice views.' },
+  ];
+  const orders = demo.orders.map((order, index) => ({
+    ...blankOrder,
+    ...order,
+    orderDate: new Date(Date.now() - (index + 2) * 86400000).toISOString().slice(0, 10),
+    purchaseCost: Math.round(Number(order.totalRevenue || 0) - Number(order.totalProfit || 0)),
+    sellingPrice: Number(order.totalRevenue || 0),
+    locationName: 'Seoul HQ',
+    department: 'Sales',
+  }));
+  const shipments = demo.shipments.map((shipment, index) => ({
+    ...blankShipment,
+    ...shipment,
+    id: shipment.shipmentId,
+    linkedOrderId: orders[index]?.id || '',
+    quantity: orders[index]?.quantity || 1,
+    originCountry: 'South Korea',
+    originCity: 'Busan',
+    destinationCity: index === 0 ? 'Mumbai' : 'Chennai',
+    portOfDeparture: 'Busan Port',
+    portOfArrival: index === 0 ? 'Nhava Sheva' : 'Chennai Port',
+    shippingCompany: index === 0 ? 'Pacific Demo Logistics' : 'Harborline Sample Freight',
+    eta: new Date(Date.now() + (index + 4) * 86400000).toISOString().slice(0, 10),
+    customsStatus: index === 0 ? 'Submitted' : 'Under Review',
+    locationName: 'Port Operations Office',
+  }));
+  const suppliers = [
+    { ...blankSupplier, id: 'guest-supplier-1', supplierName: 'Korea Demo Auto Supply', country: 'South Korea', contactPerson: 'Demo Supplier One', phone: '+82 10 0000 1001', email: 'supply@koreademo.example', rating: 'A', onTimeDeliveryRate: '94', totalOrders: 12, notes: 'Fictional supplier for guest mode.' },
+    { ...blankSupplier, id: 'guest-supplier-2', supplierName: 'Pacific Sample Motors', country: 'Japan', contactPerson: 'Demo Supplier Two', phone: '+81 90 0000 2002', email: 'partners@pacificsample.example', rating: 'B', onTimeDeliveryRate: '88', totalOrders: 8, notes: 'Fictional regional sourcing partner.' },
+  ];
+  const logisticsPartners = [
+    { ...blankLogisticsPartner, id: 'guest-logistics-1', partnerName: 'Velora Demo Logistics', country: 'India', contactPerson: 'Demo Logistics Lead', phone: '+91 90000 22001', email: 'ops@velorademologistics.example', serviceType: 'Port handling and customs', notes: 'Local-only guest logistics partner.' },
+  ];
+  const procurementRequests = [
+    { ...blankProcurementRequest, procurementId: 'G-PR-0001', vehicleBrand: 'Toyota', vehicleModel: 'Fortuner', quantity: 3, supplierName: suppliers[0].supplierName, supplierId: suppliers[0].id, supplierCountry: suppliers[0].country, estimatedPurchaseCost: 3100000, estimatedFreightCost: 240000, requestedBy: 'Velora Guest', status: 'Negotiation', priority: 'High', expectedDeliveryDate: new Date(Date.now() + 12 * 86400000).toISOString().slice(0, 10), notes: 'Guest demo procurement pipeline.' },
+  ];
+  const financeRecords = orders.map((order, index) => ({
+    ...blankFinanceRecord,
+    id: `guest-finance-${index + 1}`,
+    orderId: order.id,
+    customerId: customers[index]?.id || '',
+    orderNumber: order.orderNumber,
+    customerName: order.customerName,
+    totalSaleAmount: order.totalRevenue,
+    vehicleCost: order.purchaseCost,
+    freightCost: shipments[index]?.freightCost || 0,
+    amountPaid: index === 2 ? order.totalRevenue : Math.round(order.totalRevenue * 0.55),
+    paymentStatus: index === 2 ? 'Paid' : 'Partially Paid',
+    invoiceStatus: index === 2 ? 'Paid' : 'Sent',
+    dueDate: new Date(Date.now() + (index + 5) * 86400000).toISOString().slice(0, 10),
+    notes: 'Guest mode finance record.',
+  }));
+  const employees = [
+    { ...blankEmployee, id: 'guest-employee-1', employeeCode: 'EMP-G001', fullName: 'Demo Operations Lead', email: 'operations@velora.demo', phone: '+91 90000 33001', department: 'Operations', role: 'Operations Manager', status: 'Active' },
+    { ...blankEmployee, id: 'guest-employee-2', employeeCode: 'EMP-G002', fullName: 'Demo Logistics Manager', email: 'logistics@velora.demo', phone: '+91 90000 33002', department: 'Logistics', role: 'Logistics Manager', status: 'Active' },
+  ];
+  const hrDepartments = departments.slice(0, 6).map((name, index) => ({ id: `guest-dept-${index + 1}`, name, managerEmployeeId: employees[index % employees.length]?.id || '', notes: 'Guest mode department.' }));
+  const payrollRecords = employees.map((employee, index) => ({
+    id: `guest-payroll-${index + 1}`,
+    employeeId: employee.id,
+    employeeCode: employee.employeeCode,
+    baseSalary: 85000 + index * 15000,
+    bonus: 5000,
+    deductions: 2500,
+    netSalary: 87500 + index * 15000,
+    paymentDate: today,
+    paymentStatus: 'Paid',
+    notes: 'Guest payroll record.',
+  }));
+
+  return {
+    vehicles,
+    orders,
+    quotes: [],
+    orderTimelines: {
+      [orders[0].id]: [{ id: 'guest-timeline-1', orderId: orders[0].id, status: orders[0].status, note: 'Guest demo order entered procurement.', createdAt: new Date().toISOString() }],
+    },
+    procurementTimelines: {
+      [procurementRequests[0].procurementId]: [{ id: 'guest-proc-timeline-1', procurementId: procurementRequests[0].procurementId, status: procurementRequests[0].status, note: 'Supplier negotiation opened in guest mode.', createdAt: new Date().toISOString() }],
+    },
+    customers,
+    shipments,
+    logisticsPartners,
+    procurementRequests,
+    suppliers,
+    financeRecords,
+    documents: [],
+    vehicleEvents: {},
+    shipmentEvents: {},
+    customerContacts: [],
+    customerNotes: [],
+    employees,
+    hrDepartments,
+    payrollRecords,
+    payrollCycles: [],
+    salaryHistory: [],
+    bonuses: [],
+    deductions: [],
+    attendanceRecords: [],
+    leaveRequests: [],
+    performanceNotes: [],
+  };
+}
+
+function loadGuestRecords() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(guestRecordsKey) || 'null');
+    return stored || createGuestRecords();
+  } catch {
+    return createGuestRecords();
+  }
+}
+
+function saveGuestRecords(records) {
+  window.localStorage.setItem(guestRecordsKey, JSON.stringify(records));
+}
 
 function numberValue(value) {
   return Number(String(value ?? '').replace(/,/g, '')) || 0;
@@ -1985,16 +2138,6 @@ function normalizeRole(role) {
   return roleOptions.includes(role) ? role : 'Inventory Manager';
 }
 
-function getHaloContext(page) {
-  if (['AIOS', 'AI COO', 'Time Machine', 'Digital Twin', 'Strategic War Room'].includes(page)) return 'ai';
-  if (['Command Center', 'Showcase', 'Ecosystem', 'Marketplace', 'Reports', 'Launch Readiness'].includes(page)) return 'management';
-  if (['Finance', 'Payroll', 'Backup & Recovery'].includes(page)) return 'finance';
-  if (['Shipments', 'Timeline'].includes(page)) return 'logistics';
-  if (['Inventory', 'Procurement', 'Orders', 'Quotes', 'Customers', 'Projects', 'Portals'].includes(page)) return 'operations';
-  if (['Employees', 'Communication', 'User Management', 'Settings', 'Notifications'].includes(page)) return 'people';
-  return 'system';
-}
-
 function createPermissions(role) {
   const normalizedRole = normalizeRole(role);
   const isExecutive = normalizedRole === 'CEO' || normalizedRole === 'Company Manager';
@@ -2287,10 +2430,22 @@ function buildAiContext({
 
 function useAuthSession() {
   const [session, setSession] = useState(null);
+  const [guestUser, setGuestUser] = useState(() => {
+    try {
+      return JSON.parse(window.localStorage.getItem(guestSessionKey) || 'null');
+    } catch {
+      return null;
+    }
+  });
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
   useEffect(() => {
+    if (guestUser) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
     if (!isSupabaseConfigured) {
       setAuthLoading(false);
       setAuthError(supabaseConfigError);
@@ -2319,11 +2474,29 @@ function useAuthSession() {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [guestUser?.id]);
+
+  function signInAsGuest() {
+    const nextGuest = createGuestUser();
+    window.localStorage.setItem(guestSessionKey, JSON.stringify(nextGuest));
+    if (!window.localStorage.getItem(guestRecordsKey)) {
+      saveGuestRecords(createGuestRecords());
+    }
+    setAuthError('');
+    setSession(null);
+    setGuestUser(nextGuest);
+    setAuthLoading(false);
+  }
 
   async function signOut() {
     setAuthError('');
     window.localStorage.removeItem(pendingOAuthRoleKey);
+    if (guestUser) {
+      window.localStorage.removeItem(guestSessionKey);
+      setGuestUser(null);
+      setSession(null);
+      return;
+    }
     const { error } = await supabase.auth.signOut();
     if (error) {
       const message = friendlyError(error, 'Velora could not sign you out.');
@@ -2332,7 +2505,7 @@ function useAuthSession() {
     }
   }
 
-  return { session, user: session?.user || null, authLoading, authError, signOut };
+  return { session, user: guestUser || session?.user || null, authLoading, authError, signOut, signInAsGuest };
 }
 
 function useTheme(userId) {
@@ -2372,6 +2545,19 @@ function useUserProfile(user) {
     let mounted = true;
 
     async function loadProfile() {
+      if (isGuestUser(user)) {
+        setProfile({
+          id: user.id,
+          full_name: userName(user),
+          email: user.email,
+          role: 'Company Manager',
+          is_guest: true,
+        });
+        setProfileError('');
+        setProfileLoading(false);
+        return;
+      }
+
       if (!user || !isSupabaseConfigured) {
         setProfile(null);
         setProfileLoading(false);
@@ -2482,6 +2668,7 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
+  const guestMode = isGuestUser(user);
   const scopeQuery = (query) => ecosystemReady && currentCompanyId
     ? query.eq('company_id', currentCompanyId)
     : query;
@@ -2547,6 +2734,41 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   }
 
   async function loadRecords() {
+    if (guestMode) {
+      const guestRecords = loadGuestRecords();
+      setVehicles(guestRecords.vehicles || []);
+      setOrders(guestRecords.orders || []);
+      setQuotes(guestRecords.quotes || []);
+      setOrderTimelines(guestRecords.orderTimelines || {});
+      setProcurementTimelines(guestRecords.procurementTimelines || {});
+      setCustomers(guestRecords.customers || []);
+      setShipments(guestRecords.shipments || []);
+      setLogisticsPartners(guestRecords.logisticsPartners || []);
+      setProcurementRequests(guestRecords.procurementRequests || []);
+      setSuppliers(guestRecords.suppliers || []);
+      setFinanceRecords(guestRecords.financeRecords || []);
+      setDocuments(guestRecords.documents || []);
+      setVehicleEvents(guestRecords.vehicleEvents || {});
+      setShipmentEvents(guestRecords.shipmentEvents || {});
+      setCustomerContacts(guestRecords.customerContacts || []);
+      setCustomerNotes(guestRecords.customerNotes || []);
+      setEmployees(guestRecords.employees || []);
+      setHrDepartments(guestRecords.hrDepartments || []);
+      setPayrollRecords(guestRecords.payrollRecords || []);
+      setPayrollCycles(guestRecords.payrollCycles || []);
+      setSalaryHistory(guestRecords.salaryHistory || []);
+      setBonuses(guestRecords.bonuses || []);
+      setDeductions(guestRecords.deductions || []);
+      setAttendanceRecords(guestRecords.attendanceRecords || []);
+      setLeaveRequests(guestRecords.leaveRequests || []);
+      setPerformanceNotes(guestRecords.performanceNotes || []);
+      setPhase2Ready(true);
+      setError('');
+      setLoading(false);
+      setLastUpdated(new Date());
+      return;
+    }
+
     if (!isSupabaseConfigured) {
       setLoading(false);
       setError(supabaseConfigError);
@@ -2764,10 +2986,36 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   useEffect(() => {
     loadRecords();
-  }, [user?.id, permissions?.role, currentCompanyId, ecosystemReady]);
+  }, [user?.id, permissions?.role, currentCompanyId, ecosystemReady, guestMode]);
+
+  function persistGuestPatch(patch) {
+    if (!guestMode) return;
+    saveGuestRecords({ ...loadGuestRecords(), ...patch });
+    setLastUpdated(new Date());
+  }
+
+  function localSave(collection, setter, getKey, record, editingId, fallbackPrefix) {
+    const keyValue = editingId || getKey(record) || guestId(fallbackPrefix);
+    const saved = {
+      ...record,
+      ...(getKey(record) ? {} : { id: keyValue }),
+      createdAt: record.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const next = editingId
+      ? collection.map((item) => getKey(item) === editingId ? saved : item)
+      : [saved, ...collection];
+    setter(next);
+    return { saved, next };
+  }
 
   async function saveVehicle(vehicle, editingId) {
     if (!permissions?.canManageInventory()) throw new Error('Your role cannot manage inventory.');
+    if (guestMode) {
+      const { saved, next } = localSave(vehicles, setVehicles, (item) => item.id, { ...vehicle, id: editingId || vehicle.id || nextDisplayId(vehicles, 'id') }, editingId, 'vehicle');
+      persistGuestPatch({ vehicles: next });
+      return saved;
+    }
     const previous = vehicles.find((item) => item.id === editingId);
     const query = editingId
       ? scopeQuery(supabase.from('vehicles').update(toVehicleRow(vehicle, null, phase2Ready)).eq('id', editingId)).select().single()
@@ -2782,6 +3030,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteVehicle(id) {
     if (!permissions?.canDeleteRecords('Inventory')) throw new Error('Your role cannot delete inventory records.');
+    if (guestMode) {
+      const next = vehicles.filter((item) => item.id !== id);
+      setVehicles(next);
+      persistGuestPatch({ vehicles: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('vehicles').delete().eq('id', id)));
     setVehicles((current) => current.filter((item) => item.id !== id));
   }
@@ -2792,6 +3046,16 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       ...order,
       orderNumber: order.orderNumber || nextOrderNumber(orders),
     };
+    if (guestMode) {
+      const { saved, next } = localSave(orders, setOrders, (item) => item.id, { ...orderToSave, id: editingId || orderToSave.id || guestId('order') }, editingId, 'order');
+      const nextTimelines = editingId ? orderTimelines : {
+        ...orderTimelines,
+        [saved.id]: [{ id: guestId('timeline'), orderId: saved.id, status: saved.status, note: 'Guest order created.', createdAt: new Date().toISOString() }],
+      };
+      setOrderTimelines(nextTimelines);
+      persistGuestPatch({ orders: next, orderTimelines: nextTimelines });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('orders').update(toOrderRow(orderToSave)).eq('id', editingId)).select().single()
       : supabase.from('orders').insert(scopeRow(toOrderRow(orderToSave, user.id))).select().single();
@@ -2807,6 +3071,15 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteOrder(id) {
     if (!permissions?.canDeleteRecords('Orders')) throw new Error('Your role cannot delete orders.');
+    if (guestMode) {
+      const next = orders.filter((item) => item.id !== id);
+      const nextTimelines = { ...orderTimelines };
+      delete nextTimelines[id];
+      setOrders(next);
+      setOrderTimelines(nextTimelines);
+      persistGuestPatch({ orders: next, orderTimelines: nextTimelines });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('orders').delete().eq('id', id)));
     setOrders((current) => current.filter((item) => item.id !== id));
   }
@@ -2817,6 +3090,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       ...quote,
       quoteId: quote.quoteId || nextQuoteId(quotes),
     };
+    if (guestMode) {
+      const { saved, next } = localSave(quotes, setQuotes, (item) => item.quoteId, quoteToSave, editingId, 'quote');
+      persistGuestPatch({ quotes: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('quotes').update(toQuoteRow(quoteToSave)).eq('quote_id', editingId)).select().single()
       : supabase.from('quotes').insert(scopeRow(toQuoteRow(quoteToSave, user.id))).select().single();
@@ -2827,18 +3105,40 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteQuote(id) {
     if (!permissions?.canDeleteRecords('Quotes')) throw new Error('Your role cannot delete quotes.');
+    if (guestMode) {
+      const next = quotes.filter((item) => item.quoteId !== id);
+      setQuotes(next);
+      persistGuestPatch({ quotes: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('quotes').delete().eq('quote_id', id)));
     setQuotes((current) => current.filter((item) => item.quoteId !== id));
   }
 
   async function updateOrderStatus(id, status) {
     if (!permissions?.canManageOrders()) throw new Error('Your role cannot update order status.');
+    if (guestMode) {
+      const next = orders.map((item) => item.id === id ? { ...item, status, updatedAt: new Date().toISOString() } : item);
+      const timelineEvent = { id: guestId('timeline'), orderId: id, status, note: `Status changed to ${status}.`, createdAt: new Date().toISOString() };
+      const nextTimelines = { ...orderTimelines, [id]: [...(orderTimelines[id] || []), timelineEvent] };
+      setOrders(next);
+      setOrderTimelines(nextTimelines);
+      persistGuestPatch({ orders: next, orderTimelines: nextTimelines });
+      return;
+    }
     const saved = fromOrderRow(await runRequest(scopeQuery(supabase.from('orders').update({ status }).eq('id', id)).select().single()));
     setOrders((current) => current.map((item) => item.id === id ? saved : item));
     await addOrderTimelineEvent(id, status, `Status changed to ${status}.`);
   }
 
   async function addOrderTimelineEvent(orderId, status, note) {
+    if (guestMode) {
+      const saved = { id: guestId('timeline'), orderId, status, note, createdAt: new Date().toISOString() };
+      const nextTimelines = { ...orderTimelines, [orderId]: [...(orderTimelines[orderId] || []), saved] };
+      setOrderTimelines(nextTimelines);
+      persistGuestPatch({ orderTimelines: nextTimelines });
+      return saved;
+    }
     const { data, error: requestError } = await supabase
       .from('order_timeline_events')
       .insert(scopeRow(toTimelineRow({ orderId, status, note }, user.id)))
@@ -2879,6 +3179,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function saveCustomer(customer, editingId) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customers.');
+    if (guestMode) {
+      const { saved, next } = localSave(customers, setCustomers, (item) => item.id, { ...customer, id: editingId || customer.id || guestId('customer') }, editingId, 'customer');
+      persistGuestPatch({ customers: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('customers').update(toCustomerRow(customer, null, phase2Ready)).eq('id', editingId)).select().single()
       : supabase.from('customers').insert(scopeRow(toCustomerRow(customer, user.id, phase2Ready))).select().single();
@@ -2889,6 +3194,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteCustomer(id) {
     if (!permissions?.canDeleteRecords('Customers')) throw new Error('Your role cannot delete customers.');
+    if (guestMode) {
+      const next = customers.filter((item) => item.id !== id);
+      setCustomers(next);
+      persistGuestPatch({ customers: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('customers').delete().eq('id', id)));
     setCustomers((current) => current.filter((item) => item.id !== id));
   }
@@ -2897,6 +3208,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage shipments.');
     const linkedCustomer = customers.find((customer) => sameText(customer.name, shipment.customerName));
     const shipmentToSave = { ...shipment, customerId: shipment.customerId || linkedCustomer?.id || '' };
+    if (guestMode) {
+      const { saved, next } = localSave(shipments, setShipments, (item) => item.shipmentId, { ...shipmentToSave, shipmentId: editingId || shipmentToSave.shipmentId || nextDisplayId(shipments, 'shipmentId') || 'SHIP-0001' }, editingId, 'shipment');
+      persistGuestPatch({ shipments: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('shipments').update(toShipmentRow(shipmentToSave, null, phase2Ready)).eq('shipment_id', editingId)).select().single()
       : supabase.from('shipments').insert(scopeRow(toShipmentRow(shipmentToSave, user.id, phase2Ready))).select().single();
@@ -2911,12 +3227,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteShipment(id) {
     if (!permissions?.canDeleteRecords('Shipments')) throw new Error('Your role cannot delete shipments.');
+    if (guestMode) {
+      const next = shipments.filter((item) => item.shipmentId !== id);
+      setShipments(next);
+      persistGuestPatch({ shipments: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('shipments').delete().eq('shipment_id', id)));
     setShipments((current) => current.filter((item) => item.shipmentId !== id));
   }
 
   async function saveLogisticsPartner(partner, editingId) {
     if (!permissions?.canManageShipments()) throw new Error('Your role cannot manage logistics partners.');
+    if (guestMode) {
+      const { saved, next } = localSave(logisticsPartners, setLogisticsPartners, (item) => item.id, { ...partner, id: editingId || partner.id || guestId('logistics') }, editingId, 'logistics');
+      persistGuestPatch({ logisticsPartners: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('logistics_partners').update(toLogisticsPartnerRow(partner)).eq('id', editingId)).select().single()
       : supabase.from('logistics_partners').insert(scopeRow(toLogisticsPartnerRow(partner, user.id))).select().single();
@@ -2927,6 +3254,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteLogisticsPartner(id) {
     if (!permissions?.canDeleteRecords('Shipments')) throw new Error('Your role cannot delete logistics partners.');
+    if (guestMode) {
+      const next = logisticsPartners.filter((item) => item.id !== id);
+      setLogisticsPartners(next);
+      persistGuestPatch({ logisticsPartners: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('logistics_partners').delete().eq('id', id)));
     setLogisticsPartners((current) => current.filter((item) => item.id !== id));
   }
@@ -2967,6 +3300,13 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   }
 
   async function addProcurementTimelineEvent(procurementId, status, note) {
+    if (guestMode) {
+      const saved = { id: guestId('procurement-timeline'), procurementId, status, note, createdAt: new Date().toISOString() };
+      const nextTimelines = { ...procurementTimelines, [procurementId]: [...(procurementTimelines[procurementId] || []), saved] };
+      setProcurementTimelines(nextTimelines);
+      persistGuestPatch({ procurementTimelines: nextTimelines });
+      return saved;
+    }
     const { data, error: requestError } = await supabase
       .from('procurement_timeline')
       .insert(scopeRow(toProcurementTimelineRow({ procurementId, status, note }, user.id)))
@@ -3005,6 +3345,18 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
       ...request,
       procurementId: request.procurementId || nextProcurementId(procurementRequests),
     };
+    if (guestMode) {
+      const previous = procurementRequests.find((item) => item.procurementId === editingId);
+      const { saved, next } = localSave(procurementRequests, setProcurementRequests, (item) => item.procurementId, requestToSave, editingId, 'procurement');
+      let nextTimelines = procurementTimelines;
+      if (!editingId || previous?.status !== saved.status) {
+        const timelineEvent = { id: guestId('procurement-timeline'), procurementId: saved.procurementId, status: saved.status, note: editingId ? `Status changed to ${saved.status}.` : 'Guest procurement request created.', createdAt: new Date().toISOString() };
+        nextTimelines = { ...procurementTimelines, [saved.procurementId]: [...(procurementTimelines[saved.procurementId] || []), timelineEvent] };
+        setProcurementTimelines(nextTimelines);
+      }
+      persistGuestPatch({ procurementRequests: next, procurementTimelines: nextTimelines });
+      return saved;
+    }
     const previous = procurementRequests.find((item) => item.procurementId === editingId);
     const query = editingId
       ? scopeQuery(supabase.from('procurement_requests').update(toProcurementRow(requestToSave, null, phase2Ready)).eq('procurement_id', editingId)).select().single()
@@ -3027,6 +3379,15 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteProcurementRequest(id) {
     if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete procurement records.');
+    if (guestMode) {
+      const next = procurementRequests.filter((item) => item.procurementId !== id);
+      const nextTimelines = { ...procurementTimelines };
+      delete nextTimelines[id];
+      setProcurementRequests(next);
+      setProcurementTimelines(nextTimelines);
+      persistGuestPatch({ procurementRequests: next, procurementTimelines: nextTimelines });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('procurement_requests').delete().eq('procurement_id', id)));
     setProcurementRequests((current) => current.filter((item) => item.procurementId !== id));
   }
@@ -3038,6 +3399,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function saveSupplier(supplier, editingId) {
     if (!permissions?.canManageProcurement()) throw new Error('Your role cannot manage suppliers.');
+    if (guestMode) {
+      const { saved, next } = localSave(suppliers, setSuppliers, (item) => item.id, { ...supplier, id: editingId || supplier.id || guestId('supplier') }, editingId, 'supplier');
+      persistGuestPatch({ suppliers: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('suppliers').update(toSupplierRow(supplier, null, phase2Ready)).eq('id', editingId)).select().single()
       : supabase.from('suppliers').insert(scopeRow(toSupplierRow(supplier, user.id, phase2Ready))).select().single();
@@ -3048,11 +3414,24 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteSupplier(id) {
     if (!permissions?.canDeleteRecords('Procurement')) throw new Error('Your role cannot delete suppliers.');
+    if (guestMode) {
+      const next = suppliers.filter((item) => item.id !== id);
+      setSuppliers(next);
+      persistGuestPatch({ suppliers: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('suppliers').delete().eq('id', id)));
     setSuppliers((current) => current.filter((item) => item.id !== id));
   }
 
   async function addVehicleLifecycleEvent(vehicleId, status, note) {
+    if (guestMode) {
+      const saved = { id: guestId('vehicle-event'), vehicleId, status, note, createdAt: new Date().toISOString() };
+      const nextEvents = { ...vehicleEvents, [vehicleId]: [...(vehicleEvents[vehicleId] || []), saved] };
+      setVehicleEvents(nextEvents);
+      persistGuestPatch({ vehicleEvents: nextEvents });
+      return;
+    }
     if (!phase2Ready) return;
     const { data, error: requestError } = await supabase
       .from('vehicle_lifecycle_events')
@@ -3078,6 +3457,13 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   }
 
   async function addShipmentEvent(shipmentId, status, note) {
+    if (guestMode) {
+      const saved = { id: guestId('shipment-event'), shipmentId, status, note, createdAt: new Date().toISOString() };
+      const nextEvents = { ...shipmentEvents, [shipmentId]: [...(shipmentEvents[shipmentId] || []), saved] };
+      setShipmentEvents(nextEvents);
+      persistGuestPatch({ shipmentEvents: nextEvents });
+      return;
+    }
     if (!phase2Ready) return;
     const { data, error: requestError } = await supabase
       .from('shipment_events')
@@ -3105,6 +3491,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   async function saveFinanceRecord(record, editingId) {
     if (!permissions?.canManageFinance()) throw new Error('Your role cannot manage finance records.');
     if (!phase2Ready) throw new Error('Install the Phase 2 Supabase migration before creating finance records.');
+    if (guestMode) {
+      const { saved, next } = localSave(financeRecords, setFinanceRecords, (item) => item.id, { ...record, id: editingId || record.id || guestId('finance') }, editingId, 'finance');
+      persistGuestPatch({ financeRecords: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('finance_records').update(toFinanceRow(record)).eq('id', editingId)).select().single()
       : supabase.from('finance_records').insert(scopeRow(toFinanceRow(record, user.id))).select().single();
@@ -3117,6 +3508,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteFinanceRecord(id) {
     if (!permissions?.canManageFinance()) throw new Error('Your role cannot delete finance records.');
+    if (guestMode) {
+      const next = financeRecords.filter((item) => item.id !== id);
+      setFinanceRecords(next);
+      persistGuestPatch({ financeRecords: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('finance_records').delete().eq('id', id)), 'delete finance record');
     setFinanceRecords((current) => current.filter((item) => item.id !== id));
   }
@@ -3124,6 +3521,25 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   async function uploadDocument(documentInput) {
     if (!permissions?.canManageDocuments()) throw new Error('Your role cannot upload documents.');
     if (!phase2Ready) throw new Error('Install the Phase 2 Supabase migration before uploading documents.');
+    if (guestMode) {
+      const file = documentInput.file;
+      const saved = {
+        id: guestId('document'),
+        fileName: file?.name || 'Guest demo document',
+        fileType: file?.type || 'text/plain',
+        fileSize: file?.size || 0,
+        category: documentInput.category,
+        linkedModule: documentInput.linkedModule || '',
+        linkedRecordId: documentInput.linkedRecordId || '',
+        storagePath: '',
+        notes: documentInput.notes || 'Guest mode document placeholder. No file was uploaded.',
+        uploadedAt: new Date().toISOString(),
+      };
+      const next = [saved, ...documents];
+      setDocuments(next);
+      persistGuestPatch({ documents: next });
+      return saved;
+    }
     const file = documentInput.file;
     const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'text/csv', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
     if (!file) throw new Error('Choose a document to upload.');
@@ -3160,6 +3576,10 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   }
 
   async function openDocument(documentRecord) {
+    if (guestMode) {
+      window.alert(documentRecord.notes || 'Guest mode document preview only. No file is stored.');
+      return;
+    }
     const { data, error: signedUrlError } = await supabase.storage
       .from('velora-documents')
       .createSignedUrl(documentRecord.storagePath, 60);
@@ -3174,6 +3594,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteDocument(id) {
     if (!permissions?.canManageDocuments()) throw new Error('Your role cannot delete documents.');
+    if (guestMode) {
+      const next = documents.filter((item) => item.id !== id);
+      setDocuments(next);
+      persistGuestPatch({ documents: next });
+      return;
+    }
     const documentRecord = documents.find((item) => item.id === id);
     if (!documentRecord) return;
     await runRequest(supabase.storage.from('velora-documents').remove([documentRecord.storagePath]), 'delete document file');
@@ -3183,6 +3609,13 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function saveCustomerContact(contact) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot manage customer contacts.');
+    if (guestMode) {
+      const saved = { ...contact, id: guestId('customer-contact'), createdAt: new Date().toISOString() };
+      const next = [...customerContacts, saved];
+      setCustomerContacts(next);
+      persistGuestPatch({ customerContacts: next });
+      return saved;
+    }
     const saved = fromCustomerContactRow(await runRequest(
       supabase.from('customer_contacts').insert(scopeRow({
         customer_id: contact.customerId,
@@ -3201,12 +3634,25 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteCustomerContact(id) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot delete customer contacts.');
+    if (guestMode) {
+      const next = customerContacts.filter((item) => item.id !== id);
+      setCustomerContacts(next);
+      persistGuestPatch({ customerContacts: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('customer_contacts').delete().eq('id', id)), 'delete customer contact');
     setCustomerContacts((current) => current.filter((item) => item.id !== id));
   }
 
   async function addCustomerNote(customerId, note) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot add customer notes.');
+    if (guestMode) {
+      const saved = { id: guestId('customer-note'), customerId, note, createdAt: new Date().toISOString() };
+      const next = [saved, ...customerNotes];
+      setCustomerNotes(next);
+      persistGuestPatch({ customerNotes: next });
+      return saved;
+    }
     const saved = fromCustomerNoteRow(await runRequest(
       supabase.from('customer_notes').insert(scopeRow({ customer_id: customerId, note, created_by: user.id })).select().single(),
       'add customer note',
@@ -3217,6 +3663,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteCustomerNote(id) {
     if (!permissions?.canManageCustomers()) throw new Error('Your role cannot delete customer notes.');
+    if (guestMode) {
+      const next = customerNotes.filter((item) => item.id !== id);
+      setCustomerNotes(next);
+      persistGuestPatch({ customerNotes: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('customer_notes').delete().eq('id', id)), 'delete customer note');
     setCustomerNotes((current) => current.filter((item) => item.id !== id));
   }
@@ -3232,6 +3684,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
   async function saveEmployee(employee, editingId) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot manage employees.');
     const employeeToSave = { ...employee, employeeCode: employee.employeeCode || nextEmployeeCode() };
+    if (guestMode) {
+      const { saved, next } = localSave(employees, setEmployees, (item) => item.id, { ...employeeToSave, id: editingId || employeeToSave.id || guestId('employee') }, editingId, 'employee');
+      persistGuestPatch({ employees: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('employees').update(toEmployeeRow(employeeToSave)).eq('id', editingId)).select().single()
       : supabase.from('employees').insert(scopeRow(toEmployeeRow(employeeToSave, user.id))).select().single();
@@ -3242,12 +3699,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteEmployee(id) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot delete employee records.');
+    if (guestMode) {
+      const next = employees.filter((item) => item.id !== id);
+      setEmployees(next);
+      persistGuestPatch({ employees: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('employees').delete().eq('id', id)), 'delete employee');
     setEmployees((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveHrDepartment(department, editingId) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot manage departments.');
+    if (guestMode) {
+      const { saved, next } = localSave(hrDepartments, setHrDepartments, (item) => item.id, { ...department, id: editingId || department.id || guestId('department') }, editingId, 'department');
+      persistGuestPatch({ hrDepartments: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('hr_departments').update(toHrDepartmentRow(department)).eq('id', editingId)).select().single()
       : supabase.from('hr_departments').insert(scopeRow(toHrDepartmentRow(department, user.id))).select().single();
@@ -3258,12 +3726,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteHrDepartment(id) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot delete departments.');
+    if (guestMode) {
+      const next = hrDepartments.filter((item) => item.id !== id);
+      setHrDepartments(next);
+      persistGuestPatch({ hrDepartments: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('hr_departments').delete().eq('id', id)), 'delete HR department');
     setHrDepartments((current) => current.filter((item) => item.id !== id));
   }
 
   async function savePayrollRecord(record, editingId) {
     if (!permissions?.canManageHR() || !permissions?.canViewFinancials()) throw new Error('Your role cannot manage payroll.');
+    if (guestMode) {
+      const { saved, next } = localSave(payrollRecords, setPayrollRecords, (item) => item.id, { ...record, id: editingId || record.id || guestId('payroll') }, editingId, 'payroll');
+      persistGuestPatch({ payrollRecords: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('payroll_records').update(toPayrollRow(record, employees)).eq('id', editingId)).select().single()
       : supabase.from('payroll_records').insert(scopeRow(toPayrollRow(record, employees, user.id))).select().single();
@@ -3274,6 +3753,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deletePayrollRecord(id) {
     if (!permissions?.canManageHR() || !permissions?.canViewFinancials()) throw new Error('Your role cannot delete payroll.');
+    if (guestMode) {
+      const next = payrollRecords.filter((item) => item.id !== id);
+      setPayrollRecords(next);
+      persistGuestPatch({ payrollRecords: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('payroll_records').delete().eq('id', id)), 'delete payroll record');
     setPayrollRecords((current) => current.filter((item) => item.id !== id));
   }
@@ -3282,6 +3767,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage payroll cycles.');
     const existing = payrollCycles.find((item) => item.id === editingId);
     if (existing?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be edited.');
+    if (guestMode) {
+      const { saved, next } = localSave(payrollCycles, setPayrollCycles, (item) => item.id, { ...cycle, id: editingId || cycle.id || guestId('payroll-cycle') }, editingId, 'payroll-cycle');
+      persistGuestPatch({ payrollCycles: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('payroll_cycles').update(toPayrollCycleRow(cycle)).eq('id', editingId)).select().single()
       : supabase.from('payroll_cycles').insert(scopeRow(toPayrollCycleRow(cycle, user.id))).select().single();
@@ -3294,6 +3784,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     if (!permissions?.canManagePayroll()) throw new Error('Your role cannot approve payroll.');
     const cycle = payrollCycles.find((item) => item.id === id);
     if (cycle?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be changed.');
+    if (guestMode) {
+      const next = payrollCycles.map((item) => item.id === id ? { ...item, runStatus: status, approvalStatus: status === 'Approved' ? 'Approved' : item.approvalStatus || status, updatedAt: new Date().toISOString() } : item);
+      setPayrollCycles(next);
+      persistGuestPatch({ payrollCycles: next });
+      return next.find((item) => item.id === id);
+    }
     const patch = {
       run_status: status,
       approval_status: status === 'Approved' ? 'Approved' : cycle?.approvalStatus || status,
@@ -3310,6 +3806,13 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function saveSalaryHistory(record) {
     if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage salary history.');
+    if (guestMode) {
+      const saved = { ...record, id: guestId('salary-history'), createdAt: new Date().toISOString() };
+      const next = [saved, ...salaryHistory];
+      setSalaryHistory(next);
+      persistGuestPatch({ salaryHistory: next });
+      return saved;
+    }
     const saved = fromSalaryHistoryRow(await runRequest(
       supabase.from('salary_history').insert(scopeRow(toSalaryHistoryRow(record, user.id))).select().single(),
       'save salary history',
@@ -3322,6 +3825,13 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage bonuses.');
     const cycle = payrollCycles.find((item) => item.id === record.payrollCycleId);
     if (cycle?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be edited.');
+    if (guestMode) {
+      const saved = { ...record, id: guestId('bonus'), createdAt: new Date().toISOString() };
+      const next = [saved, ...bonuses];
+      setBonuses(next);
+      persistGuestPatch({ bonuses: next });
+      return saved;
+    }
     const saved = fromBonusRow(await runRequest(
       supabase.from('employee_bonuses').insert(scopeRow(toBonusRow(record, user.id))).select().single(),
       'save employee bonus',
@@ -3334,6 +3844,13 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
     if (!permissions?.canManagePayroll()) throw new Error('Your role cannot manage deductions.');
     const cycle = payrollCycles.find((item) => item.id === record.payrollCycleId);
     if (cycle?.runStatus === 'Locked') throw new Error('Locked payroll cycles cannot be edited.');
+    if (guestMode) {
+      const saved = { ...record, id: guestId('deduction'), createdAt: new Date().toISOString() };
+      const next = [saved, ...deductions];
+      setDeductions(next);
+      persistGuestPatch({ deductions: next });
+      return saved;
+    }
     const saved = fromDeductionRow(await runRequest(
       supabase.from('employee_deductions').insert(scopeRow(toDeductionRow(record, user.id))).select().single(),
       'save employee deduction',
@@ -3344,6 +3861,11 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function saveAttendanceRecord(record, editingId) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot manage attendance.');
+    if (guestMode) {
+      const { saved, next } = localSave(attendanceRecords, setAttendanceRecords, (item) => item.id, { ...record, id: editingId || record.id || guestId('attendance') }, editingId, 'attendance');
+      persistGuestPatch({ attendanceRecords: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('attendance_records').update(toAttendanceRow(record)).eq('id', editingId)).select().single()
       : supabase.from('attendance_records').insert(scopeRow(toAttendanceRow(record, user.id))).select().single();
@@ -3354,12 +3876,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteAttendanceRecord(id) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot delete attendance.');
+    if (guestMode) {
+      const next = attendanceRecords.filter((item) => item.id !== id);
+      setAttendanceRecords(next);
+      persistGuestPatch({ attendanceRecords: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('attendance_records').delete().eq('id', id)), 'delete attendance record');
     setAttendanceRecords((current) => current.filter((item) => item.id !== id));
   }
 
   async function saveLeaveRequest(record, editingId) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot manage leave.');
+    if (guestMode) {
+      const { saved, next } = localSave(leaveRequests, setLeaveRequests, (item) => item.id, { ...record, id: editingId || record.id || guestId('leave') }, editingId, 'leave');
+      persistGuestPatch({ leaveRequests: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('leave_requests').update(toLeaveRow(record)).eq('id', editingId)).select().single()
       : supabase.from('leave_requests').insert(scopeRow(toLeaveRow(record, user.id))).select().single();
@@ -3370,6 +3903,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function updateLeaveStatus(id, status) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot approve leave.');
+    if (guestMode) {
+      const next = leaveRequests.map((item) => item.id === id ? { ...item, status, approvedBy: user.id, approvedAt: new Date().toISOString() } : item);
+      setLeaveRequests(next);
+      persistGuestPatch({ leaveRequests: next });
+      return next.find((item) => item.id === id);
+    }
     const saved = fromLeaveRow(await runRequest(
       scopeQuery(supabase.from('leave_requests').update({ status, approved_by: user.id, approved_at: new Date().toISOString() }).eq('id', id)).select().single(),
       'update leave status',
@@ -3380,12 +3919,23 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deleteLeaveRequest(id) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot delete leave requests.');
+    if (guestMode) {
+      const next = leaveRequests.filter((item) => item.id !== id);
+      setLeaveRequests(next);
+      persistGuestPatch({ leaveRequests: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('leave_requests').delete().eq('id', id)), 'delete leave request');
     setLeaveRequests((current) => current.filter((item) => item.id !== id));
   }
 
   async function savePerformanceNote(note, editingId) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot manage performance notes.');
+    if (guestMode) {
+      const { saved, next } = localSave(performanceNotes, setPerformanceNotes, (item) => item.id, { ...note, id: editingId || note.id || guestId('performance') }, editingId, 'performance');
+      persistGuestPatch({ performanceNotes: next });
+      return saved;
+    }
     const query = editingId
       ? scopeQuery(supabase.from('performance_notes').update(toPerformanceNoteRow(note)).eq('id', editingId)).select().single()
       : supabase.from('performance_notes').insert(scopeRow(toPerformanceNoteRow(note, user.id))).select().single();
@@ -3396,6 +3946,12 @@ function useSupabaseRecords(user, permissions, currentCompanyId, ecosystemReady)
 
   async function deletePerformanceNote(id) {
     if (!permissions?.canManageHR()) throw new Error('Your role cannot delete performance notes.');
+    if (guestMode) {
+      const next = performanceNotes.filter((item) => item.id !== id);
+      setPerformanceNotes(next);
+      persistGuestPatch({ performanceNotes: next });
+      return;
+    }
     await runRequest(scopeQuery(supabase.from('performance_notes').delete().eq('id', id)), 'delete performance note');
     setPerformanceNotes((current) => current.filter((item) => item.id !== id));
   }
@@ -4641,7 +5197,7 @@ function PrivacyPolicy() {
   );
 }
 
-function AuthView({ authError }) {
+function AuthView({ authError, onGuestSignIn }) {
   const [mode, setMode] = useState('signin');
   const [form, setForm] = useState({
     fullName: '',
@@ -4871,6 +5427,22 @@ function AuthView({ authError }) {
             {submitting ? 'Please wait...' : title}
           </button>
         </form>
+        {mode === 'signin' && (
+          <button
+            type="button"
+            className="guest-signin-button"
+            onClick={onGuestSignIn}
+            disabled={submitting || Boolean(submittingProvider)}
+          >
+            <PlayCircle size={17} />
+            Continue as Guest
+          </button>
+        )}
+        {mode === 'signin' && (
+          <p className="guest-signin-note">
+            Opens an isolated demo workspace with sample data. Guest changes stay in this browser and never touch production records.
+          </p>
+        )}
         {mode !== 'forgot' && (
           <>
             <div className="auth-divider"><span>or continue with</span></div>
@@ -7784,7 +8356,7 @@ function App() {
   const [aiOpen, setAiOpen] = useState(false);
   const [strategicScenarios, setStrategicScenarios] = useState([]);
   const healthEvents = useHealthEvents();
-  const { user, authLoading, authError, signOut } = useAuthSession();
+  const { user, authLoading, authError, signOut, signInAsGuest } = useAuthSession();
   const [theme, setTheme, appearance, updateAppearance, resetAppearance] = useTheme(user?.id);
   const { profile, profileLoading, profileError } = useUserProfile(user);
   const permissions = useMemo(() => createPermissions(profile?.role), [profile?.role]);
@@ -7891,7 +8463,6 @@ function App() {
     canViewFinancials: permissions.canViewFinancials(),
   }), [ecosystem.ready, permissions, phase2Ready, user]);
   const recordCounts = useMemo(() => ({
-    totalRecords: vehicles.length + orders.length + quotes.length + customers.length + shipments.length + procurementRequests.length + suppliers.length + (permissions.canViewFinancials() ? financeRecords.length : 0) + documents.length + employees.length,
     vehicles: vehicles.length,
     orders: orders.length,
     quotes: quotes.length,
@@ -7932,7 +8503,6 @@ function App() {
   const visibleNavGroups = useMemo(() => navGroups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => permissions.canViewPage(page)) }))
     .filter((group) => group.pages.length), [permissions]);
-  const haloContext = useMemo(() => getHaloContext(activePage), [activePage]);
 
   useEffect(() => {
     if (!profileLoading && !permissions.canViewPage(activePage) && permissions.allowedPages[0]) {
@@ -7959,7 +8529,7 @@ function App() {
   }
 
   if (!user) {
-    return <AuthView authError={authError} />;
+    return <AuthView authError={authError} onGuestSignIn={signInAsGuest} />;
   }
 
   if (profileLoading) {
@@ -7976,7 +8546,7 @@ function App() {
   }
 
   return (
-    <div className={`app halo-shell halo-context-${haloContext} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
+    <div className={`app ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${mobileNavOpen ? 'mobile-nav-open' : ''}`}>
       <aside className="sidebar">
         <div className="brand-mark">
           <span>{ecosystem.currentCompany.name.slice(0, 2).toUpperCase()}</span>
@@ -8026,7 +8596,7 @@ function App() {
         </nav>
       </aside>
       <button className="mobile-scrim" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation overlay" />
-      <main className="halo-main" data-halo-context={haloContext}>
+      <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation">
             <Menu size={20} />
@@ -8034,12 +8604,6 @@ function App() {
           <div className="page-title">
             <p className="breadcrumb">{ecosystem.currentCompany.name} / {activePage}</p>
             <h1>{activePage}</h1>
-            <div className="halo-status-pills" aria-label="Workspace status">
-              <span className="halo-operating-mode">{haloContext} workspace</span>
-              <span>{permissions.role}</span>
-              <span>{recordCounts.totalRecords} records</span>
-              {lastUpdated && <span>Live {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
-            </div>
           </div>
           <div className="topbar-actions">
             <GlobalSearch index={searchIndexData} setActivePage={goToPage} allowedPages={permissions.allowedPages} />
